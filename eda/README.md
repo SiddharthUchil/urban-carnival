@@ -6,6 +6,22 @@ fill the evidence gaps in `research/claude/` (volume/cadence — open blocker #8
 29 placeholder slots in `research/claude/metric-registry.yaml`, and produce the spec used
 to generate synthetic data locally.
 
+## Scope: CA Retirement is a subset
+
+The table holds **all** GWAM Adobe data. Canada Retirement is the subset selected by two
+widgets (both default-on; blank either to disable it):
+
+- `rsid_filter` = `manulifeglobalprod` (Manulife.com storefront report suite)
+- `url_filter` = `manulife.com/ca/en/personal/group-plans/group-retirement` (page URL
+  contains this — matches the section root and all subpages)
+
+Every profiling section (S4–S11) and the `synthesis_spec` describe this subset. The only
+whole-table outputs are `delta_meta` (S2) and the `total_hits` column of `daily_volume`
+(S3), which reports total vs subset side by side plus the `ca_share_pct`. The scope
+columns are resolved defensively against the schema (`rsid`/`report_suite`/… and
+`post_page_url`/`page_url`); if a column is absent the condition is dropped and flagged in
+`uc_discovery.scope` and `window_frame.filter`.
+
 ## How to run
 
 1. In the Databricks workspace: **Workspace → Import → File**, select
@@ -25,6 +41,11 @@ to generate synthetic data locally.
 
 If the run is too slow or the cluster is small: lower `sample_fraction` to 0.01 and/or
 `window_months` to 6 and re-run from S4 onward (sections rebuild their frames).
+
+**If nothing downstream has data** (empty S5–S12): the scope filter matched 0 rows. S3
+and S4 both flag this loudly. Check `window_frame.filter.top_rsids` for the real
+report-suite value/casing and `window_frame.filter.url_only_match` to see whether the URL
+substring is right, then adjust the `rsid_filter` / `url_filter` widgets and re-run from S3.
 
 ## What to paste back
 

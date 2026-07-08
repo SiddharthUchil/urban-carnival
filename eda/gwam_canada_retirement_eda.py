@@ -4,6 +4,12 @@
 # MAGIC
 # MAGIC **Purpose.** Read-only exploratory profiling of the Adobe Analytics hit-level table
 # MAGIC (`gwam_prod_catalog.inv_typed_common.adobe_hit_data`, provisional) to:
+# MAGIC
+# MAGIC **Scope.** The table holds ALL GWAM Adobe data. CA Retirement is the subset with
+# MAGIC `rsid = 'manulifeglobalprod'` AND page URL containing
+# MAGIC `manulife.com/ca/en/personal/group-plans/group-retirement` (both are widgets).
+# MAGIC All profiling sections (S4–S11) and the synthesis spec describe this subset;
+# MAGIC S3 reports total-table vs subset daily volume side by side.
 # MAGIC 1. Fill evidence gaps: volume, history depth, load cadence, schema population census.
 # MAGIC 2. Discover real metric candidates (post_event_list event IDs, live eVars/props).
 # MAGIC 3. Capture time-series shape (seasonality, volatility) for anomaly-model design.
@@ -46,6 +52,8 @@ dbutils.widgets.text("hourly_days", "35", "6. Days for hourly profile")
 dbutils.widgets.text("max_csv_lines", "450", "7. Max CSV lines per shareable block")
 dbutils.widgets.text("top_events_k", "6", "8. Top-K events for daily series")
 dbutils.widgets.text("cache_sample", "false", "9. Persist sample df (true/false)")
+dbutils.widgets.text("rsid_filter", "manulifeglobalprod", "10. rsid filter (empty = off)")
+dbutils.widgets.text("url_filter", "manulife.com/ca/en/personal/group-plans/group-retirement", "11. URL contains filter (empty = off)")
 
 TABLE_FQN      = dbutils.widgets.get("table_fqn").strip()
 WINDOW_MONTHS  = int(dbutils.widgets.get("window_months"))
@@ -56,6 +64,8 @@ HOURLY_DAYS    = int(dbutils.widgets.get("hourly_days"))
 MAX_CSV_LINES  = int(dbutils.widgets.get("max_csv_lines"))
 TOP_EVENTS_K   = int(dbutils.widgets.get("top_events_k"))
 CACHE_SAMPLE   = dbutils.widgets.get("cache_sample").strip().lower() == "true"
+RSID_FILTER    = dbutils.widgets.get("rsid_filter").strip().lower()
+URL_FILTER     = dbutils.widgets.get("url_filter").strip().lower()
 
 # ------------------------------------------------------- privacy constants ----
 # ADR-0007 / doc-11 §2 disposition table (24 profiler-flagged columns).
@@ -216,8 +226,51 @@ def pick_col(df, *candidates):
             return c
     return None
 
+# CA-Retirement scope columns (resolved once against the schema).
+RSID_COL = None   # report-suite column
+URL_COL  = None   # page-URL column
+
+def _resolve_scope_cols(df):
+    global RSID_COL, URL_COL
+    RSID_COL = pick_col(df, "rsid", "report_suite", "reportsuite", "reportsuiteid", "post_rsid")
+    URL_COL  = pick_col(df, "post_page_url", "page_url")
+
+def scope_condition(df):
+    """CA-Retirement subset selector. Returns (Column|None, meta).
+
+    rsid == RSID_FILTER (case-insensitive) AND page URL CONTAINS URL_FILTER.
+    Either widget empty -> that condition is dropped. Missing schema column ->
+    that condition is dropped and flagged in meta (so the run doesn't silently
+    profile the wrong population). NOTE: the URL 'contains' test excludes hits
+    with a blank page_url; that share is measured in S4 filter diagnostics.
+    """
+    if RSID_COL is None and URL_COL is None:
+        _resolve_scope_cols(df)
+    conds, active, missing = [], [], []
+    if RSID_FILTER:
+        if RSID_COL:
+            conds.append(F.lower(F.trim(F.col(RSID_COL).cast("string"))) == F.lit(RSID_FILTER))
+            active.append(f"rsid[{RSID_COL}]=={RSID_FILTER}")
+        else:
+            missing.append("rsid (no report-suite column found)")
+    if URL_FILTER:
+        if URL_COL:
+            conds.append(F.lower(F.col(URL_COL).cast("string")).contains(URL_FILTER))
+            active.append(f"url[{URL_COL}] contains {URL_FILTER}")
+        else:
+            missing.append("url (no page_url column found)")
+    cond = None
+    for c in conds:
+        cond = c if cond is None else (cond & c)
+    meta = {"rsid_col": RSID_COL, "url_col": URL_COL,
+            "rsid_filter": RSID_FILTER or None, "url_filter": URL_FILTER or None,
+            "active_conditions": active, "missing_conditions": missing,
+            "scoped": cond is not None}
+    return cond, meta
+
 # Globals populated by S1/S4; ensure_frames() rebuilds them for re-runs.
 DF = None
+DF_CA = None
 DF_W = None
 DF_S = None
 DATE_EXPR = None
@@ -227,12 +280,16 @@ WINDOW_END = None
 SAMPLE_ROWS = None
 
 def ensure_frames():
-    """Make DF/DF_W/DF_S available even when a section is re-run standalone."""
-    global DF, DF_W, DF_S, DATE_EXPR, DATE_EXPR_DESC, WINDOW_START, WINDOW_END, SAMPLE_ROWS
+    """Make DF/DF_CA/DF_W/DF_S available even when a section is re-run standalone.
+    DF = full table (S1/S2/S3). DF_CA = CA-Retirement subset; DF_W/DF_S derive from it."""
+    global DF, DF_CA, DF_W, DF_S, DATE_EXPR, DATE_EXPR_DESC, WINDOW_START, WINDOW_END, SAMPLE_ROWS
     if DF is None:
         DF = spark.table(TABLE_FQN)
     if DATE_EXPR is None:
         DATE_EXPR, DATE_EXPR_DESC = resolve_date_expr(DF)
+    if DF_CA is None:
+        cond, _ = scope_condition(DF)
+        DF_CA = DF.filter(cond) if cond is not None else DF
     if DF_W is None:
         if WINDOW_END is None:
             dv = RESULTS.get("daily_volume", {})
@@ -240,7 +297,7 @@ def ensure_frames():
         WINDOW_START = (WINDOW_END.replace(day=1) - datetime.timedelta(days=1)).replace(day=1)
         for _ in range(WINDOW_MONTHS - 1):
             WINDOW_START = (WINDOW_START - datetime.timedelta(days=1)).replace(day=1)
-        DF_W = DF.filter(F.to_date(DATE_EXPR) >= F.lit(WINDOW_START))
+        DF_W = DF_CA.filter(F.to_date(DATE_EXPR) >= F.lit(WINDOW_START))
     if DF_S is None:
         DF_S = DF_W.sample(withReplacement=False, fraction=SAMPLE_FRACTION, seed=42)
         if CACHE_SAMPLE:
@@ -250,6 +307,7 @@ def ensure_frames():
 
 print(f"Config OK. table={TABLE_FQN} window={WINDOW_MONTHS}mo fraction={SAMPLE_FRACTION} "
       f"batch={COL_BATCH_SIZE} top_n={TOP_N} sensitive_cols={len(SENSITIVE_COLS)}")
+print(f"Scope filter: rsid={RSID_FILTER or '(off)'} url_contains={URL_FILTER or '(off)'}")
 
 # COMMAND ----------
 
@@ -310,11 +368,13 @@ def s1_discovery():
                     if re.search(r"adobe|hit|clickstream", tname, re.IGNORECASE):
                         candidates.append({"fqn": f"{cat}.{sch}.{tname}", "n_cols": None})
 
-    resolves, n_cols_chosen, err = False, None, None
+    resolves, n_cols_chosen, err, scope_meta = False, None, None, None
     try:
         DF = spark.table(TABLE_FQN)
         n_cols_chosen = len(DF.columns)
         resolves = True
+        _resolve_scope_cols(DF)
+        _, scope_meta = scope_condition(DF)
     except Exception as e:
         err = f"{type(e).__name__}: {str(e)[:200]}"
 
@@ -324,6 +384,7 @@ def s1_discovery():
         "n_cols": n_cols_chosen,
         "resolve_error": err,
         "candidates": candidates[:30],
+        "scope": scope_meta,
         "note": "If resolves=false, set the table_fqn widget to one of the candidates and re-run.",
     })
 
@@ -387,81 +448,112 @@ run_section("S2", s2_delta_meta)
 
 # COMMAND ----------
 
-DAILY_ROWS = []   # [(date, count)] kept for S4/S8/S10 cross-checks and charts
+DAILY_ROWS = []       # [(date, ca_count)] — the CA subset series; drives S4/S8/S10
+DAILY_TOTAL_ROWS = [] # [(date, total_count)] — whole-table series (chart/context)
 
 def s3_daily_volume():
-    global DF, DATE_EXPR, DATE_EXPR_DESC, WINDOW_END, DAILY_ROWS
+    global DF, DATE_EXPR, DATE_EXPR_DESC, WINDOW_END, DAILY_ROWS, DAILY_TOTAL_ROWS
     if DF is None:
         DF = spark.table(TABLE_FQN)
     DATE_EXPR, DATE_EXPR_DESC = resolve_date_expr(DF)
+    _resolve_scope_cols(DF)
+    cond, scope_meta = scope_condition(DF)
+    ca_expr = F.when(cond, 1).otherwise(0) if cond is not None else F.lit(1)
+    url_blank_expr = (F.when(~nonblank(URL_COL), 1).otherwise(0)
+                      if URL_COL else F.lit(0))
 
-    rows = (DF.select(F.to_date(DATE_EXPR).alias("d"))
-              .groupBy("d").count().orderBy("d").collect())
-    null_dates = sum(r["count"] for r in rows if r["d"] is None)
-    daily = [(r["d"], r["count"]) for r in rows if r["d"] is not None]
-    DAILY_ROWS = daily
-    if not daily:
+    rows = (DF.select(F.to_date(DATE_EXPR).alias("d"),
+                      ca_expr.alias("ca"), url_blank_expr.alias("urlblank"))
+              .groupBy("d")
+              .agg(F.count("*").alias("total"),
+                   F.sum("ca").alias("ca"),
+                   F.sum("urlblank").alias("urlblank"))
+              .orderBy("d").collect())
+    null_dates = sum(r["total"] for r in rows if r["d"] is None)
+    per_day = [(r["d"], r["total"], r["ca"] or 0) for r in rows if r["d"] is not None]
+    DAILY_TOTAL_ROWS = [(d, t) for d, t, _ in per_day]
+    DAILY_ROWS = [(d, ca) for d, _, ca in per_day]     # CA subset series
+    url_blank_total = sum(r["urlblank"] or 0 for r in rows)
+    if not per_day:
         emit("daily_volume", {"error": "no non-null dates", "date_expr": DATE_EXPR_DESC})
         return
 
-    dmin, dmax = daily[0][0], daily[-1][0]
-    WINDOW_END = dmax
-    total = sum(c for _, c in daily)
-    counts_by_date = dict(daily)
+    total_all = sum(t for _, t, _ in per_day)
+    total_ca = sum(ca for _, _, ca in per_day)
 
-    # missing calendar days
+    # CA subset drives the calendar/seasonality stats
+    ca_daily = [(d, ca) for d, ca in DAILY_ROWS if ca > 0]
+    if not ca_daily:
+        emit("daily_volume", {
+            "error": "scope filter matched 0 rows — check rsid/url widgets and uc_discovery.scope",
+            "date_expr": DATE_EXPR_DESC, "scope": scope_meta,
+            "total_rows_all": total_all, "url_blank_rows": url_blank_total,
+        })
+        return
+    dmin, dmax = ca_daily[0][0], ca_daily[-1][0]
+    WINDOW_END = dmax   # subset may end earlier than the table
+    ca_by_date = dict(DAILY_ROWS)
+
+    # missing calendar days within the CA active range (zero-hit days included)
     missing = []
     d = dmin
     while d <= dmax:
-        if d not in counts_by_date:
+        if ca_by_date.get(d, 0) == 0:
             missing.append(str(d))
         d += datetime.timedelta(days=1)
 
-    # day-of-week means (Mon..Sun)
+    # day-of-week means over the CA active range (Mon..Sun)
     dow_sum, dow_n = [0] * 7, [0] * 7
-    for d, c in daily:
-        dow_sum[d.weekday()] += c
-        dow_n[d.weekday()] += 1
+    for d, ca in DAILY_ROWS:
+        if dmin <= d <= dmax:
+            dow_sum[d.weekday()] += ca
+            dow_n[d.weekday()] += 1
     dow_mean = [round(dow_sum[i] / dow_n[i]) if dow_n[i] else None for i in range(7)]
 
-    # monthly totals (full history — RRSP seasonality evidence)
-    monthly = {}
-    for d, c in daily:
-        monthly[d.strftime("%Y-%m")] = monthly.get(d.strftime("%Y-%m"), 0) + c
+    # monthly totals (both series) — RRSP seasonality evidence
+    monthly_ca, monthly_total = {}, {}
+    for d, t, ca in per_day:
+        monthly_ca[d.strftime("%Y-%m")] = monthly_ca.get(d.strftime("%Y-%m"), 0) + ca
+        monthly_total[d.strftime("%Y-%m")] = monthly_total.get(d.strftime("%Y-%m"), 0) + t
 
-    # top |log-ratio| day-over-day jumps (level-shift candidates)
+    # top |log-ratio| day-over-day jumps on the CA series (level-shift candidates)
     jumps = []
-    for (d0, c0), (d1, c1) in zip(daily, daily[1:]):
+    for (d0, c0), (d1, c1) in zip(ca_daily, ca_daily[1:]):
         if c0 > 0 and c1 > 0:
             jumps.append((abs(math.log(c1 / c0)), str(d1), c0, c1))
     jumps.sort(reverse=True)
     top_jumps = [{"date": j[1], "prev": j[2], "curr": j[3],
                   "ratio": round(j[3] / j[2], 3)} for j in jumps[:5]]
 
-    # CSV lines: full daily if it fits, else last WINDOW_MONTHS daily + older monthly
-    if len(daily) <= MAX_CSV_LINES:
-        csv_daily = [f"{d},{c}" for d, c in daily]
+    # CSV: date,total_hits,ca_hits — full daily if it fits, else last WINDOW_MONTHS
+    if len(per_day) <= MAX_CSV_LINES:
+        csv_daily = [f"{d},{t},{ca}" for d, t, ca in per_day]
         csv_note = "full history, daily"
     else:
         cutoff = (dmax.replace(day=1) - datetime.timedelta(days=1)).replace(day=1)
         for _ in range(WINDOW_MONTHS - 1):
             cutoff = (cutoff - datetime.timedelta(days=1)).replace(day=1)
-        csv_daily = [f"{d},{c}" for d, c in daily if d >= cutoff][:MAX_CSV_LINES]
+        csv_daily = [f"{d},{t},{ca}" for d, t, ca in per_day if d >= cutoff][:MAX_CSV_LINES]
         csv_note = f"daily since {cutoff}; older history in monthly_totals"
 
     emit("daily_volume", {
         "date_expr": DATE_EXPR_DESC,
-        "total_rows": total,
+        "scope": scope_meta,
+        "total_rows_all": total_all,
+        "total_rows_ca": total_ca,
+        "ca_share_pct": round(100.0 * total_ca / max(total_all, 1), 3),
+        "url_blank_rows": url_blank_total,
         "null_date_rows": null_dates,
-        "date_min": str(dmin), "date_max": str(dmax),
-        "n_days_present": len(daily),
-        "n_days_missing": len(missing),
+        "ca_date_min": str(dmin), "ca_date_max": str(dmax),
+        "n_ca_days_present": len(ca_daily),
+        "n_ca_days_missing": len(missing),
         "missing_days": missing[:50],
-        "dow_mean_hits_mon_to_sun": dow_mean,
-        "monthly_totals": monthly,
-        "top5_day_over_day_jumps": top_jumps,
+        "dow_mean_ca_hits_mon_to_sun": dow_mean,
+        "monthly_totals_ca": monthly_ca,
+        "monthly_totals_all": monthly_total,
+        "top5_day_over_day_jumps_ca": top_jumps,
         "csv_note": csv_note,
-        "csv_header": "date,hits",
+        "csv_header": "date,total_hits,ca_hits",
         "csv": csv_daily,
     })
 
@@ -471,31 +563,78 @@ run_section("S3", s3_daily_volume)
 
 # chart for your own inspection (not part of the shareable output)
 if DAILY_ROWS:
-    display(spark.createDataFrame([(str(d), c) for d, c in DAILY_ROWS], ["date", "hits"]))
+    display(spark.createDataFrame(
+        [(str(d), t, ca) for (d, t), (_, ca) in zip(DAILY_TOTAL_ROWS, DAILY_ROWS)],
+        ["date", "total_hits", "ca_hits"]))
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC ## S4 — Profiling window + sample frames
-# MAGIC Builds `df_w` (last N months) and `df_s` (random sample) used by S5–S11;
-# MAGIC cross-checks window row count against S3.
+# MAGIC Builds `df_w` (last N months of the CA subset) and `df_s` (random sample) used by
+# MAGIC S5–S11; cross-checks the CA window count against S3 and emits filter diagnostics
+# MAGIC (rsid-only / url-only / both matches, top report-suites) so a wrong filter fails loudly.
 
 # COMMAND ----------
 
 def s4_frames():
-    global DF_W, DF_S, SAMPLE_ROWS
-    DF_W = None; DF_S = None  # force rebuild with S3's date_max
+    global DF_CA, DF_W, DF_S, SAMPLE_ROWS
+    DF_CA = None; DF_W = None; DF_S = None  # force rebuild with S3's date_max
     ensure_frames()
-    window_rows = DF_W.count()
+    window_rows = DF_W.count()   # DF_W is CA-scoped, so this is the CA window count
     s3_window_sum = sum(c for d, c in DAILY_ROWS if d >= WINDOW_START) if DAILY_ROWS else None
+
+    # ---- filter diagnostics on the UNFILTERED window (rsid-only / url-only / both) ----
+    cond, scope_meta = scope_condition(DF)
+    raw_window = DF.filter(F.to_date(DATE_EXPR) >= F.lit(WINDOW_START))
+    rsid_cond = (F.lower(F.trim(F.col(RSID_COL).cast("string"))) == F.lit(RSID_FILTER)
+                 if (RSID_COL and RSID_FILTER) else F.lit(False))
+    url_cond = (F.lower(F.col(URL_COL).cast("string")).contains(URL_FILTER)
+                if (URL_COL and URL_FILTER) else F.lit(False))
+    url_blank_cond = (~nonblank(URL_COL)) if URL_COL else F.lit(False)
+    diag = raw_window.agg(
+        F.count("*").alias("total"),
+        F.sum(F.when(rsid_cond, 1).otherwise(0)).alias("rsid_match"),
+        F.sum(F.when(url_cond, 1).otherwise(0)).alias("url_match"),
+        F.sum(F.when(rsid_cond & url_cond, 1).otherwise(0)).alias("both"),
+        F.sum(F.when(url_blank_cond, 1).otherwise(0)).alias("url_blank"),
+    ).collect()[0]
+
+    # top report-suite values (config identifiers, not PII) to catch value/casing mismatch
+    top_rsids = []
+    if RSID_COL:
+        top_rsids = [{"rsid": (str(r[RSID_COL]) if r[RSID_COL] is not None else None),
+                      "pct": round(100.0 * r["count"] / max(diag["total"], 1), 3)}
+                     for r in (raw_window.groupBy(RSID_COL).count()
+                                         .orderBy(F.desc("count")).limit(10).collect())]
+
+    both = diag["both"] or 0
+    warning = None
+    if both == 0:
+        warning = ("SCOPE FILTER MATCHED 0 ROWS in the window. Downstream sections would "
+                   "profile an empty frame. Check window_frame.filter.top_rsids for the "
+                   "actual rsid value/casing and adjust the rsid_filter / url_filter widgets.")
+        print("!!!!! " + warning)
+
     emit("window_frame", {
         "window_start": str(WINDOW_START), "window_end": str(WINDOW_END),
-        "window_rows": window_rows,
-        "s3_crosscheck_sum": s3_window_sum,
+        "window_rows_ca": window_rows,
+        "s3_crosscheck_sum_ca": s3_window_sum,
         "crosscheck_ok": (s3_window_sum == window_rows) if s3_window_sum is not None else None,
         "sample_fraction": SAMPLE_FRACTION,
         "sample_rows": SAMPLE_ROWS,
         "sample_cached": CACHE_SAMPLE,
+        "filter": {
+            **scope_meta,
+            "window_total_rows": diag["total"],
+            "rsid_only_match": diag["rsid_match"],
+            "url_only_match": diag["url_match"],
+            "both_match": both,
+            "url_blank_rows": diag["url_blank"],
+            "url_blank_pct": round(100.0 * (diag["url_blank"] or 0) / max(diag["total"], 1), 3),
+            "top_rsids": top_rsids,
+            "warning": warning,
+        },
     })
 
 run_section("S4", s4_frames)
@@ -890,9 +1029,10 @@ def s10_dq_baseline():
     vis_hi = pick_col(DF_S, "post_visid_high", "visid_high")
     vis_lo = pick_col(DF_S, "post_visid_low", "visid_low")
     seq = pick_col(DF_S, "visit_page_num", "hit_time_gmt")
-    if DAILY_ROWS and vis_hi and vis_lo and pick_col(DF_S, "visit_num") and seq:
-        check_day = DAILY_ROWS[-2][0] if len(DAILY_ROWS) >= 2 else DAILY_ROWS[-1][0]
-        day_df = DF.filter(F.to_date(DATE_EXPR) == F.lit(check_day))
+    ca_days = [d for d, ca in DAILY_ROWS if ca > 0]
+    if ca_days and vis_hi and vis_lo and pick_col(DF_S, "visit_num") and seq:
+        check_day = ca_days[-2] if len(ca_days) >= 2 else ca_days[-1]
+        day_df = DF_CA.filter(F.to_date(DATE_EXPR) == F.lit(check_day))
         total = day_df.count()
         distinct = day_df.select(vis_hi, vis_lo, "visit_num", seq).distinct().count()
         dup = {"day": str(check_day), "rows": total, "distinct_keys": distinct,
@@ -1023,10 +1163,15 @@ def s12_synthesis_spec():
 
     dv = RESULTS.get("daily_volume", {})
     prof = RESULTS.get("ts_profiles", {})
+    _, scope_meta = scope_condition(DF) if DF is not None else (None, None)
     emit("synthesis_spec", {
         "meta": {
             "table": TABLE_FQN,
             "generated_at": datetime.datetime.now().isoformat(timespec="seconds"),
+            "scope": {"rsid": RSID_FILTER or None, "url_contains": URL_FILTER or None,
+                      "rsid_col": (scope_meta or {}).get("rsid_col"),
+                      "url_col": (scope_meta or {}).get("url_col"),
+                      "ca_share_pct": dv.get("ca_share_pct")},
             "window": {"start": str(WINDOW_START), "end": str(WINDOW_END),
                        "months": WINDOW_MONTHS},
             "sample_fraction": SAMPLE_FRACTION, "sample_rows": SAMPLE_ROWS,
@@ -1072,3 +1217,8 @@ run_section("S12", s12_synthesis_spec)
 # MAGIC Nothing in these blocks contains raw identifier values, full URLs with query strings,
 # MAGIC or unmasked high-cardinality values (ADR-0007). If a block looks like it leaks anything,
 # MAGIC don't paste it — flag it instead so the notebook can be tightened.
+# MAGIC
+# MAGIC **Scope reminder:** everything except `delta_meta` and the `total_hits` column of
+# MAGIC `daily_volume` describes the CA-Retirement subset. First sanity check on any run:
+# MAGIC `window_frame.filter.both_match` must be > 0 and `top_rsids` must list the expected
+# MAGIC `manulifeglobalprod` value — if not, fix the `rsid_filter` / `url_filter` widgets.
