@@ -170,9 +170,14 @@ def mask(v):
     """SHA1-truncated token; matches new_data/generated_data_profile.json format."""
     return "<masked:" + hashlib.sha1(str(v).encode("utf-8")).hexdigest()[:8] + ">"
 
+def qcol(col_name):
+    """F.col with backtick quoting — the schema has dotted column names
+    (mobileappperformanceappid.*) that unquoted F.col parses as struct access."""
+    return F.col("`" + col_name.replace("`", "``") + "`")
+
 def nonblank(col_name):
     """Adobe feeds use empty strings, not NULLs."""
-    c = F.col(col_name)
+    c = qcol(col_name)
     return c.isNotNull() & (F.trim(c.cast("string")) != "")
 
 def strip_query(u):
@@ -293,7 +298,7 @@ def ensure_frames():
     if DF_W is None:
         if WINDOW_END is None:
             dv = RESULTS.get("daily_volume", {})
-            WINDOW_END = datetime.date.fromisoformat(dv["date_max"]) if dv.get("date_max") else datetime.date.today()
+            WINDOW_END = datetime.date.fromisoformat(dv["ca_date_max"]) if dv.get("ca_date_max") else datetime.date.today()
         WINDOW_START = (WINDOW_END.replace(day=1) - datetime.timedelta(days=1)).replace(day=1)
         for _ in range(WINDOW_MONTHS - 1):
             WINDOW_START = (WINDOW_START - datetime.timedelta(days=1)).replace(day=1)
@@ -664,7 +669,7 @@ def s5_population_census():
     sparse    = [c for c, cnt in pop_counts.items() if 0 < (cnt or 0) / n < 0.001]
     dead      = [c for c, cnt in pop_counts.items() if not cnt]
 
-    dist_exprs = [(c, F.approx_count_distinct(F.col(c))) for c in populated]
+    dist_exprs = [(c, F.approx_count_distinct(qcol(c))) for c in populated]
     distincts = batched_agg(DF_S, dist_exprs, COL_BATCH_SIZE) if dist_exprs else {}
 
     CENSUS = {c: {"dtype": dtypes.get(c), "pop_pct": round(100.0 * pop_counts[c] / n, 3),
@@ -1048,7 +1053,7 @@ def s10_dq_baseline():
         lc = load_cols[0]
         try:
             late_row = (DF_S.filter(nonblank(lc))
-                        .select(F.datediff(F.to_date(F.col(lc).cast("timestamp")),
+                        .select(F.datediff(F.to_date(qcol(lc).cast("timestamp")),
                                            F.to_date(DATE_EXPR)).alias("lag_days"))
                         .agg(F.expr("percentile_approx(lag_days, array(0.5, 0.95, 0.99))")
                              .alias("p")).collect()[0])
@@ -1178,11 +1183,11 @@ def s12_synthesis_spec():
             "sections_missing": missing, "sections_skipped": SKIPPED,
         },
         "volume": {
-            "total_rows": dv.get("total_rows"),
-            "date_min": dv.get("date_min"), "date_max": dv.get("date_max"),
-            "monthly_totals": dv.get("monthly_totals"),
-            "dow_mean_hits_mon_to_sun": dv.get("dow_mean_hits_mon_to_sun"),
-            "missing_days": dv.get("n_days_missing"),
+            "total_rows": dv.get("total_rows_ca"),
+            "date_min": dv.get("ca_date_min"), "date_max": dv.get("ca_date_max"),
+            "monthly_totals": dv.get("monthly_totals_ca"),
+            "dow_mean_hits_mon_to_sun": dv.get("dow_mean_ca_hits_mon_to_sun"),
+            "missing_days": dv.get("n_ca_days_missing"),
             "cv": prof.get("cv"),
             "autocorr_lag7": prof.get("autocorr_lag7"),
             "autocorr_lag28": prof.get("autocorr_lag28"),
