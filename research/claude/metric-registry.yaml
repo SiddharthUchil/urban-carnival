@@ -1,0 +1,84 @@
+# GMAI-Pulse Phase-1 Metric Registry
+# ------------------------------------------------------------------
+# version: 0.1.0 (2026-07-02)
+# generated_from: new_data/data_profile_summary.json (profiler v0.1.0, run 2026-07-02)
+# seed_source: CoverMe data dictionary rows where Notes == "Anomaly Detection"
+#              -> confirmed counts: 9 (data_feed_columns) + 8 (post_eVar) + 12 (post_event_list) = 29
+#
+# STATUS: SCAFFOLD. The profile JSONs confirm the per-sheet COUNTS but are
+# per-column aggregates — they cannot map which specific rows carry the tag.
+# Filling the placeholders requires one extraction pass over the dictionary
+# workbook (see extraction_procedure below). Tracked as an open task in
+# 10-data-profile-alignment.md.
+#
+# validation_rules:
+#   - every source_ref must exist in data_profile_summary.json for its sheet
+#   - per-sheet entry counts must equal the seed counts (9 / 8 / 12)
+#   - metric_id unique; grain in {daily, hourly}; status in {active, candidate, deferred}
+#   - direction in {higher_is_good, higher_is_bad, context_dependent}
+#
+# extraction_procedure: |
+#   import pandas as pd
+#   xl = pd.ExcelFile("<CoverMe data dictionary workbook>")
+#   for sheet in ["data_feed_columns", "post_eVar", "post_event_list"]:
+#       df = xl.parse(sheet)
+#       print(df[df["Notes"].str.strip().str.casefold() == "anomaly detection"])
+# ------------------------------------------------------------------
+
+meta:
+  version: 0.1.0
+  updated: 2026-07-02
+  default_grain: daily          # hourly reserved — enable only after >=30-day feed confirms volume
+  domains: [coverme, gwam_retirement]
+  notes: >
+    One canonical Adobe hit schema serves both domains (ADR-0006); entries default to
+    domain: shared unless a metric is proven domain-specific. No metric columns exist
+    in the hit schema — every metric here is a downstream aggregate of decoded
+    post_event_list events or column/eVar population rates (02 §2).
+
+# ------------------------------------------------------------------
+# 1) data_feed_columns — 9 tagged rows (traffic / behavioral columns)
+# ------------------------------------------------------------------
+data_feed_columns:   # exactly 9 entries when extracted
+  - metric_id: dfc_metric_01        # PLACEHOLDER — fill from extraction
+    domain: shared
+    source_sheet: data_feed_columns
+    source_ref: TBD-extract         # dictionary "Column name" value
+    decode_rule: TBD                # e.g. non-null rate or per-grain count of the column
+    grain: daily
+    direction: TBD
+    owner: TBD
+    status: candidate
+  # dfc_metric_02 .. dfc_metric_09: same shape (9 total, per seed count)
+
+# ------------------------------------------------------------------
+# 2) post_eVar — 8 tagged rows (conversion-context eVars)
+# ------------------------------------------------------------------
+post_eVar:           # exactly 8 entries when extracted
+  - metric_id: evar_metric_01       # PLACEHOLDER — fill from extraction
+    domain: shared
+    source_sheet: post_eVar
+    source_ref: TBD-extract         # e.g. post_evarNN slot
+    decode_rule: population-rate    # % of hits/visits where the eVar is set (typical)
+    grain: daily
+    direction: TBD
+    owner: TBD
+    status: candidate
+  # evar_metric_02 .. evar_metric_08: same shape (8 total, per seed count)
+
+# ------------------------------------------------------------------
+# 3) post_event_list — 12 tagged rows (commerce/conversion events)
+#    Expected first ACTIVE entries: the commerce events the dictionary
+#    names (Purchase, Product View, Cart Open/Add/Remove, form/quote events).
+# ------------------------------------------------------------------
+post_event_list:     # exactly 12 entries when extracted
+  - metric_id: pel_metric_01        # PLACEHOLDER — likely coverme_purchase_daily
+    domain: shared
+    source_sheet: post_event_list
+    source_ref: TBD-extract         # dictionary "Event" id
+    decode_rule: event-count        # count of event id occurrences per grain
+    grain: daily
+    direction: higher_is_good       # typical for conversion events; confirm per entry
+    owner: TBD
+    status: candidate
+  # pel_metric_02 .. pel_metric_12: same shape (12 total, per seed count)

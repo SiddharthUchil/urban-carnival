@@ -1,0 +1,1074 @@
+# Databricks notebook source
+# MAGIC %md
+# MAGIC # GMAI-Pulse — GWAM Canada Retirement EDA
+# MAGIC
+# MAGIC **Purpose.** Read-only exploratory profiling of the Adobe Analytics hit-level table
+# MAGIC (`gwam_prod_catalog.inv_typed_common.adobe_hit_data`, provisional) to:
+# MAGIC 1. Fill evidence gaps: volume, history depth, load cadence, schema population census.
+# MAGIC 2. Discover real metric candidates (post_event_list event IDs, live eVars/props).
+# MAGIC 3. Capture time-series shape (seasonality, volatility) for anomaly-model design.
+# MAGIC 4. Produce a machine-readable **synthesis spec** for generating synthetic data.
+# MAGIC
+# MAGIC **Privacy (ADR-0007).** This notebook NEVER prints raw values of sensitive columns
+# MAGIC (visitor IDs, IPs, cookies, geo_zip, user_agent, userid, ...). Sensitive columns are
+# MAGIC reported shape-only (null %, cardinality, length stats). Non-allowlisted values are
+# MAGIC masked as `<masked:xxxxxxxx>` tokens. URLs are query-stripped before any grouping.
+# MAGIC A final regex scrubber redacts anything resembling an email/IP/long ID in outputs.
+# MAGIC
+# MAGIC **How to run.** Attach to a cluster (DBR 13+ recommended), review the widgets that
+# MAGIC appear at the top after running the CONFIG cell, then Run All. Each section prints a
+# MAGIC `===== BEGIN SHAREABLE: <id> =====` block — copy those blocks back. Sections are
+# MAGIC independent: a failure prints `SKIPPED` and the run continues.
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## S0 — Config, constants, helpers
+
+# COMMAND ----------
+
+import json
+import re
+import math
+import hashlib
+import datetime
+import traceback
+
+from pyspark.sql import functions as F
+
+# ---------------------------------------------------------------- widgets ----
+dbutils.widgets.text("table_fqn", "gwam_prod_catalog.inv_typed_common.adobe_hit_data", "1. Table (catalog.schema.table)")
+dbutils.widgets.text("window_months", "13", "2. Deep-profiling window (months)")
+dbutils.widgets.text("sample_fraction", "0.05", "3. Sample fraction for per-column stats")
+dbutils.widgets.text("col_batch_size", "150", "4. Columns per aggregation batch")
+dbutils.widgets.text("top_n", "15", "5. Top-N cap for value lists")
+dbutils.widgets.text("hourly_days", "35", "6. Days for hourly profile")
+dbutils.widgets.text("max_csv_lines", "450", "7. Max CSV lines per shareable block")
+dbutils.widgets.text("top_events_k", "6", "8. Top-K events for daily series")
+dbutils.widgets.text("cache_sample", "false", "9. Persist sample df (true/false)")
+
+TABLE_FQN      = dbutils.widgets.get("table_fqn").strip()
+WINDOW_MONTHS  = int(dbutils.widgets.get("window_months"))
+SAMPLE_FRACTION = float(dbutils.widgets.get("sample_fraction"))
+COL_BATCH_SIZE = int(dbutils.widgets.get("col_batch_size"))
+TOP_N          = int(dbutils.widgets.get("top_n"))
+HOURLY_DAYS    = int(dbutils.widgets.get("hourly_days"))
+MAX_CSV_LINES  = int(dbutils.widgets.get("max_csv_lines"))
+TOP_EVENTS_K   = int(dbutils.widgets.get("top_events_k"))
+CACHE_SAMPLE   = dbutils.widgets.get("cache_sample").strip().lower() == "true"
+
+# ------------------------------------------------------- privacy constants ----
+# ADR-0007 / doc-11 §2 disposition table (24 profiler-flagged columns).
+# Rule here: SHAPE ONLY — null%, approx-distinct, length stats. Never values,
+# not even masked. Pre- and post- variants both listed defensively.
+SENSITIVE_COLS = {
+    # visitor/device identifiers -> pseudonymize (HMAC) in the pipeline
+    "mcvisid", "visid_high", "visid_low", "post_visid_high", "post_visid_low",
+    "cust_visid", "post_cust_visid", "cookies", "post_cookies", "persistent_cookie",
+    # network addresses -> drop
+    "ip", "ip2", "ipv6",
+    # fine geo -> generalize
+    "geo_zip", "post_zip", "zip",
+    # device fingerprint -> generalize
+    "user_agent", "accept_language",
+    # account/system -> drop
+    "userid", "username", "user_hash",
+    # personalization / social -> pseudonymize-or-drop per review
+    "post_tnt", "tnt", "socialaccountandappids",
+}
+# Pattern net for anything the explicit list misses (belt and suspenders).
+SENSITIVE_PATTERNS = re.compile(
+    r"visid|cookie|^ip[v0-9]*$|user_agent|zip$|userid|username|user_hash|"
+    r"social|email|phone|password|token|guid|mcid|aamid",
+    re.IGNORECASE,
+)
+
+def is_sensitive(col_name):
+    c = col_name.lower()
+    return c in SENSITIVE_COLS or bool(SENSITIVE_PATTERNS.search(c))
+
+# Columns whose RAW values are allowlisted for printing (low-cardinality
+# technical dims / lookup IDs / public-site path segments).
+RAW_OK_DIMS = {
+    "geo_country", "geo_region", "post_geo_country", "post_geo_region",
+    "browser", "os", "connection_type", "language", "javascript",
+    "hit_source", "exclude_hit", "duplicate_purchase", "currency",
+    "visit_num", "visit_page_num", "new_visit", "hourly_visitor",
+    "daily_visitor", "weekly_visitor", "monthly_visitor", "quarterly_visitor",
+    "yearly_visitor", "ref_type", "post_page_event", "page_event",
+}
+
+# ------------------------------------------------------------ emit helpers ----
+RESULTS = {}   # section_id -> payload (drives S12 consolidation)
+SKIPPED = {}   # section_id -> reason
+
+_SCRUB_PATTERNS = [
+    (re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"), "<redacted:email>"),
+    (re.compile(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b"), "<redacted:ipv4>"),
+    (re.compile(r"\b[0-9a-fA-F]{24,}\b"), "<redacted:hexid>"),
+    (re.compile(r"\b\d{10,}\b"), "<redacted:longnum>"),
+]
+
+def _scrub_str(s):
+    if len(s) > 160:
+        s = s[:160] + "...<trunc>"
+    for pat, repl in _SCRUB_PATTERNS:
+        s = pat.sub(repl, s)
+    return s
+
+def _scrub(obj):
+    """Walk a payload: truncate strings, redact email/IP/long-ID lookalikes, round floats."""
+    if isinstance(obj, dict):
+        return {(_scrub_str(k) if isinstance(k, str) else k): _scrub(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_scrub(v) for v in obj]
+    if isinstance(obj, str):
+        return _scrub_str(obj)
+    if isinstance(obj, float):
+        return round(obj, 4) if math.isfinite(obj) else None
+    return obj
+
+def emit(section_id, payload):
+    """Single privacy chokepoint: every shareable output goes through here."""
+    payload = _scrub(payload)
+    RESULTS[section_id] = payload
+    body = json.dumps(payload, separators=(",", ":"), default=str)
+    print(f"===== BEGIN SHAREABLE: {section_id} =====")
+    if len(body) <= 48000:
+        print(body)
+    else:
+        n_parts = math.ceil(len(body) / 40000)
+        for i in range(n_parts):
+            print(f"----- part {i+1} of {n_parts} (concatenate parts to reassemble) -----")
+            print(body[i * 40000:(i + 1) * 40000])
+    print(f"===== END SHAREABLE: {section_id} =====")
+
+def run_section(section_id, fn):
+    print(f"\n>>> running {section_id} ...")
+    t0 = datetime.datetime.now()
+    try:
+        fn()
+        print(f">>> {section_id} done in {(datetime.datetime.now() - t0).total_seconds():.0f}s")
+    except Exception as e:
+        reason = f"{type(e).__name__}: {str(e)[:300]}"
+        SKIPPED[section_id] = reason
+        print(f"===== SKIPPED: {section_id} | {reason} =====")
+        traceback.print_exc()
+
+# ------------------------------------------------------------ data helpers ----
+def mask(v):
+    """SHA1-truncated token; matches new_data/generated_data_profile.json format."""
+    return "<masked:" + hashlib.sha1(str(v).encode("utf-8")).hexdigest()[:8] + ">"
+
+def nonblank(col_name):
+    """Adobe feeds use empty strings, not NULLs."""
+    c = F.col(col_name)
+    return c.isNotNull() & (F.trim(c.cast("string")) != "")
+
+def strip_query(u):
+    return str(u).split("?")[0].split("#")[0]
+
+def url_shape(u):
+    """(domain, path_depth, first_path_segment) — never the full URL."""
+    u = strip_query(u)
+    m = re.match(r"^(?:[a-z]+:)?//([^/]+)(/.*)?$", u) or re.match(r"^([^/]+)(/.*)?$", u)
+    if not m:
+        return ("<unparsed>", 0, "")
+    domain = m.group(1).lower()
+    path = m.group(2) or ""
+    segs = [s for s in path.split("/") if s]
+    return (domain, len(segs), ("/" + segs[0]) if segs else "/")
+
+def batched_agg(df, agg_exprs, batch_size):
+    """Run many agg expressions in batches to dodge codegen limits.
+    agg_exprs: list of (alias, Column). Returns {alias: value}."""
+    out = {}
+    for i in range(0, len(agg_exprs), batch_size):
+        batch = agg_exprs[i:i + batch_size]
+        exprs = [c.alias(a) for a, c in batch]
+        try:
+            row = df.agg(*exprs).collect()[0]
+        except Exception:
+            spark.conf.set("spark.sql.codegen.wholeStage", "false")
+            try:
+                row = df.agg(*exprs).collect()[0]
+            finally:
+                spark.conf.set("spark.sql.codegen.wholeStage", "true")
+        out.update(row.asDict())
+    return out
+
+def resolve_date_expr(df):
+    """Fallback chain for the canonical hit timestamp. Returns (Column, description)."""
+    dtypes = dict(df.dtypes)
+    if "date_time" in dtypes:
+        if dtypes["date_time"] in ("timestamp", "date"):
+            return F.col("date_time"), "date_time (typed)"
+        return F.to_timestamp(F.col("date_time")), "to_timestamp(date_time)"
+    if "hit_time_gmt" in dtypes:
+        return F.from_unixtime(F.col("hit_time_gmt").cast("long")).cast("timestamp"), "from_unixtime(hit_time_gmt)"
+    raise ValueError("No usable timestamp column (date_time / hit_time_gmt) found")
+
+def pick_col(df, *candidates):
+    """First candidate column present in the schema, else None."""
+    cols = set(df.columns)
+    for c in candidates:
+        if c in cols:
+            return c
+    return None
+
+# Globals populated by S1/S4; ensure_frames() rebuilds them for re-runs.
+DF = None
+DF_W = None
+DF_S = None
+DATE_EXPR = None
+DATE_EXPR_DESC = None
+WINDOW_START = None
+WINDOW_END = None
+SAMPLE_ROWS = None
+
+def ensure_frames():
+    """Make DF/DF_W/DF_S available even when a section is re-run standalone."""
+    global DF, DF_W, DF_S, DATE_EXPR, DATE_EXPR_DESC, WINDOW_START, WINDOW_END, SAMPLE_ROWS
+    if DF is None:
+        DF = spark.table(TABLE_FQN)
+    if DATE_EXPR is None:
+        DATE_EXPR, DATE_EXPR_DESC = resolve_date_expr(DF)
+    if DF_W is None:
+        if WINDOW_END is None:
+            dv = RESULTS.get("daily_volume", {})
+            WINDOW_END = datetime.date.fromisoformat(dv["date_max"]) if dv.get("date_max") else datetime.date.today()
+        WINDOW_START = (WINDOW_END.replace(day=1) - datetime.timedelta(days=1)).replace(day=1)
+        for _ in range(WINDOW_MONTHS - 1):
+            WINDOW_START = (WINDOW_START - datetime.timedelta(days=1)).replace(day=1)
+        DF_W = DF.filter(F.to_date(DATE_EXPR) >= F.lit(WINDOW_START))
+    if DF_S is None:
+        DF_S = DF_W.sample(withReplacement=False, fraction=SAMPLE_FRACTION, seed=42)
+        if CACHE_SAMPLE:
+            DF_S = DF_S.persist()
+        SAMPLE_ROWS = DF_S.count()
+    return DF, DF_W, DF_S
+
+print(f"Config OK. table={TABLE_FQN} window={WINDOW_MONTHS}mo fraction={SAMPLE_FRACTION} "
+      f"batch={COL_BATCH_SIZE} top_n={TOP_N} sensitive_cols={len(SENSITIVE_COLS)}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## S1 — Unity Catalog discovery
+# MAGIC Finds candidate adobe/hit/clickstream tables and verifies the configured table resolves.
+# MAGIC Metadata-only; runs in seconds.
+
+# COMMAND ----------
+
+def s1_discovery():
+    global DF
+    candidates = []
+    try:
+        rows = spark.sql("""
+            SELECT table_catalog, table_schema, table_name
+            FROM system.information_schema.tables
+            WHERE lower(table_name) RLIKE 'adobe|hit|clickstream'
+              AND table_schema <> 'information_schema'
+            LIMIT 100
+        """).collect()
+        for r in rows:
+            fqn = f"{r.table_catalog}.{r.table_schema}.{r.table_name}"
+            n_cols = None
+            try:
+                n_cols = spark.sql(f"""
+                    SELECT count(*) AS n FROM system.information_schema.columns
+                    WHERE table_catalog = '{r.table_catalog}'
+                      AND table_schema  = '{r.table_schema}'
+                      AND table_name    = '{r.table_name}'
+                """).collect()[0].n
+            except Exception:
+                pass
+            candidates.append({"fqn": fqn, "n_cols": n_cols})
+    except Exception as e:
+        # Fallback: SHOW loops (capped) for workspaces without information_schema access.
+        print(f"information_schema unavailable ({type(e).__name__}); falling back to SHOW loops")
+        scanned = 0
+        for cat_row in spark.sql("SHOW CATALOGS").collect():
+            cat = cat_row[0]
+            if cat in ("system", "samples") or scanned >= 200:
+                continue
+            try:
+                schemas = spark.sql(f"SHOW SCHEMAS IN `{cat}`").collect()
+            except Exception:
+                continue
+            for s_row in schemas:
+                sch = s_row[0]
+                if scanned >= 200:
+                    break
+                try:
+                    tables = spark.sql(f"SHOW TABLES IN `{cat}`.`{sch}`").collect()
+                except Exception:
+                    continue
+                for t_row in tables:
+                    scanned += 1
+                    tname = t_row.tableName
+                    if re.search(r"adobe|hit|clickstream", tname, re.IGNORECASE):
+                        candidates.append({"fqn": f"{cat}.{sch}.{tname}", "n_cols": None})
+
+    resolves, n_cols_chosen, err = False, None, None
+    try:
+        DF = spark.table(TABLE_FQN)
+        n_cols_chosen = len(DF.columns)
+        resolves = True
+    except Exception as e:
+        err = f"{type(e).__name__}: {str(e)[:200]}"
+
+    emit("uc_discovery", {
+        "configured_table": TABLE_FQN,
+        "resolves": resolves,
+        "n_cols": n_cols_chosen,
+        "resolve_error": err,
+        "candidates": candidates[:30],
+        "note": "If resolves=false, set the table_fqn widget to one of the candidates and re-run.",
+    })
+
+run_section("S1", s1_discovery)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## S2 — Delta metadata & load cadence
+# MAGIC `DESCRIBE DETAIL` + `DESCRIBE HISTORY`: freshness/arrival-cadence evidence with zero data scan.
+# MAGIC (Closes open blocker #8 in 10-data-profile-alignment.md.)
+
+# COMMAND ----------
+
+def s2_delta_meta():
+    detail = spark.sql(f"DESCRIBE DETAIL {TABLE_FQN}").collect()[0].asDict()
+    # Deliberately exclude 'location' and free-form properties (internal paths).
+    detail_safe = {k: detail.get(k) for k in
+                   ["format", "numFiles", "sizeInBytes", "partitionColumns",
+                    "clusteringColumns", "createdAt", "lastModified"]}
+
+    writes = {"available": False}
+    try:
+        hist = spark.sql(f"DESCRIBE HISTORY {TABLE_FQN} LIMIT 100").collect()
+        write_ops = [h for h in hist if h.operation and
+                     any(k in h.operation.upper() for k in ["WRITE", "MERGE", "UPDATE", "COPY", "REPLACE"])]
+        ts = sorted([h.timestamp for h in write_ops])
+        gaps_h = sorted((b - a).total_seconds() / 3600 for a, b in zip(ts, ts[1:]))
+        recent = []
+        for h in write_ops[:20]:
+            om = h.operationMetrics or {}
+            rows_written = om.get("numOutputRows") or om.get("numTargetRowsInserted")
+            recent.append({"ts": str(h.timestamp), "op": h.operation, "rows": rows_written})
+        ops_by_type = {}
+        for h in hist:
+            ops_by_type[h.operation] = ops_by_type.get(h.operation, 0) + 1
+        writes = {
+            "available": True,
+            "n_history_rows": len(hist),
+            "ops_by_type": ops_by_type,
+            "n_write_ops": len(write_ops),
+            "median_interarrival_hours": gaps_h[len(gaps_h) // 2] if gaps_h else None,
+            "min_gap_hours": gaps_h[0] if gaps_h else None,
+            "max_gap_hours": gaps_h[-1] if gaps_h else None,
+            "recent_writes": recent,
+        }
+    except Exception as e:
+        writes = {"available": False, "error": f"{type(e).__name__}: {str(e)[:200]}"}
+
+    emit("delta_meta", {"detail": detail_safe, "writes": writes})
+
+run_section("S2", s2_delta_meta)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## S3 — Full-range daily volume (exact)
+# MAGIC The one full-table scan (narrow projection): daily row counts over ALL history →
+# MAGIC history depth, missing days, day-of-week profile, monthly totals (RRSP-season evidence),
+# MAGIC biggest day-over-day jumps.
+
+# COMMAND ----------
+
+DAILY_ROWS = []   # [(date, count)] kept for S4/S8/S10 cross-checks and charts
+
+def s3_daily_volume():
+    global DF, DATE_EXPR, DATE_EXPR_DESC, WINDOW_END, DAILY_ROWS
+    if DF is None:
+        DF = spark.table(TABLE_FQN)
+    DATE_EXPR, DATE_EXPR_DESC = resolve_date_expr(DF)
+
+    rows = (DF.select(F.to_date(DATE_EXPR).alias("d"))
+              .groupBy("d").count().orderBy("d").collect())
+    null_dates = sum(r["count"] for r in rows if r["d"] is None)
+    daily = [(r["d"], r["count"]) for r in rows if r["d"] is not None]
+    DAILY_ROWS = daily
+    if not daily:
+        emit("daily_volume", {"error": "no non-null dates", "date_expr": DATE_EXPR_DESC})
+        return
+
+    dmin, dmax = daily[0][0], daily[-1][0]
+    WINDOW_END = dmax
+    total = sum(c for _, c in daily)
+    counts_by_date = dict(daily)
+
+    # missing calendar days
+    missing = []
+    d = dmin
+    while d <= dmax:
+        if d not in counts_by_date:
+            missing.append(str(d))
+        d += datetime.timedelta(days=1)
+
+    # day-of-week means (Mon..Sun)
+    dow_sum, dow_n = [0] * 7, [0] * 7
+    for d, c in daily:
+        dow_sum[d.weekday()] += c
+        dow_n[d.weekday()] += 1
+    dow_mean = [round(dow_sum[i] / dow_n[i]) if dow_n[i] else None for i in range(7)]
+
+    # monthly totals (full history — RRSP seasonality evidence)
+    monthly = {}
+    for d, c in daily:
+        monthly[d.strftime("%Y-%m")] = monthly.get(d.strftime("%Y-%m"), 0) + c
+
+    # top |log-ratio| day-over-day jumps (level-shift candidates)
+    jumps = []
+    for (d0, c0), (d1, c1) in zip(daily, daily[1:]):
+        if c0 > 0 and c1 > 0:
+            jumps.append((abs(math.log(c1 / c0)), str(d1), c0, c1))
+    jumps.sort(reverse=True)
+    top_jumps = [{"date": j[1], "prev": j[2], "curr": j[3],
+                  "ratio": round(j[3] / j[2], 3)} for j in jumps[:5]]
+
+    # CSV lines: full daily if it fits, else last WINDOW_MONTHS daily + older monthly
+    if len(daily) <= MAX_CSV_LINES:
+        csv_daily = [f"{d},{c}" for d, c in daily]
+        csv_note = "full history, daily"
+    else:
+        cutoff = (dmax.replace(day=1) - datetime.timedelta(days=1)).replace(day=1)
+        for _ in range(WINDOW_MONTHS - 1):
+            cutoff = (cutoff - datetime.timedelta(days=1)).replace(day=1)
+        csv_daily = [f"{d},{c}" for d, c in daily if d >= cutoff][:MAX_CSV_LINES]
+        csv_note = f"daily since {cutoff}; older history in monthly_totals"
+
+    emit("daily_volume", {
+        "date_expr": DATE_EXPR_DESC,
+        "total_rows": total,
+        "null_date_rows": null_dates,
+        "date_min": str(dmin), "date_max": str(dmax),
+        "n_days_present": len(daily),
+        "n_days_missing": len(missing),
+        "missing_days": missing[:50],
+        "dow_mean_hits_mon_to_sun": dow_mean,
+        "monthly_totals": monthly,
+        "top5_day_over_day_jumps": top_jumps,
+        "csv_note": csv_note,
+        "csv_header": "date,hits",
+        "csv": csv_daily,
+    })
+
+run_section("S3", s3_daily_volume)
+
+# COMMAND ----------
+
+# chart for your own inspection (not part of the shareable output)
+if DAILY_ROWS:
+    display(spark.createDataFrame([(str(d), c) for d, c in DAILY_ROWS], ["date", "hits"]))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## S4 — Profiling window + sample frames
+# MAGIC Builds `df_w` (last N months) and `df_s` (random sample) used by S5–S11;
+# MAGIC cross-checks window row count against S3.
+
+# COMMAND ----------
+
+def s4_frames():
+    global DF_W, DF_S, SAMPLE_ROWS
+    DF_W = None; DF_S = None  # force rebuild with S3's date_max
+    ensure_frames()
+    window_rows = DF_W.count()
+    s3_window_sum = sum(c for d, c in DAILY_ROWS if d >= WINDOW_START) if DAILY_ROWS else None
+    emit("window_frame", {
+        "window_start": str(WINDOW_START), "window_end": str(WINDOW_END),
+        "window_rows": window_rows,
+        "s3_crosscheck_sum": s3_window_sum,
+        "crosscheck_ok": (s3_window_sum == window_rows) if s3_window_sum is not None else None,
+        "sample_fraction": SAMPLE_FRACTION,
+        "sample_rows": SAMPLE_ROWS,
+        "sample_cached": CACHE_SAMPLE,
+    })
+
+run_section("S4", s4_frames)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## S5 — Population census (~1,198 columns)
+# MAGIC Which columns are actually populated? Batched non-blank counts on the sample,
+# MAGIC then approx-distinct only for live columns. Never prints values.
+
+# COMMAND ----------
+
+CENSUS = {}   # col -> {"dtype":..., "pop_pct":..., "apx_distinct":...}; reused by S7/S9/S10
+
+def s5_population_census():
+    global CENSUS
+    ensure_frames()
+    all_cols = DF_S.columns
+    dtypes = dict(DF_S.dtypes)
+
+    pop_exprs = [(c, F.sum(F.when(nonblank(c), 1).otherwise(0))) for c in all_cols]
+    pop_counts = batched_agg(DF_S, pop_exprs, COL_BATCH_SIZE)
+
+    n = max(SAMPLE_ROWS, 1)
+    populated = {c: cnt for c, cnt in pop_counts.items() if (cnt or 0) / n >= 0.001}
+    sparse    = [c for c, cnt in pop_counts.items() if 0 < (cnt or 0) / n < 0.001]
+    dead      = [c for c, cnt in pop_counts.items() if not cnt]
+
+    dist_exprs = [(c, F.approx_count_distinct(F.col(c))) for c in populated]
+    distincts = batched_agg(DF_S, dist_exprs, COL_BATCH_SIZE) if dist_exprs else {}
+
+    CENSUS = {c: {"dtype": dtypes.get(c), "pop_pct": round(100.0 * pop_counts[c] / n, 3),
+                  "apx_distinct": distincts.get(c)} for c in populated}
+
+    ranked = sorted(CENSUS.items(), key=lambda kv: -kv[1]["pop_pct"])
+    emit("population_census", {
+        "basis": "sample", "sample_rows": SAMPLE_ROWS,
+        "n_total_cols": len(all_cols),
+        "n_populated": len(populated), "n_sparse": len(sparse), "n_dead": len(dead),
+        "populated": [{"col": c, **v} for c, v in ranked[:120]],
+        "populated_names_beyond_top120": [c for c, _ in ranked[120:]],
+        "sparse_cols": sparse[:40],
+        "evar_live": sorted(c for c in populated if re.match(r"post_evar\d+$|evar\d+$", c)),
+        "prop_live": sorted(c for c in populated if re.match(r"post_prop\d+$|prop\d+$", c)),
+    })
+
+run_section("S5", s5_population_census)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## S6 — post_event_list decode
+# MAGIC Event-ID frequency table (the raw material for the 12 post_event_list metric-registry
+# MAGIC slots) + events-per-hit distribution. IDs need the event lookup / data dictionary to
+# MAGIC name; standard commerce IDs labeled inline.
+
+# COMMAND ----------
+
+ADOBE_STD_EVENTS = {
+    "1": "purchase", "2": "product_view", "10": "cart_open", "11": "checkout",
+    "12": "cart_add", "13": "cart_remove", "14": "cart_view",
+}
+TOP_EVENT_IDS = []   # filled here; used by S8
+
+def s6_event_decode():
+    global TOP_EVENT_IDS
+    ensure_frames()
+    ev_col = pick_col(DF_S, "post_event_list", "event_list")
+    if not ev_col:
+        emit("event_decode", {"error": "no post_event_list/event_list column"})
+        return
+
+    events_arr = F.filter(
+        F.transform(F.split(F.col(ev_col), ","), lambda x: F.trim(x)),
+        lambda x: x != "",
+    )
+    base = DF_S.select(F.when(nonblank(ev_col), events_arr)
+                        .otherwise(F.array().cast("array<string>")).alias("ev"))
+
+    per_hit = base.agg(
+        F.count("*").alias("hits"),
+        F.sum(F.when(F.size("ev") > 0, 1).otherwise(0)).alias("hits_with_events"),
+        F.expr("percentile_approx(size(ev), array(0.5, 0.95))").alias("pcts"),
+        F.max(F.size("ev")).alias("max_events"),
+    ).collect()[0]
+
+    with_ev = base.filter(F.size("ev") > 0)
+    # instances (every occurrence) vs hit-presence (array_distinct)
+    inst = (with_ev.select(F.explode("ev").alias("e"))
+            .select(F.split("e", "=")[0].alias("event_id"),
+                    F.expr("try_cast(element_at(split(e, '='), 2) as double)").alias("val"))
+            .groupBy("event_id")
+            .agg(F.count("*").alias("instances"),
+                 F.sum(F.when(F.col("val").isNotNull(), 1).otherwise(0)).alias("with_value"),
+                 F.avg("val").alias("val_mean"), F.max("val").alias("val_max")))
+    pres = (with_ev.select(F.explode(F.array_distinct(
+                F.transform("ev", lambda x: F.split(x, "=")[0]))).alias("event_id"))
+            .groupBy("event_id").agg(F.count("*").alias("hits_with")))
+    freq = (inst.join(pres, "event_id", "outer")
+                .orderBy(F.desc("hits_with")).limit(40).collect())
+
+    hits = max(per_hit["hits"], 1)
+    event_freq = []
+    for r in freq:
+        eid = r["event_id"]
+        event_freq.append({
+            "event_id": eid,
+            "label": ADOBE_STD_EVENTS.get(eid, "unknown — resolve via event lookup / data dictionary"),
+            "hits_with_pct": round(100.0 * (r["hits_with"] or 0) / hits, 3),
+            "instances": r["instances"],
+            "has_value_pct": round(100.0 * (r["with_value"] or 0) / r["instances"], 2) if r["instances"] else None,
+            "val_mean": r["val_mean"], "val_max": r["val_max"],
+        })
+    TOP_EVENT_IDS = [e["event_id"] for e in event_freq[:TOP_EVENTS_K]]
+
+    emit("event_decode", {
+        "basis": "sample", "source_col": ev_col, "sample_hits": per_hit["hits"],
+        "pct_hits_with_events": round(100.0 * per_hit["hits_with_events"] / hits, 2),
+        "events_per_hit_p50_p95": list(per_hit["pcts"]) if per_hit["pcts"] else None,
+        "events_per_hit_max": per_hit["max_events"],
+        "event_freq": event_freq,
+    })
+
+run_section("S6", s6_event_decode)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## S7 — Live eVars / props / campaign
+# MAGIC Shape + masked top-value distributions for the live custom dimensions
+# MAGIC (feeds the 8 post_eVar registry slots and the synthetic generator).
+
+# COMMAND ----------
+
+def s7_live_custom_dims():
+    ensure_frames()
+    live = [c for c in CENSUS
+            if re.match(r"post_evar\d+$|evar\d+$|post_prop\d+$|prop\d+$|^post_campaign$|^campaign$", c)]
+    live = sorted(live, key=lambda c: -CENSUS[c]["pop_pct"])[:25]
+    if not live:
+        emit("live_custom_dims", {"error": "no live eVar/prop/campaign columns (run S5 first)"})
+        return
+
+    out = []
+    for c in live:
+        stats = DF_S.filter(nonblank(c)).agg(
+            F.expr(f"percentile_approx(length({c}), 0.5)").alias("len_p50"),
+            F.max(F.length(c)).alias("len_max"),
+            F.avg(F.length(c)).alias("len_avg"),
+            F.avg(F.when(F.col(c).cast("string").startswith("http"), 1.0).otherwise(0.0)).alias("url_frac"),
+        ).collect()[0]
+        top = (DF_S.filter(nonblank(c)).groupBy(c).count()
+                   .orderBy(F.desc("count")).limit(TOP_N).collect())
+        pop_rows = max(SAMPLE_ROWS * CENSUS[c]["pop_pct"] / 100.0, 1)
+        out.append({
+            "col": c,
+            "pop_pct": CENSUS[c]["pop_pct"],
+            "apx_distinct": CENSUS[c]["apx_distinct"],
+            "len": {"p50": stats["len_p50"], "avg": stats["len_avg"], "max": stats["len_max"]},
+            "looks_like_url": (stats["url_frac"] or 0) > 0.5,
+            "free_text": (stats["len_avg"] or 0) > 80,
+            "top_masked": [{"m": mask(r[c]), "len": len(str(r[c])),
+                            "pct": round(100.0 * r["count"] / pop_rows, 2)} for r in top],
+        })
+    emit("live_custom_dims", {"basis": "sample", "dims": out})
+
+run_section("S7", s7_live_custom_dims)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## S8 — Time-series pack (exact, on the full window)
+# MAGIC Daily hits/visits/visitors/clean-hits + per-day series for the top-K event IDs +
+# MAGIC 7×24 day-of-week × hour profile. This is what the darts/pyod model design consumes
+# MAGIC (weekly seasonality, lag-7/28 autocorrelation, volatility, level shifts).
+
+# COMMAND ----------
+
+TS_DAILY_PDF = None   # kept for the chart cell below
+
+def s8_time_series():
+    global TS_DAILY_PDF
+    ensure_frames()
+    vis_hi = pick_col(DF_W, "post_visid_high", "visid_high")
+    vis_lo = pick_col(DF_W, "post_visid_low", "visid_low")
+    visit_num = pick_col(DF_W, "visit_num")
+    excl = pick_col(DF_W, "exclude_hit")
+
+    aggs = [F.count("*").alias("hits")]
+    if vis_hi and vis_lo and visit_num:
+        aggs.append(F.approx_count_distinct(
+            F.concat_ws(":", vis_hi, vis_lo, visit_num)).alias("visits"))
+        aggs.append(F.approx_count_distinct(
+            F.concat_ws(":", vis_hi, vis_lo)).alias("visitors"))
+    if excl:
+        aggs.append(F.sum(F.when(F.coalesce(F.expr(f"try_cast({excl} as int)"), F.lit(0)) == 0, 1)
+                          .otherwise(0)).alias("clean_hits"))
+
+    daily = (DF_W.groupBy(F.to_date(DATE_EXPR).alias("d")).agg(*aggs).orderBy("d").collect())
+    cols = ["hits", "visits", "visitors", "clean_hits"]
+    series = {c: [] for c in cols}
+    dates = []
+    for r in daily:
+        if r["d"] is None:
+            continue
+        dates.append(r["d"])
+        rd = r.asDict()
+        for c in cols:
+            series[c].append(rd.get(c))
+
+    csv_daily = [",".join([str(d)] + [str(series[c][i]) if series[c][i] is not None else ""
+                                      for c in cols]) for i, d in enumerate(dates)]
+
+    # ---- per-day series for top-K event IDs (exact hit-presence counts) ----
+    csv_events, ev_cols = [], []
+    ev_col = pick_col(DF_W, "post_event_list", "event_list")
+    if ev_col and TOP_EVENT_IDS:
+        ev_daily = (DF_W.filter(nonblank(ev_col))
+                    .select(F.to_date(DATE_EXPR).alias("d"),
+                            F.explode(F.array_distinct(F.transform(
+                                F.filter(F.transform(F.split(F.col(ev_col), ","), lambda x: F.trim(x)),
+                                         lambda x: x != ""),
+                                lambda x: F.split(x, "=")[0]))).alias("event_id"))
+                    .filter(F.col("event_id").isin(TOP_EVENT_IDS))
+                    .groupBy("d", "event_id").count().collect())
+        by_date = {}
+        for r in ev_daily:
+            if r["d"] is not None:
+                by_date.setdefault(r["d"], {})[r["event_id"]] = r["count"]
+        ev_cols = TOP_EVENT_IDS
+        csv_events = [",".join([str(d)] + [str(by_date.get(d, {}).get(e, 0)) for e in ev_cols])
+                      for d in dates]
+
+    # ---- hourly 7x24 profile over the last HOURLY_DAYS days ----
+    hour_matrix = None
+    if dates:
+        h_start = dates[-1] - datetime.timedelta(days=HOURLY_DAYS)
+        hourly = (DF_W.filter(F.to_date(DATE_EXPR) >= F.lit(h_start))
+                  .select(F.to_date(DATE_EXPR).alias("d"), F.hour(DATE_EXPR).alias("h"))
+                  .groupBy("d", "h").count()
+                  .groupBy(F.dayofweek("d").alias("dow"), "h")
+                  .agg(F.avg("count").alias("mean_hits")).collect())
+        # dayofweek: 1=Sunday..7=Saturday -> reorder rows to Mon..Sun
+        mat = [[0] * 24 for _ in range(7)]
+        for r in hourly:
+            mat[(r["dow"] + 5) % 7][r["h"]] = round(r["mean_hits"], 1)
+        hour_matrix = mat
+
+    # ---- driver-side stats ----
+    profiles = {}
+    try:
+        import pandas as pd
+        s = pd.Series(series["hits"], index=pd.to_datetime([str(d) for d in dates]))
+        overall = s.mean()
+        dow_idx = (s.groupby(s.index.dayofweek).mean() / overall).round(3)
+        roll = s.rolling(7, center=True).median()
+        shift_scores = (roll / roll.shift(7)).apply(
+            lambda x: abs(math.log(x)) if x and x > 0 else 0)
+        top_shifts = shift_scores.nlargest(5)
+        profiles = {
+            "cv": round(float(s.std() / overall), 4) if overall else None,
+            "autocorr_lag7": round(float(s.autocorr(7)), 4) if len(s) > 14 else None,
+            "autocorr_lag28": round(float(s.autocorr(28)), 4) if len(s) > 56 else None,
+            "dow_index_mon_to_sun": [float(dow_idx.get(i, float("nan"))) for i in range(7)],
+            "level_shift_candidates": [
+                {"date": str(d.date()), "abs_log_ratio_wow": round(float(v), 3)}
+                for d, v in top_shifts.items() if v > math.log(1.3)],
+        }
+        TS_DAILY_PDF = s.reset_index()
+    except Exception as e:
+        profiles = {"error": f"pandas stats failed: {type(e).__name__}: {str(e)[:150]}"}
+
+    emit("ts_daily", {
+        "basis": "exact_window",
+        "csv_header": "date," + ",".join(cols),
+        "csv": csv_daily[-MAX_CSV_LINES:],
+        "visits_visitors_note": "approx_count_distinct (~5% rsd)" if vis_hi else "visid columns missing",
+    })
+    if csv_events:
+        emit("ts_events", {
+            "basis": "exact_window (hits containing event, not instances)",
+            "csv_header": "date," + ",".join("ev" + e for e in ev_cols),
+            "csv": csv_events[-MAX_CSV_LINES:],
+        })
+    emit("ts_profiles", {
+        "hour_matrix_rows_mon_to_sun_cols_0_23h": hour_matrix,
+        "hourly_days": HOURLY_DAYS,
+        **profiles,
+    })
+
+run_section("S8", s8_time_series)
+
+# COMMAND ----------
+
+# chart for your own inspection
+if TS_DAILY_PDF is not None:
+    display(spark.createDataFrame(TS_DAILY_PDF.astype(str)))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## S9 — Dimension candidates
+# MAGIC Cardinality + top values of candidate slicing dimensions. Allowlisted dims print raw
+# MAGIC (lookup IDs / country codes); pagename & URL shapes are query-stripped; anything else masked.
+
+# COMMAND ----------
+
+def s9_dimensions():
+    ensure_frames()
+    dim_candidates = [c for c in [
+        "pagename", "post_pagename", "page_url", "post_page_url", "referrer",
+        "ref_domain", "ref_type", "geo_country", "geo_region", "geo_city",
+        "browser", "os", "connection_type", "language", "hit_source",
+        "exclude_hit", "duplicate_purchase", "new_visit", "post_page_event",
+        "va_closer_id",
+    ] if c in set(DF_S.columns) and c in CENSUS]
+
+    out = []
+    for c in dim_candidates:
+        is_url = c in ("page_url", "post_page_url", "referrer")
+        top = (DF_S.filter(nonblank(c)).groupBy(c).count()
+                   .orderBy(F.desc("count")).limit(TOP_N * (3 if is_url else 1)).collect())
+        pop_rows = max(SAMPLE_ROWS * CENSUS[c]["pop_pct"] / 100.0, 1)
+        if is_url:
+            shape_counts = {}
+            for r in top:
+                dom, depth, seg1 = url_shape(r[c])
+                key = f"{dom} | depth={depth} | {seg1}"
+                shape_counts[key] = shape_counts.get(key, 0) + r["count"]
+            top_vals = [{"v": k, "pct": round(100.0 * v / pop_rows, 2)}
+                        for k, v in sorted(shape_counts.items(), key=lambda kv: -kv[1])[:TOP_N]]
+            mode = "url_shape(domain|depth|seg1), query-stripped"
+        elif c in ("pagename", "post_pagename"):
+            top_vals = [{"v": strip_query(r[c]), "pct": round(100.0 * r["count"] / pop_rows, 2)}
+                        for r in top[:TOP_N]]
+            mode = "raw, query-stripped"
+        elif c in RAW_OK_DIMS and not is_sensitive(c):
+            top_vals = [{"v": str(r[c]), "pct": round(100.0 * r["count"] / pop_rows, 2)}
+                        for r in top[:TOP_N]]
+            mode = "raw (allowlisted)"
+        else:
+            top_vals = [{"v": mask(r[c]), "pct": round(100.0 * r["count"] / pop_rows, 2)}
+                        for r in top[:TOP_N]]
+            mode = "masked"
+        out.append({"dim": c, "mode": mode,
+                    "coverage_pct": CENSUS[c]["pop_pct"],
+                    "apx_distinct": CENSUS[c]["apx_distinct"],
+                    "top": top_vals})
+    emit("dim_candidates", {"basis": "sample", "dims": out})
+
+run_section("S9", s9_dimensions)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## S10 — Data-quality baseline
+# MAGIC Bot-filter distributions (exclude_hit × hit_source), clock skew, duplicate rate
+# MAGIC (exact, one recent day), late-arrival evidence if a load-timestamp column exists.
+
+# COMMAND ----------
+
+def s10_dq_baseline():
+    ensure_frames()
+    key_cols = [c for c in ["date_time", "hit_time_gmt", "visit_num", "visit_page_num",
+                            "post_event_list", "pagename", "page_url", "exclude_hit",
+                            "hit_source"] if c in set(DF_S.columns)]
+    key_nulls = {c: round(100.0 - CENSUS.get(c, {}).get("pop_pct", 0.0), 3) if c in CENSUS
+                 else 100.0 for c in key_cols}
+
+    # exclude_hit x hit_source (bot filtering rules)
+    dist = []
+    if pick_col(DF_S, "exclude_hit") and pick_col(DF_S, "hit_source"):
+        dist = [{"exclude_hit": str(r["exclude_hit"]), "hit_source": str(r["hit_source"]),
+                 "pct": round(100.0 * r["count"] / max(SAMPLE_ROWS, 1), 3)}
+                for r in (DF_S.groupBy("exclude_hit", "hit_source").count()
+                              .orderBy(F.desc("count")).limit(20).collect())]
+
+    # clock skew: date_time (local) vs hit_time_gmt (epoch) -> tz offset + stragglers
+    skew = None
+    if pick_col(DF_S, "hit_time_gmt"):
+        skew_row = (DF_S.filter(nonblank("hit_time_gmt"))
+                    .select((F.unix_timestamp(DATE_EXPR)
+                             - F.col("hit_time_gmt").cast("long")).alias("skew_s"))
+                    .agg(F.expr("percentile_approx(skew_s, array(0.05, 0.5, 0.95))")
+                         .alias("p")).collect()[0])
+        skew = {"p5_p50_p95_seconds": list(skew_row["p"]) if skew_row["p"] else None,
+                "note": "constant offset = timezone of date_time; spread = clock skew"}
+
+    # duplicates: exact on the most recent complete day
+    dup = None
+    vis_hi = pick_col(DF_S, "post_visid_high", "visid_high")
+    vis_lo = pick_col(DF_S, "post_visid_low", "visid_low")
+    seq = pick_col(DF_S, "visit_page_num", "hit_time_gmt")
+    if DAILY_ROWS and vis_hi and vis_lo and pick_col(DF_S, "visit_num") and seq:
+        check_day = DAILY_ROWS[-2][0] if len(DAILY_ROWS) >= 2 else DAILY_ROWS[-1][0]
+        day_df = DF.filter(F.to_date(DATE_EXPR) == F.lit(check_day))
+        total = day_df.count()
+        distinct = day_df.select(vis_hi, vis_lo, "visit_num", seq).distinct().count()
+        dup = {"day": str(check_day), "rows": total, "distinct_keys": distinct,
+               "dup_pct": round(100.0 * (total - distinct) / max(total, 1), 4),
+               "key": f"{vis_hi},{vis_lo},visit_num,{seq}", "basis": "exact_one_day"}
+
+    # late-arrival: look for a load/ingest timestamp column
+    load_cols = [c for c in DF_S.columns
+                 if re.search(r"(load|ingest|etl|insert|_created|processed).*(ts|time|date)|_ts$",
+                              c, re.IGNORECASE)]
+    late = {"load_timestamp_cols_found": load_cols[:10]}
+    if load_cols:
+        lc = load_cols[0]
+        try:
+            late_row = (DF_S.filter(nonblank(lc))
+                        .select(F.datediff(F.to_date(F.col(lc).cast("timestamp")),
+                                           F.to_date(DATE_EXPR)).alias("lag_days"))
+                        .agg(F.expr("percentile_approx(lag_days, array(0.5, 0.95, 0.99))")
+                             .alias("p")).collect()[0])
+            late["lag_days_p50_p95_p99"] = list(late_row["p"]) if late_row["p"] else None
+            late["col_used"] = lc
+        except Exception as e:
+            late["error"] = f"{type(e).__name__}: {str(e)[:150]}"
+    else:
+        late["note"] = "no load-timestamp column; use S2 write cadence as arrival evidence"
+
+    emit("dq_baseline", {
+        "basis": "sample (dup check exact on one day)",
+        "key_col_null_blank_pct": key_nulls,
+        "exclude_hit_x_hit_source_pct": dist,
+        "clock_skew": skew,
+        "duplicates": dup,
+        "late_arrival": late,
+    })
+
+run_section("S10", s10_dq_baseline)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## S11 — Identity evidence (ADR-0007)
+# MAGIC Shape-only stats for every identity column: validates doc-11 §3 findings
+# MAGIC (cust_visid all-null? userid cardinality-1?) on the GWAM table. No values printed.
+
+# COMMAND ----------
+
+def s11_identity():
+    ensure_frames()
+    identity_cols = [c for c in [
+        "mcvisid", "visid_high", "visid_low", "post_visid_high", "post_visid_low",
+        "cust_visid", "post_cust_visid", "userid", "username", "user_hash",
+        "cookies", "persistent_cookie", "visid_type", "visid_new",
+    ] if c in set(DF_S.columns)]
+
+    out = []
+    for c in identity_cols:
+        r = DF_S.agg(
+            F.avg(F.when(nonblank(c), 0.0).otherwise(1.0)).alias("null_blank_frac"),
+            F.approx_count_distinct(F.col(c)).alias("apx_distinct"),
+            F.min(F.when(nonblank(c), F.length(F.col(c).cast("string")))).alias("len_min"),
+            F.avg(F.when(nonblank(c), F.length(F.col(c).cast("string")))).alias("len_avg"),
+            F.max(F.when(nonblank(c), F.length(F.col(c).cast("string")))).alias("len_max"),
+        ).collect()[0]
+        out.append({"col": c,
+                    "null_blank_pct": round(100.0 * r["null_blank_frac"], 3),
+                    "apx_distinct": r["apx_distinct"],
+                    "len": {"min": r["len_min"], "avg": r["len_avg"], "max": r["len_max"]}})
+
+    by_col = {o["col"]: o for o in out}
+    flags = {
+        "cust_visid_all_null": by_col.get("cust_visid", {}).get("null_blank_pct") == 100.0
+                               if "cust_visid" in by_col else None,
+        "post_cust_visid_all_null": by_col.get("post_cust_visid", {}).get("null_blank_pct") == 100.0
+                                    if "post_cust_visid" in by_col else None,
+        "userid_cardinality_1": by_col.get("userid", {}).get("apx_distinct") == 1
+                                if "userid" in by_col else None,
+    }
+
+    ratios = {}
+    ts = RESULTS.get("ts_daily", {})
+    if ts.get("csv"):
+        try:
+            rows = [ln.split(",") for ln in ts["csv"]]
+            hits = [float(r[1]) for r in rows if len(r) > 3 and r[1]]
+            visits = [float(r[2]) for r in rows if len(r) > 3 and r[2]]
+            visitors = [float(r[3]) for r in rows if len(r) > 3 and r[3]]
+            if visits and visitors:
+                ratios = {"mean_hits_per_visit": round(sum(hits) / sum(visits), 3),
+                          "mean_visits_per_visitor_daily": round(sum(visits) / sum(visitors), 3)}
+        except Exception:
+            pass
+
+    emit("identity_evidence", {
+        "basis": "sample", "note": "shape only per ADR-0007 — no identifier values",
+        "columns": out, "flags": flags, "daily_ratios": ratios,
+    })
+
+run_section("S11", s11_identity)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## S12 — Synthesis spec (master paste-back artifact)
+# MAGIC Consolidates all prior sections into one machine-readable spec for the synthetic
+# MAGIC data generator. Tolerant of skipped sections.
+
+# COMMAND ----------
+
+def s12_synthesis_spec():
+    expected = ["uc_discovery", "delta_meta", "daily_volume", "window_frame",
+                "population_census", "event_decode", "live_custom_dims",
+                "ts_daily", "ts_events", "ts_profiles", "dim_candidates",
+                "dq_baseline", "identity_evidence"]
+    missing = [s for s in expected if s not in RESULTS]
+
+    census = RESULTS.get("population_census", {})
+    live_dims = {d["col"]: d for d in RESULTS.get("live_custom_dims", {}).get("dims", [])}
+    schema_spec = []
+    for entry in census.get("populated", []):
+        col = entry["col"]
+        spec = {"col": col, "dtype": entry.get("dtype"),
+                "pop_pct": entry.get("pop_pct"), "apx_distinct": entry.get("apx_distinct"),
+                "sensitive_shape_only": is_sensitive(col)}
+        if col in live_dims:
+            spec["len"] = live_dims[col].get("len")
+            spec["top_masked"] = live_dims[col].get("top_masked")
+        schema_spec.append(spec)
+
+    dv = RESULTS.get("daily_volume", {})
+    prof = RESULTS.get("ts_profiles", {})
+    emit("synthesis_spec", {
+        "meta": {
+            "table": TABLE_FQN,
+            "generated_at": datetime.datetime.now().isoformat(timespec="seconds"),
+            "window": {"start": str(WINDOW_START), "end": str(WINDOW_END),
+                       "months": WINDOW_MONTHS},
+            "sample_fraction": SAMPLE_FRACTION, "sample_rows": SAMPLE_ROWS,
+            "sections_missing": missing, "sections_skipped": SKIPPED,
+        },
+        "volume": {
+            "total_rows": dv.get("total_rows"),
+            "date_min": dv.get("date_min"), "date_max": dv.get("date_max"),
+            "monthly_totals": dv.get("monthly_totals"),
+            "dow_mean_hits_mon_to_sun": dv.get("dow_mean_hits_mon_to_sun"),
+            "missing_days": dv.get("n_days_missing"),
+            "cv": prof.get("cv"),
+            "autocorr_lag7": prof.get("autocorr_lag7"),
+            "autocorr_lag28": prof.get("autocorr_lag28"),
+            "dow_index": prof.get("dow_index_mon_to_sun"),
+            "hour_matrix": prof.get("hour_matrix_rows_mon_to_sun_cols_0_23h"),
+            "level_shifts": prof.get("level_shift_candidates"),
+        },
+        "series_ref": "daily values in the ts_daily / ts_events shareable blocks",
+        "schema": schema_spec,
+        "events": RESULTS.get("event_decode", {}),
+        "dims": RESULTS.get("dim_candidates", {}).get("dims"),
+        "dq": RESULTS.get("dq_baseline", {}),
+        "identity": RESULTS.get("identity_evidence", {}),
+    })
+
+run_section("S12", s12_synthesis_spec)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Done — what to copy back
+# MAGIC
+# MAGIC Paste every `===== BEGIN SHAREABLE: ... =====` block (and any `SKIPPED` lines), in this
+# MAGIC priority order if you need to split across messages:
+# MAGIC
+# MAGIC 1. `synthesis_spec` (the consolidated master — if you only send one thing, send this)
+# MAGIC 2. `ts_daily` + `ts_events` (daily series for model design)
+# MAGIC 3. `event_decode` + `live_custom_dims` + `population_census` (metric-registry seeding)
+# MAGIC 4. `daily_volume` + `delta_meta` (volume/cadence evidence)
+# MAGIC 5. `dim_candidates` + `dq_baseline` + `identity_evidence` + `uc_discovery` + `window_frame`
+# MAGIC
+# MAGIC Nothing in these blocks contains raw identifier values, full URLs with query strings,
+# MAGIC or unmasked high-cardinality values (ADR-0007). If a block looks like it leaks anything,
+# MAGIC don't paste it — flag it instead so the notebook can be tightened.

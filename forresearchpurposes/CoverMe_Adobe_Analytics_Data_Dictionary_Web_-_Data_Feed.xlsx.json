@@ -1,0 +1,896 @@
+[
+  {
+    "tool_version": "0.1.0",
+    "path": "CoverMe Adobe Analytics Data Dictionary Web - Data Feed.xlsx#sheet=data_feed_columns",
+    "absolute_path": "/Users/uchilsi/Desktop/GMAI-Pulse/data/CoverMe Adobe Analytics Data Dictionary Web - Data Feed.xlsx",
+    "extension": ".xlsx",
+    "sheet_name": "data_feed_columns",
+    "size_bytes": 77244,
+    "parse_status": "ok",
+    "parse_error": null,
+    "row_count": 225,
+    "sampled_rows": 225,
+    "column_count": 4,
+    "schema_source": "file_header",
+    "duplicate_row_count": 0,
+    "duplicate_skip_reason": null,
+    "columns": [
+      {
+        "name": "Note: Most columns contain a similar column with a prefix of post_. Post columns contain values after server-side logic, processing rules, and VISTA rules. Adobe recommends using post columns in most cases. See Data feeds FAQ  for more information.",
+        "dtype": "str",
+        "inferred_type": "string",
+        "null_count": 0,
+        "null_pct": 0.0,
+        "distinct_count": 225,
+        "distinct_pct": 100.0,
+        "is_sensitive": true,
+        "is_timestamp": false,
+        "is_metric": false,
+        "is_dimension": false,
+        "is_join_key": true,
+        "numeric_stats": null,
+        "top_values": [
+          {
+            "value": "<masked:becd6dae>",
+            "count": 1
+          },
+          {
+            "value": "<masked:f1d1fd3c>",
+            "count": 1
+          },
+          {
+            "value": "<masked:1549531c>",
+            "count": 1
+          },
+          {
+            "value": "<masked:d97217d2>",
+            "count": 1
+          },
+          {
+            "value": "<masked:e25994ae>",
+            "count": 1
+          }
+        ],
+        "sample_values_masked": [
+          "<masked:becd6dae>",
+          "<masked:f1d1fd3c>",
+          "<masked:1549531c>"
+        ]
+      },
+      {
+        "name": "Unnamed: 1",
+        "dtype": "str",
+        "inferred_type": "string",
+        "null_count": 0,
+        "null_pct": 0.0,
+        "distinct_count": 225,
+        "distinct_pct": 100.0,
+        "is_sensitive": false,
+        "is_timestamp": false,
+        "is_metric": false,
+        "is_dimension": false,
+        "is_join_key": false,
+        "numeric_stats": null,
+        "top_values": [
+          {
+            "value": "Description",
+            "count": 1
+          },
+          {
+            "value": "Lists all accepted languages, as indicat…",
+            "count": 1
+          },
+          {
+            "value": "Media ad loads",
+            "count": 1
+          },
+          {
+            "value": "A multi-value variable corresponding to …",
+            "count": 1
+          },
+          {
+            "value": "Identifies the source of the asset event…",
+            "count": 1
+          }
+        ],
+        "sample_values_masked": [
+          "Description",
+          "Lists all accepted languages, as indicat…",
+          "Media ad loads"
+        ]
+      },
+      {
+        "name": "Unnamed: 2",
+        "dtype": "str",
+        "inferred_type": "string",
+        "null_count": 0,
+        "null_pct": 0.0,
+        "distinct_count": 27,
+        "distinct_pct": 12.0,
+        "is_sensitive": false,
+        "is_timestamp": false,
+        "is_metric": false,
+        "is_dimension": true,
+        "is_join_key": false,
+        "numeric_stats": null,
+        "top_values": [
+          {
+            "value": "varchar(255)",
+            "count": 97
+          },
+          {
+            "value": "varchar(100)",
+            "count": 23
+          },
+          {
+            "value": "tinyint unsigned",
+            "count": 23
+          },
+          {
+            "value": "text",
+            "count": 18
+          },
+          {
+            "value": "int unsigned",
+            "count": 9
+          }
+        ],
+        "sample_values_masked": [
+          "Data type",
+          "char(20)",
+          "varchar(255)"
+        ]
+      },
+      {
+        "name": "Data feeds FAQ",
+        "dtype": "str",
+        "inferred_type": "string",
+        "null_count": 215,
+        "null_pct": 95.5556,
+        "distinct_count": 2,
+        "distinct_pct": 20.0,
+        "is_sensitive": false,
+        "is_timestamp": false,
+        "is_metric": false,
+        "is_dimension": true,
+        "is_join_key": false,
+        "numeric_stats": null,
+        "top_values": [
+          {
+            "value": "Anomaly Detection",
+            "count": 9
+          },
+          {
+            "value": "Notes",
+            "count": 1
+          }
+        ],
+        "sample_values_masked": [
+          "Notes",
+          "Anomaly Detection",
+          "Anomaly Detection"
+        ]
+      }
+    ],
+    "timestamp_candidates": [],
+    "metric_candidates": [],
+    "dimension_candidates": [
+      "Unnamed: 2",
+      "Data feeds FAQ"
+    ],
+    "join_key_candidates": [
+      "Note: Most columns contain a similar column with a prefix of post_. Post columns contain values after server-side logic, processing rules, and VISTA rules. Adobe recommends using post columns in most cases. See Data feeds FAQ  for more information."
+    ],
+    "sensitive_column_candidates": [
+      "Note: Most columns contain a similar column with a prefix of post_. Post columns contain values after server-side logic, processing rules, and VISTA rules. Adobe recommends using post columns in most cases. See Data feeds FAQ  for more information."
+    ],
+    "inferred_business_domain": "web_analytics",
+    "domain_signals": [
+      "path-contains:adobe->web_analytics",
+      "path-contains:analytics->web_analytics"
+    ],
+    "profiled_at": "2026-06-29T12:41:41.180965+00:00",
+    "relevance_score": 4,
+    "readiness_score": 6,
+    "score_rationale": {
+      "relevance": "parse_ok+2, dimension+1, domain_known+1",
+      "readiness": "parse_ok+2, median_null<30%+2, dup<5%+1, sensitive_flagged_nonblocking+1"
+    }
+  },
+  {
+    "tool_version": "0.1.0",
+    "path": "CoverMe Adobe Analytics Data Dictionary Web - Data Feed.xlsx#sheet=post_eVar",
+    "absolute_path": "/Users/uchilsi/Desktop/GMAI-Pulse/data/CoverMe Adobe Analytics Data Dictionary Web - Data Feed.xlsx",
+    "extension": ".xlsx",
+    "sheet_name": "post_eVar",
+    "size_bytes": 77244,
+    "parse_status": "ok",
+    "parse_error": null,
+    "row_count": 200,
+    "sampled_rows": 200,
+    "column_count": 6,
+    "schema_source": "file_header",
+    "duplicate_row_count": 0,
+    "duplicate_skip_reason": null,
+    "columns": [
+      {
+        "name": "Column",
+        "dtype": "str",
+        "inferred_type": "string",
+        "null_count": 0,
+        "null_pct": 0.0,
+        "distinct_count": 200,
+        "distinct_pct": 100.0,
+        "is_sensitive": false,
+        "is_timestamp": false,
+        "is_metric": false,
+        "is_dimension": false,
+        "is_join_key": true,
+        "numeric_stats": null,
+        "top_values": [
+          {
+            "value": "post_evar1",
+            "count": 1
+          },
+          {
+            "value": "post_evar2",
+            "count": 1
+          },
+          {
+            "value": "post_evar3",
+            "count": 1
+          },
+          {
+            "value": "post_evar4",
+            "count": 1
+          },
+          {
+            "value": "post_evar5",
+            "count": 1
+          }
+        ],
+        "sample_values_masked": [
+          "post_evar1",
+          "post_evar2",
+          "post_evar3"
+        ]
+      },
+      {
+        "name": "Name",
+        "dtype": "str",
+        "inferred_type": "string",
+        "null_count": 0,
+        "null_pct": 0.0,
+        "distinct_count": 198,
+        "distinct_pct": 99.0,
+        "is_sensitive": false,
+        "is_timestamp": false,
+        "is_metric": false,
+        "is_dimension": false,
+        "is_join_key": true,
+        "numeric_stats": null,
+        "top_values": [
+          {
+            "value": "Language",
+            "count": 2
+          },
+          {
+            "value": "User Type",
+            "count": 2
+          },
+          {
+            "value": "Time Stamp",
+            "count": 1
+          },
+          {
+            "value": "New/Repeat Visitors",
+            "count": 1
+          },
+          {
+            "value": "Visit Number",
+            "count": 1
+          }
+        ],
+        "sample_values_masked": [
+          "Time Stamp",
+          "New/Repeat Visitors",
+          "Visit Number"
+        ]
+      },
+      {
+        "name": "Description",
+        "dtype": "float64",
+        "inferred_type": "float",
+        "null_count": 200,
+        "null_pct": 100.0,
+        "distinct_count": 0,
+        "distinct_pct": 0.0,
+        "is_sensitive": true,
+        "is_timestamp": false,
+        "is_metric": false,
+        "is_dimension": false,
+        "is_join_key": false,
+        "numeric_stats": null,
+        "top_values": [],
+        "sample_values_masked": []
+      },
+      {
+        "name": "Status",
+        "dtype": "str",
+        "inferred_type": "string",
+        "null_count": 0,
+        "null_pct": 0.0,
+        "distinct_count": 2,
+        "distinct_pct": 1.0,
+        "is_sensitive": false,
+        "is_timestamp": false,
+        "is_metric": false,
+        "is_dimension": true,
+        "is_join_key": false,
+        "numeric_stats": null,
+        "top_values": [
+          {
+            "value": "Disabled",
+            "count": 107
+          },
+          {
+            "value": "Enabled",
+            "count": 93
+          }
+        ],
+        "sample_values_masked": [
+          "Enabled",
+          "Enabled",
+          "Enabled"
+        ]
+      },
+      {
+        "name": "Example Value(s)",
+        "dtype": "float64",
+        "inferred_type": "float",
+        "null_count": 200,
+        "null_pct": 100.0,
+        "distinct_count": 0,
+        "distinct_pct": 0.0,
+        "is_sensitive": false,
+        "is_timestamp": false,
+        "is_metric": true,
+        "is_dimension": false,
+        "is_join_key": false,
+        "numeric_stats": null,
+        "top_values": [],
+        "sample_values_masked": []
+      },
+      {
+        "name": "Notes",
+        "dtype": "str",
+        "inferred_type": "string",
+        "null_count": 192,
+        "null_pct": 96.0,
+        "distinct_count": 1,
+        "distinct_pct": 12.5,
+        "is_sensitive": false,
+        "is_timestamp": false,
+        "is_metric": false,
+        "is_dimension": true,
+        "is_join_key": false,
+        "numeric_stats": null,
+        "top_values": [
+          {
+            "value": "Anomaly Detection",
+            "count": 8
+          }
+        ],
+        "sample_values_masked": [
+          "Anomaly Detection",
+          "Anomaly Detection",
+          "Anomaly Detection"
+        ]
+      }
+    ],
+    "timestamp_candidates": [],
+    "metric_candidates": [
+      "Example Value(s)"
+    ],
+    "dimension_candidates": [
+      "Status",
+      "Notes"
+    ],
+    "join_key_candidates": [
+      "Column",
+      "Name"
+    ],
+    "sensitive_column_candidates": [
+      "Description"
+    ],
+    "inferred_business_domain": "web_analytics",
+    "domain_signals": [
+      "path-contains:adobe->web_analytics",
+      "path-contains:analytics->web_analytics"
+    ],
+    "profiled_at": "2026-06-29T12:41:41.191871+00:00",
+    "relevance_score": 6,
+    "readiness_score": 6,
+    "score_rationale": {
+      "relevance": "parse_ok+2, metric+2, dimension+1, domain_known+1",
+      "readiness": "parse_ok+2, median_null<30%+2, dup<5%+1, sensitive_flagged_nonblocking+1"
+    }
+  },
+  {
+    "tool_version": "0.1.0",
+    "path": "CoverMe Adobe Analytics Data Dictionary Web - Data Feed.xlsx#sheet=post_prop",
+    "absolute_path": "/Users/uchilsi/Desktop/GMAI-Pulse/data/CoverMe Adobe Analytics Data Dictionary Web - Data Feed.xlsx",
+    "extension": ".xlsx",
+    "sheet_name": "post_prop",
+    "size_bytes": 77244,
+    "parse_status": "ok",
+    "parse_error": null,
+    "row_count": 75,
+    "sampled_rows": 75,
+    "column_count": 6,
+    "schema_source": "file_header",
+    "duplicate_row_count": 0,
+    "duplicate_skip_reason": null,
+    "columns": [
+      {
+        "name": "Column",
+        "dtype": "str",
+        "inferred_type": "string",
+        "null_count": 0,
+        "null_pct": 0.0,
+        "distinct_count": 75,
+        "distinct_pct": 100.0,
+        "is_sensitive": false,
+        "is_timestamp": false,
+        "is_metric": false,
+        "is_dimension": false,
+        "is_join_key": true,
+        "numeric_stats": null,
+        "top_values": [
+          {
+            "value": "post_prop1",
+            "count": 1
+          },
+          {
+            "value": "post_prop2",
+            "count": 1
+          },
+          {
+            "value": "post_prop3",
+            "count": 1
+          },
+          {
+            "value": "post_prop4",
+            "count": 1
+          },
+          {
+            "value": "post_prop5",
+            "count": 1
+          }
+        ],
+        "sample_values_masked": [
+          "post_prop1",
+          "post_prop2",
+          "post_prop3"
+        ]
+      },
+      {
+        "name": "Name",
+        "dtype": "str",
+        "inferred_type": "string",
+        "null_count": 24,
+        "null_pct": 32.0,
+        "distinct_count": 51,
+        "distinct_pct": 100.0,
+        "is_sensitive": false,
+        "is_timestamp": false,
+        "is_metric": false,
+        "is_dimension": false,
+        "is_join_key": true,
+        "numeric_stats": null,
+        "top_values": [
+          {
+            "value": "Product Category",
+            "count": 1
+          },
+          {
+            "value": "Product ID",
+            "count": 1
+          },
+          {
+            "value": "Sponsor/Distributor/Association",
+            "count": 1
+          },
+          {
+            "value": "Sub-Line of Business",
+            "count": 1
+          },
+          {
+            "value": "Language",
+            "count": 1
+          }
+        ],
+        "sample_values_masked": [
+          "Product Category",
+          "Product ID",
+          "Sponsor/Distributor/Association"
+        ]
+      },
+      {
+        "name": "Description",
+        "dtype": "float64",
+        "inferred_type": "float",
+        "null_count": 75,
+        "null_pct": 100.0,
+        "distinct_count": 0,
+        "distinct_pct": 0.0,
+        "is_sensitive": true,
+        "is_timestamp": false,
+        "is_metric": false,
+        "is_dimension": false,
+        "is_join_key": false,
+        "numeric_stats": null,
+        "top_values": [],
+        "sample_values_masked": []
+      },
+      {
+        "name": "Status",
+        "dtype": "str",
+        "inferred_type": "string",
+        "null_count": 0,
+        "null_pct": 0.0,
+        "distinct_count": 2,
+        "distinct_pct": 2.6667,
+        "is_sensitive": false,
+        "is_timestamp": false,
+        "is_metric": false,
+        "is_dimension": true,
+        "is_join_key": false,
+        "numeric_stats": null,
+        "top_values": [
+          {
+            "value": "Disabled",
+            "count": 49
+          },
+          {
+            "value": "Enabled",
+            "count": 26
+          }
+        ],
+        "sample_values_masked": [
+          "Enabled",
+          "Enabled",
+          "Enabled"
+        ]
+      },
+      {
+        "name": "Example Value(s)",
+        "dtype": "float64",
+        "inferred_type": "float",
+        "null_count": 75,
+        "null_pct": 100.0,
+        "distinct_count": 0,
+        "distinct_pct": 0.0,
+        "is_sensitive": false,
+        "is_timestamp": false,
+        "is_metric": true,
+        "is_dimension": false,
+        "is_join_key": false,
+        "numeric_stats": null,
+        "top_values": [],
+        "sample_values_masked": []
+      },
+      {
+        "name": "Notes",
+        "dtype": "float64",
+        "inferred_type": "float",
+        "null_count": 75,
+        "null_pct": 100.0,
+        "distinct_count": 0,
+        "distinct_pct": 0.0,
+        "is_sensitive": false,
+        "is_timestamp": false,
+        "is_metric": false,
+        "is_dimension": false,
+        "is_join_key": false,
+        "numeric_stats": null,
+        "top_values": [],
+        "sample_values_masked": []
+      }
+    ],
+    "timestamp_candidates": [],
+    "metric_candidates": [
+      "Example Value(s)"
+    ],
+    "dimension_candidates": [
+      "Status"
+    ],
+    "join_key_candidates": [
+      "Column",
+      "Name"
+    ],
+    "sensitive_column_candidates": [
+      "Description"
+    ],
+    "inferred_business_domain": "web_analytics",
+    "domain_signals": [
+      "path-contains:adobe->web_analytics",
+      "path-contains:analytics->web_analytics"
+    ],
+    "profiled_at": "2026-06-29T12:41:41.197240+00:00",
+    "relevance_score": 6,
+    "readiness_score": 6,
+    "score_rationale": {
+      "relevance": "parse_ok+2, metric+2, dimension+1, domain_known+1",
+      "readiness": "parse_ok+2, median_null<30%+2, dup<5%+1, sensitive_flagged_nonblocking+1"
+    }
+  },
+  {
+    "tool_version": "0.1.0",
+    "path": "CoverMe Adobe Analytics Data Dictionary Web - Data Feed.xlsx#sheet=post_event_list",
+    "absolute_path": "/Users/uchilsi/Desktop/GMAI-Pulse/data/CoverMe Adobe Analytics Data Dictionary Web - Data Feed.xlsx",
+    "extension": ".xlsx",
+    "sheet_name": "post_event_list",
+    "size_bytes": 77244,
+    "parse_status": "ok",
+    "parse_error": null,
+    "row_count": 1263,
+    "sampled_rows": 1263,
+    "column_count": 6,
+    "schema_source": "file_header",
+    "duplicate_row_count": 0,
+    "duplicate_skip_reason": null,
+    "columns": [
+      {
+        "name": "post_event_list number",
+        "dtype": "int64",
+        "inferred_type": "integer",
+        "null_count": 0,
+        "null_pct": 0.0,
+        "distinct_count": 1263,
+        "distinct_pct": 100.0,
+        "is_sensitive": false,
+        "is_timestamp": "True",
+        "is_metric": false,
+        "is_dimension": false,
+        "is_join_key": true,
+        "numeric_stats": {
+          "min": 1.0,
+          "max": 20999.0,
+          "mean": 15873.490102929532,
+          "std": 7816.933586884571,
+          "p25": 10102.5,
+          "p50": 20368.0,
+          "p75": 20683.5,
+          "p95": 20935.9
+        },
+        "top_values": [
+          {
+            "value": "1",
+            "count": 1
+          },
+          {
+            "value": "2",
+            "count": 1
+          },
+          {
+            "value": "10",
+            "count": 1
+          },
+          {
+            "value": "11",
+            "count": 1
+          },
+          {
+            "value": "12",
+            "count": 1
+          }
+        ],
+        "sample_values_masked": [
+          "1",
+          "2",
+          "10"
+        ]
+      },
+      {
+        "name": "Event",
+        "dtype": "str",
+        "inferred_type": "string",
+        "null_count": 0,
+        "null_pct": 0.0,
+        "distinct_count": 1263,
+        "distinct_pct": 100.0,
+        "is_sensitive": false,
+        "is_timestamp": false,
+        "is_metric": false,
+        "is_dimension": false,
+        "is_join_key": true,
+        "numeric_stats": null,
+        "top_values": [
+          {
+            "value": "Purchase",
+            "count": 1
+          },
+          {
+            "value": "Product View",
+            "count": 1
+          },
+          {
+            "value": "Cart Open",
+            "count": 1
+          },
+          {
+            "value": "Checkout",
+            "count": 1
+          },
+          {
+            "value": "Cart Add",
+            "count": 1
+          }
+        ],
+        "sample_values_masked": [
+          "Purchase",
+          "Product View",
+          "Cart Open"
+        ]
+      },
+      {
+        "name": "Friendly Name",
+        "dtype": "str",
+        "inferred_type": "string",
+        "null_count": 1005,
+        "null_pct": 79.5724,
+        "distinct_count": 254,
+        "distinct_pct": 98.4496,
+        "is_sensitive": false,
+        "is_timestamp": false,
+        "is_metric": false,
+        "is_dimension": false,
+        "is_join_key": true,
+        "numeric_stats": null,
+        "top_values": [
+          {
+            "value": "Language",
+            "count": 2
+          },
+          {
+            "value": "User Type",
+            "count": 2
+          },
+          {
+            "value": "Premium (Offline)",
+            "count": 2
+          },
+          {
+            "value": "Trip Days (Offline)",
+            "count": 2
+          },
+          {
+            "value": "Time Stamp",
+            "count": 1
+          }
+        ],
+        "sample_values_masked": [
+          "Time Stamp",
+          "New/Repeat Visitors",
+          "Visit Number"
+        ]
+      },
+      {
+        "name": "Description",
+        "dtype": "str",
+        "inferred_type": "string",
+        "null_count": 1106,
+        "null_pct": 87.5693,
+        "distinct_count": 1,
+        "distinct_pct": 0.6369,
+        "is_sensitive": true,
+        "is_timestamp": false,
+        "is_metric": false,
+        "is_dimension": true,
+        "is_join_key": false,
+        "numeric_stats": null,
+        "top_values": [
+          {
+            "value": "<masked:d560e979>",
+            "count": 157
+          }
+        ],
+        "sample_values_masked": [
+          "<masked:d560e979>",
+          "<masked:d560e979>",
+          "<masked:d560e979>"
+        ]
+      },
+      {
+        "name": "Status",
+        "dtype": "str",
+        "inferred_type": "string",
+        "null_count": 955,
+        "null_pct": 75.6136,
+        "distinct_count": 3,
+        "distinct_pct": 0.974,
+        "is_sensitive": false,
+        "is_timestamp": false,
+        "is_metric": false,
+        "is_dimension": true,
+        "is_join_key": false,
+        "numeric_stats": null,
+        "top_values": [
+          {
+            "value": "Disabled",
+            "count": 160
+          },
+          {
+            "value": "Enabled",
+            "count": 93
+          },
+          {
+            "value": "ENABLED",
+            "count": 55
+          }
+        ],
+        "sample_values_masked": [
+          "Enabled",
+          "Enabled",
+          "Enabled"
+        ]
+      },
+      {
+        "name": "Notes",
+        "dtype": "str",
+        "inferred_type": "string",
+        "null_count": 1251,
+        "null_pct": 99.0499,
+        "distinct_count": 1,
+        "distinct_pct": 8.3333,
+        "is_sensitive": false,
+        "is_timestamp": false,
+        "is_metric": false,
+        "is_dimension": true,
+        "is_join_key": false,
+        "numeric_stats": null,
+        "top_values": [
+          {
+            "value": "Anomaly Detection",
+            "count": 12
+          }
+        ],
+        "sample_values_masked": [
+          "Anomaly Detection",
+          "Anomaly Detection",
+          "Anomaly Detection"
+        ]
+      }
+    ],
+    "timestamp_candidates": [
+      "post_event_list number"
+    ],
+    "metric_candidates": [],
+    "dimension_candidates": [
+      "Description",
+      "Status",
+      "Notes"
+    ],
+    "join_key_candidates": [
+      "post_event_list number",
+      "Event",
+      "Friendly Name"
+    ],
+    "sensitive_column_candidates": [
+      "Description"
+    ],
+    "inferred_business_domain": "web_analytics",
+    "domain_signals": [
+      "path-contains:adobe->web_analytics",
+      "path-contains:analytics->web_analytics"
+    ],
+    "profiled_at": "2026-06-29T12:41:41.213443+00:00",
+    "relevance_score": 7,
+    "readiness_score": 6,
+    "score_rationale": {
+      "relevance": "parse_ok+2, timestamp+2, dimension+1, volume_tier+1, domain_known+1",
+      "readiness": "parse_ok+2, median_null=79.6%+0, dup<5%+1, timestamp_present+2, sensitive_flagged_nonblocking+1"
+    }
+  }
+]

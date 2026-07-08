@@ -1,0 +1,156 @@
+{
+  "source_profile": "docs/discovery/profile_outputs/CoverMe_Adobe_Analytics_Data_Dictionary_Web_-_Data_Feed.xlsx.json",
+  "workbook": "CoverMe_Adobe_Analytics_Data_Dictionary_Web_-_Data_Feed.xlsx",
+  "generated_from": "profile-level metadata only (no row re-read, no XLSX re-parse)",
+  "inferred_business_domain": "web_analytics",
+  "worksheets": [
+    {
+      "sheet": "data_feed_columns",
+      "row_count": 225,
+      "column_count": 4,
+      "has_notes_column": true,
+      "recommended_role": "Reference catalogue of Adobe data-feed columns. Source of metric and dimension *candidates* via business Notes tagging.",
+      "candidates": {
+        "timestamp": [],
+        "metric": [],
+        "dimension": ["data_type_column", "notes_column"],
+        "join_key": ["preamble_id_column"],
+        "sensitive": ["preamble_id_column"]
+      },
+      "notes_tagging": {
+        "anomaly_detection_count": 9,
+        "total_non_null_tags": 10,
+        "notes_column_null_pct": 95.56
+      },
+      "data_quality_findings": [
+        "Notes column ~95.6% null; only 'Anomaly Detection' (9) and a header echo (1) populated.",
+        "Data-type column dominated by varchar(255) (97 of 225); long tail of 27 distinct dtypes including varchar(100) (23), tinyint unsigned (23), text (18), int unsigned (9).",
+        "First column carries a long Adobe documentation paragraph as its header; flagged as sensitive by profile heuristic and treated abstractly in the shareable doc."
+      ],
+      "scores": {
+        "relevance": 4,
+        "readiness": 6
+      }
+    },
+    {
+      "sheet": "post_eVar",
+      "row_count": 200,
+      "column_count": 6,
+      "has_notes_column": true,
+      "recommended_role": "Adobe conversion / persistent-dimension (eVar) metadata catalogue. Source of dimension candidates for segmentation, triage, and routing.",
+      "candidates": {
+        "timestamp": [],
+        "metric": ["Example Value(s)"],
+        "dimension": ["Status", "Notes"],
+        "join_key": ["Column", "Name"],
+        "sensitive": ["Description"]
+      },
+      "notes_tagging": {
+        "anomaly_detection_count": 8,
+        "total_non_null_tags": 8,
+        "notes_column_null_pct": 96.0
+      },
+      "data_quality_findings": [
+        "Description column 100% null — no business descriptions present in the profile.",
+        "Example Value(s) column 100% null — no example values present in the profile.",
+        "Name column has duplicate values (e.g., 'Language' x2, 'User Type' x2); slot disambiguation required before use as a semantic key.",
+        "Status reasonably populated and clean (Enabled 93 / Disabled 107).",
+        "Metric candidate 'Example Value(s)' is flagged by heuristic but is fully null; not usable as a metric column."
+      ],
+      "scores": {
+        "relevance": 6,
+        "readiness": 6
+      }
+    },
+    {
+      "sheet": "post_prop",
+      "row_count": 75,
+      "column_count": 6,
+      "has_notes_column": true,
+      "recommended_role": "Adobe traffic / pathing (prop) metadata catalogue. Reserve for segmentation and pathing analysis until business mapping improves.",
+      "candidates": {
+        "timestamp": [],
+        "metric": ["Example Value(s)"],
+        "dimension": ["Status"],
+        "join_key": ["Column", "Name"],
+        "sensitive": ["Description"]
+      },
+      "notes_tagging": {
+        "anomaly_detection_count": 0,
+        "total_non_null_tags": 0,
+        "notes_column_null_pct": 100.0
+      },
+      "data_quality_findings": [
+        "Description, Example Value(s), and Notes columns are all 100% null.",
+        "Name column 32% null — roughly 24 of 75 slots lack a friendly label.",
+        "Status populated and clean (Enabled 26 / Disabled 49).",
+        "Zero Notes-based 'Anomaly Detection' tagging indicates absence of current business tagging, not absence of future utility."
+      ],
+      "scores": {
+        "relevance": 6,
+        "readiness": 6
+      }
+    },
+    {
+      "sheet": "post_event_list",
+      "row_count": 1263,
+      "column_count": 6,
+      "has_notes_column": true,
+      "recommended_role": "Adobe event / metric metadata catalogue. Primary source of event-count metric candidates for anomaly detection.",
+      "candidates": {
+        "timestamp": ["post_event_list number"],
+        "metric": [],
+        "dimension": ["Description", "Status", "Notes"],
+        "join_key": ["post_event_list number", "Event", "Friendly Name"],
+        "sensitive": ["Description"]
+      },
+      "notes_tagging": {
+        "anomaly_detection_count": 12,
+        "total_non_null_tags": 12,
+        "notes_column_null_pct": 99.05
+      },
+      "data_quality_findings": [
+        "Status has casing inconsistency: 'Enabled' (93) vs 'ENABLED' (55) vs 'Disabled' (160); normalize before any aggregation or filtering.",
+        "Friendly Name 79.6% null — many events lack business-friendly labels and require mapping.",
+        "Description 87.6% null with a single masked value dominating populated rows; not directly usable as descriptive metadata.",
+        "'post_event_list number' is flagged as a timestamp candidate by heuristic but is structurally a slot index / join key (range 1..20999, 100% distinct). Treat as identifier, not time."
+      ],
+      "scores": {
+        "relevance": 7,
+        "readiness": 6
+      }
+    }
+  ],
+  "cross_sheet_summary": {
+    "notes_tagging_priority_order": [
+      "post_event_list (12)",
+      "data_feed_columns (9)",
+      "post_eVar (8)",
+      "post_prop (0)"
+    ],
+    "no_native_timestamps_present": true,
+    "no_observed_metric_values_present": "Example Value(s) and Description columns are null where present. This is a metadata catalogue, not measurement data.",
+    "shared_governance_concerns": [
+      "Description columns are heuristically flagged sensitive on three sheets.",
+      "data_feed_columns first column (Adobe documentation paragraph) flagged sensitive due to length and content.",
+      "Friendly Name and Name columns require deduplication and missing-value remediation before use as join keys."
+    ]
+  },
+  "limitations": [
+    "Profile supports sheet-level and column-level conclusions only.",
+    "No per-row slot-to-business-name mapping is derivable from the profile alone.",
+    "Notes text beyond the 'Anomaly Detection' tag is not preserved in the profile.",
+    "Top-value lists in the source profile are masked or truncated; do not rely on them for raw values.",
+    "post_prop has zero Notes-tagged rows — absence of tagging, not absence of future utility.",
+    "Metric candidates flagged by heuristic ('Example Value(s)') are fully null and not usable as metric columns; they are metadata slots."
+  ],
+  "exclusions": {
+    "missing_inputs_listed_in_request": [
+      "docs/discovery/worksheet_analysis_data_feed_columns.md",
+      "docs/discovery/worksheet_analysis_post_eVar.md",
+      "docs/discovery/worksheet_analysis_post_prop.md",
+      "docs/discovery/worksheet_analysis_post_event_list.md"
+    ],
+    "rationale": "These files were listed conditionally ('only if available') and are not present in the workspace; they were not used."
+  }
+}
