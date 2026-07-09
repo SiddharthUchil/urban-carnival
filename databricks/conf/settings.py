@@ -15,7 +15,25 @@ PARTITION_COL = "process_date"
 
 # GWAM Canada-Retirement subset: rsid + retirement URL. EDA: 1,151,474 hits, 157 days.
 SCOPE_RSID = "manulifeglobalprod"
+
+# URL scope mode. "en_only" reproduces the shipped population exactly (single English
+# section root, applied to post_page_url). "broad" widens to a language-agnostic,
+# multi-domain retirement scope. KEEP "en_only" until EDA S4b quantifies the excluded
+# volume and the widened population is re-profiled -- flipping this re-baselines every
+# downstream KPI, detector threshold, and injected-anomaly calibration.
+SCOPE_URL_MODE = "en_only"
+
+# Current production scope -- English section root only.
 SCOPE_URL_LIKE = "%manulife.com/ca/en/personal/group-plans/group-retirement%"
+
+# Proposed broad scope: SQL LIKE patterns OR-ed together, matched case-insensitively.
+# Language-agnostic section token + French path + the standalone group-plans domain.
+# Confirm the French path against the live table (EDA S4b) before switching.
+SCOPE_URL_LIKE_BROAD = [
+    "%/group-retirement%",        # en URL path + pagename section token
+    "%/retraite-collective%",     # fr URL path (verify exact slug in S4b)
+    "%manulife-group-plans.ca%",  # standalone group-plans domain
+]
 
 # --- Target (parameterized) ---
 CATALOG_PLACEHOLDER = "__SET_ME__"

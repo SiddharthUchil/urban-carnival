@@ -14,7 +14,8 @@ common.setup_paths(dbutils)
 
 from pyspark.sql import functions as F
 from conf.settings import (
-    resolve, SOURCE_TABLE, PARTITION_COL, SCOPE_RSID, SCOPE_URL_LIKE,
+    resolve, SOURCE_TABLE, PARTITION_COL, SCOPE_RSID,
+    SCOPE_URL_MODE, SCOPE_URL_LIKE, SCOPE_URL_LIKE_BROAD,
     BRONZE_SCHEMA, SILVER_SCHEMA, GOLD_SCHEMA, OVERLAP_DAYS,
 )
 from conf.bronze_columns import bronze_select, REQUIRED_SOURCE_COLUMNS
@@ -51,9 +52,21 @@ if pcol_type == "date":
 else:
     pred = F.col(PARTITION_COL) >= F.lit(start)   # string 'YYYY-MM-DD' compares lexically
 
+# URL scope. Default ("en_only") is the shipped English section root, applied to
+# post_page_url byte-for-byte as before. "broad" OR-s the language-agnostic patterns
+# from conf.settings (lower-cased so casing variants match). Flip SCOPE_URL_MODE only
+# after a re-profile -- it changes the ingested population and re-baselines downstream.
+if SCOPE_URL_MODE == "broad":
+    from functools import reduce
+    _urlc = F.lower(F.col("post_page_url").cast("string"))
+    url_scope = reduce(lambda acc, p: acc | _urlc.like(p.lower()),
+                       SCOPE_URL_LIKE_BROAD, F.lit(False))
+else:
+    url_scope = F.col("post_page_url").like(SCOPE_URL_LIKE)
+
 scoped = (src.where(pred)
              .where(F.col("rsid") == F.lit(SCOPE_RSID))
-             .where(F.col("post_page_url").like(SCOPE_URL_LIKE))
+             .where(url_scope)
              .select(*cols))
 
 # COMMAND ----------

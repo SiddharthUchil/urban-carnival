@@ -647,6 +647,128 @@ run_section("S4", s4_frames)
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## S4b — URL scope audit (column choice + excluded retirement volume)
+# MAGIC Answers the two scope-filter review questions, measured on the **rsid-only** window
+# MAGIC population (before the URL filter narrows it):
+# MAGIC 1. **Which URL column?** blank %, cardinality, and today's-filter match rate for
+# MAGIC    `post_page_url` vs `page_url`, plus where the two disagree — so the scope column is
+# MAGIC    chosen on evidence, not by default.
+# MAGIC 2. **What does the English filter exclude?** host + leading path segments (query strings
+# MAGIC    stripped) flagging retirement traffic the current `…/ca/en/…group-retirement` substring
+# MAGIC    misses — French `/ca/fr/`, alternate domains (e.g. `manulife-group-plans.ca`), other
+# MAGIC    paths — with excluded-hit counts that show whether widening is worth a re-baseline.
+
+# COMMAND ----------
+
+# S4b runs on the rsid-only window (NOT url-scoped) so we can see what the current
+# English URL filter drops. Host/path only (query strings stripped) — no raw query
+# strings surfaced (privacy guard).
+
+def s4b_url_scope_audit():
+    ensure_frames()
+    _resolve_scope_cols(DF)
+    raw_window = DF.filter(F.to_date(DATE_EXPR) >= F.lit(WINDOW_START))
+    rsid_cond = (F.lower(F.trim(F.col(RSID_COL).cast("string"))) == F.lit(RSID_FILTER)
+                 if (RSID_COL and RSID_FILTER) else F.lit(True))
+    url_cols = [c for c in ("post_page_url", "page_url") if pick_col(raw_window, c)]
+    if not url_cols:
+        emit("url_scope_audit", {"error": "no post_page_url / page_url column in source"})
+        return
+    cur = (URL_FILTER or "").lower()
+
+    pop = raw_window.filter(rsid_cond).select(*url_cols)
+    if CACHE_SAMPLE:
+        pop = pop.persist()
+
+    def host_path(c):  # host + path; scheme and query/fragment removed
+        u = F.regexp_replace(F.lower(F.col(c).cast("string")), r"^https?://", "")
+        return F.regexp_extract(u, r"^([^?#]*)", 1)
+
+    # ---- 1) column reconciliation: coverage, cardinality, today's-filter match ----
+    exprs = [F.count("*").alias("rows")]
+    for c in url_cols:
+        hp = host_path(c)
+        exprs += [F.sum(F.when(nonblank(c), 1).otherwise(0)).alias(c + "_nb"),
+                  F.approx_count_distinct(hp).alias(c + "_dist"),
+                  F.sum(F.when(hp.contains(cur), 1).otherwise(0)).alias(c + "_cur")]
+    if len(url_cols) == 2:
+        a = host_path(url_cols[0]).contains(cur)
+        b = host_path(url_cols[1]).contains(cur)
+        exprs += [F.sum(F.when(a & b, 1).otherwise(0)).alias("agree_both"),
+                  F.sum(F.when(a & ~b, 1).otherwise(0)).alias("only0"),
+                  F.sum(F.when(~a & b, 1).otherwise(0)).alias("only1")]
+    r = pop.agg(*exprs).collect()[0]
+    total = r["rows"] or 0
+    reconciliation = {"rsid_only_rows": total, "current_url_filter": URL_FILTER or None}
+    for c in url_cols:
+        nb = r[c + "_nb"] or 0
+        reconciliation[c] = {
+            "blank_pct": round(100.0 * (total - nb) / max(total, 1), 3),
+            "approx_distinct": r[c + "_dist"],
+            "rows_matching_current_filter": r[c + "_cur"],
+            "pct_of_rsid_matched": round(100.0 * (r[c + "_cur"] or 0) / max(total, 1), 3),
+        }
+    if len(url_cols) == 2:
+        reconciliation["disagreement_on_current_filter"] = {
+            "both_match": r["agree_both"],
+            "only_" + url_cols[0]: r["only0"],
+            "only_" + url_cols[1]: r["only1"],
+        }
+
+    # ---- 2) host/path breakdown: retirement traffic the English filter excludes ----
+    sc = url_cols[0]                      # post_page_url preferred, page_url fallback
+    hp = host_path(sc)
+    host = F.regexp_extract(hp, r"^([^/]+)", 1)
+    tag = pop.filter(nonblank(sc)).select(
+        F.regexp_extract(hp, r"^([^/]+(?:/[^/]+){0,4})", 1).alias("host_path"),
+        (hp.contains(cur) if cur else F.lit(True)).alias("cur"),
+        hp.rlike(r"group-retirement|retraite|regimes-collectif|group-plans|/retirement").alias("ret"),
+        F.when(hp.rlike(r"/ca/fr/|/fr/|/fr-ca/"), "fr")
+         .when(hp.rlike(r"/ca/en/|/en/|/en-ca/"), "en").otherwise("other").alias("lang"),
+        (~host.rlike(r"(^|\.)manulife\.com$")).alias("alt"))
+    if CACHE_SAMPLE:
+        tag = tag.persist()
+
+    g = tag.agg(
+        F.count("*").alias("n"),
+        F.sum(F.col("cur").cast("int")).alias("cur"),
+        F.sum(F.col("ret").cast("int")).alias("ret"),
+        F.sum((F.col("ret") & ~F.col("cur")).cast("int")).alias("xret"),
+        F.sum((F.col("ret") & ~F.col("cur") & (F.col("lang") == "fr")).cast("int")).alias("xfr"),
+        F.sum((F.col("ret") & ~F.col("cur") & F.col("alt")).cast("int")).alias("xalt"),
+    ).collect()[0]
+    ret = g["ret"] or 0
+    top_excl = [{"host_path": x["host_path"], "hits": x["n"],
+                 "lang": x["lang"], "alt_domain": bool(x["alt"])}
+                for x in (tag.filter(F.col("ret") & ~F.col("cur"))
+                             .groupBy("host_path", "lang", "alt").agg(F.count("*").alias("n"))
+                             .orderBy(F.desc("n")).limit(TOP_N).collect())]
+
+    emit("url_scope_audit", {
+        "note": "rsid-only window population; host/path only (query strings stripped).",
+        "scope_col_used": sc,
+        "reconciliation": reconciliation,
+        "breakdown": {
+            "nonblank_url_rows": g["n"],
+            "current_english_filter_rows": g["cur"],
+            "retirement_related_rows": ret,
+            "excluded_retirement_rows": g["xret"],
+            "excluded_retirement_pct_of_retirement": round(100.0 * (g["xret"] or 0) / max(ret, 1), 3),
+            "excluded_french_rows": g["xfr"],
+            "excluded_alt_domain_rows": g["xalt"],
+        },
+        "top_excluded_retirement_host_paths": top_excl,
+    })
+    display(spark.createDataFrame(
+        top_excl or [{"host_path": "(none excluded)", "hits": 0, "lang": "-", "alt_domain": False}]))
+    if CACHE_SAMPLE:
+        pop.unpersist(); tag.unpersist()
+
+run_section("S4b", s4b_url_scope_audit)
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## S5 — Population census (~1,198 columns)
 # MAGIC Which columns are actually populated? Batched non-blank counts on the sample,
 # MAGIC then approx-distinct only for live columns. Never prints values.
