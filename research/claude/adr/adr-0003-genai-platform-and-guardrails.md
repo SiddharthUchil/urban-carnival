@@ -1,6 +1,6 @@
 # ADR-0003 — Gen-AI platform & guardrails for RCA
 
-**Status:** Accepted · **Date:** 2026-06-30 · **Deciders:** GMAI–Pulse solutioning
+**Status:** Accepted — platform choice amended by [ADR-0008](adr-0008-global-serving-and-genai-plane.md) (2026-07-09: the Azure-plane alternative — Foundry + AI Search — is promoted to primary; guardrails/eval requirements unchanged) · **Date:** 2026-06-30 · **Deciders:** GMAI–Pulse solutioning
 
 ## Context
 Phase 2 needs a multi-agent **RCA + recommendations** layer with retrieval over historical incidents/runbooks,

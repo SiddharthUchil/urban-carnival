@@ -69,8 +69,10 @@ when, why, and what to do"). The design rests on eight decisions:
 | 9 | [09-references.md](09-references.md) | Cited sources + confidence flags |
 | 10 | [10-data-profile-alignment.md](10-data-profile-alignment.md) | **What the 2026-07-02 `new_data/` profiling changed** + open blockers |
 | 11 | [11-privacy-identity-governance.md](11-privacy-identity-governance.md) | **Privacy, identity & governance** — Identity & Privacy layer, Law 25/C-27 mapping, Synapse secure views, erasure, roles |
+| 12 | [12-eda-findings-analysis.md](12-eda-findings-analysis.md) | EDA findings from the real GWAM Databricks feed |
+| 13 | [13-global-serving-topology.md](13-global-serving-topology.md) | **Global serving topology** — React/AKS surface + BFF, Azure AI Foundry Gen-AI plane, unstructured data lane (ADLS Gen2 → AI Search), global access/residency |
 | — | [metric-registry.yaml](metric-registry.yaml) | Versioned Phase-1 metric registry (29 AD-tagged seeds) |
-| — | [adr/](adr/) | ADR-0001 ingestion (v2) · ADR-0002 models · ADR-0003 Gen-AI · ADR-0004 Akka · ADR-0005 Adaptive ML · ADR-0006 compute plane · **ADR-0007 identity & privacy** |
+| — | [adr/](adr/) | ADR-0001 ingestion (v2) · ADR-0002 models · ADR-0003 Gen-AI · ADR-0004 Akka · ADR-0005 Adaptive ML · ADR-0006 compute plane · ADR-0007 identity & privacy · **ADR-0008 serving topology & Gen-AI plane** |
 
 ## Requirement-coverage map
 
@@ -92,6 +94,8 @@ when, why, and what to do"). The design rests on eight decisions:
 | **Recommendations / actionable insights** | [04 §5](04-phase2-investigation-insights.md) |
 | **Data-profile alignment + blockers** | [10](10-data-profile-alignment.md) |
 | **Privacy/identity extension research** (Perplexity & Gemini `*_extending_GMAI.md`) | [11](11-privacy-identity-governance.md) verdicts + design, [ADR-0007](adr/adr-0007-identity-privacy-layer.md) |
+| **React/TS AI-BI app for global users** (AKS serving, Foundry Gen-AI) | [13](13-global-serving-topology.md) D6, [ADR-0008](adr/adr-0008-global-serving-and-genai-plane.md) |
+| **Unstructured data** (transcripts, PDFs via ADLS Gen2 → RAG) | [13 §4](13-global-serving-topology.md) D7, [ADR-0008](adr/adr-0008-global-serving-and-genai-plane.md) |
 
 ## Scope notes & assumptions
 

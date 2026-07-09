@@ -1,7 +1,8 @@
 # 06 — Diagrams (Mermaid) + Lucidchart Import Guide
 
-> **Five diagrams** covering the end-to-end two-source architecture, Phase-1 detection, Phase-2 RCA +
-> ChatOps, the three-layer platform + improvement flywheel, and the Akka target state + migration. They
+> **Seven diagrams** covering the end-to-end two-source architecture, Phase-1 detection, Phase-2 RCA +
+> ChatOps, the three-layer platform + improvement flywheel, the Akka target state + migration, the global
+> React/AKS serving topology, and the unstructured data lane. They
 > render natively in **GitHub** and **VS Code** (Mermaid preview), and import into **Lucidchart**.
 > Architecture context: [02](02-solution-architecture.md); what changed on 2026-07-02:
 > [10-data-profile-alignment.md](10-data-profile-alignment.md).
@@ -16,6 +17,8 @@ converges on ~4–5 core views, and the old set redrew the same lanes repeatedly
 | **D3** Phase-2 RCA + ChatOps | old ④⑤⑥ | agent topology, guardrails, and triage flow belong together |
 | **D4** platform + flywheel | old ⑨⑩ | the flywheel *is* Layer 2's loop — one picture |
 | **D5** Akka target + migration | old ⑦ | unique content, updated to batch-first |
+| **D6** global serving topology | new 2026-07-09 | React/AKS surface + Foundry Gen-AI plane ([13](13-global-serving-topology.md), [ADR-0008](adr/adr-0008-global-serving-and-genai-plane.md)) |
+| **D7** unstructured data lane | new 2026-07-09 | transcripts/PDFs on ADLS Gen2 → AI Search RAG ([13 §4](13-global-serving-topology.md), [ADR-0008](adr/adr-0008-global-serving-and-genai-plane.md)) |
 
 ## How to render / import
 
@@ -27,9 +30,11 @@ converges on ~4–5 core views, and the old set redrew the same lanes repeatedly
 - **draw.io / diagrams.net (alternative):** *Arrange → Insert → Advanced → Mermaid*.
 
 **Lucid shape conventions (apply after import):** cylinders = data stores (Delta tables, ADLS, Vector
-Search) · rectangles = services/compute · diamonds = gates/decisions (severity, guardrails, identity/privacy gate) ·
-lightning bolt = alerts/notifications · dashed borders = future/optional components (hot lane, Akka) ·
-one swimlane per concern (Sources / CoverMe serving / Databricks plane / Consumers).
+Search / AI Search index) · rectangles = services/compute (incl. the BFF trust boundary, Front Door edge) ·
+diamonds = gates/decisions (severity, guardrails, identity/privacy + PII-redaction gate) ·
+lightning bolt = alerts/notifications · dashed borders = future/optional components (hot lane, Akka,
+on-demand re-scan) · one swimlane per concern (Sources / CoverMe serving / Databricks plane / Consumers;
+for D6/D7: Users / Edge / AKS / Databricks / Foundry+Search).
 
 Each diagram below is self-contained — copy from the first line inside the fence to the last.
 
@@ -229,6 +234,95 @@ durable execution + at-least-once + idempotency/saga — not "exactly-once"
 
 ---
 
+## D6 — Global serving topology (React/AKS surface, Foundry Gen-AI plane)
+
+```mermaid
+flowchart LR
+    subgraph USERS["Global Manulife users"]
+        BU["Business users - worldwide"]
+        AN["Analysts / ML engineers"]
+    end
+    subgraph EDGE["Azure Front Door + Entra ID"]
+        AFD["Front Door: WAF, edge cache, TLS"]
+        SSO["Entra ID SSO (MSAL) + group claims"]
+    end
+    subgraph AKS["AKS - Canada region"]
+        SPA["React/TS SPA (static assets)"]
+        BFF["Node/TS BFF: authZ, cache by run_id, typed API"]
+    end
+    subgraph DBX["Azure Databricks - Canada region (ADR-0006)"]
+        MED["Medallion jobs: bronze to silver to gold (daily 06:00 ET)"]
+        DET["detect job: darts + pyod to gold.anomalies"]
+        UNS["Unstructured lane: parse to redact to chunk (D7)"]
+        WH["Serverless SQL Warehouse - Statement Execution API"]
+    end
+    subgraph LAKE["ADLS Gen2 - Canada region"]
+        ADOBE["Adobe hit Delta (structured feed)"]
+        BLOB["Blob landing: transcripts + PDFs"]
+    end
+    subgraph AIF["Azure AI Foundry + AI Search - Canada region"]
+        FND["Foundry model deployments: RCA, NL, embeddings"]
+        AIS["Azure AI Search: chunk index (hybrid + semantic)"]
+    end
+    BU --> AFD --> SSO --> SPA --> BFF
+    AN -.->|DBSQL dashboards and notebooks| WH
+    ADOBE --> MED --> DET
+    BLOB --> UNS
+    MED --> WH
+    DET --> WH
+    BFF -->|Private Link reads| WH
+    BFF -->|Private Link RCA and NL| FND
+    FND -->|retrieval| AIS
+    UNS -->|chunks and embeddings| AIS
+    BFF -.->|optional run-now re-scan| MED
+```
+
+*One Canadian data region; global users enter only through Front Door + Entra, and the BFF is the sole
+trust boundary between the app and the data / Gen-AI planes. Predictions are precomputed by the daily job
+and read from gold; the dashed re-scan is optional. Decisions: [ADR-0008](adr/adr-0008-global-serving-and-genai-plane.md),
+detail [13 §2–3](13-global-serving-topology.md).*
+
+---
+
+## D7 — Unstructured data lane (transcripts + PDFs to AI Search RAG)
+
+```mermaid
+flowchart LR
+    subgraph LAND["ADLS Gen2 landing - UC external location"]
+        RAWT["transcripts/ (JSON, TXT)"]
+        RAWP["docs/ (PDF)"]
+    end
+    subgraph BRZ["Bronze"]
+        MAN["File manifest Delta: path, hash, source, ingested_at"]
+        VOL["Raw bytes in UC Volume (restricted ACL)"]
+    end
+    subgraph SLV["Silver"]
+        PRS["Parse: Document Intelligence (PDF) + transcript normalizer"]
+        PII["PII detect + redact / pseudonymize (ADR-0007 gate)"]
+        CHK["Chunk + metadata: doc_id, source, lang, effective_date"]
+    end
+    subgraph GLD["Gold"]
+        CTAB["Chunk Delta table - governed source of truth"]
+    end
+    subgraph IDX["Azure AI Search"]
+        EMB["Embeddings via Foundry embedding model"]
+        IX["Hybrid index: vector + keyword + semantic ranker"]
+    end
+    RAWT --> MAN
+    RAWP --> MAN
+    MAN --> VOL --> PRS --> PII --> CHK --> CTAB
+    CTAB --> EMB --> IX
+    CTAB -.->|erasure by doc_id rebuilds index| IX
+```
+
+*Same medallion discipline as the structured feed: parse then redact then chunk, so only redacted chunks
+reach gold and the index. The index is a rebuildable projection of the gold chunk table — governance,
+lineage, and erasure live in Delta/UC. Auto Loader `availableNow` (batch-first, ADR-0001); sources
+declared in `corpus-registry.yaml`. Detail: [13 §4](13-global-serving-topology.md).*
+
+---
+
 *D1 is the executive/architecture view; D2–D3 are the Phase-1/Phase-2 working views; D4–D5 are the
-platform-strategy views (Adaptive ML flywheel, Akka future state). All five import into Lucidchart via
+platform-strategy views (Adaptive ML flywheel, Akka future state); D6–D7 are the serving/data-lane views
+(global React/AKS + Foundry surface, unstructured RAG lane). All seven import into Lucidchart via
 Mermaid import; apply the shape conventions above after import.*
