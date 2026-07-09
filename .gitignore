@@ -1,0 +1,9 @@
+# Synthetic data outputs (generated locally, never committed)
+data/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/

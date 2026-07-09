@@ -1,33 +1,25 @@
 # GMAI-Pulse Phase-1 Metric Registry
 # ------------------------------------------------------------------
-# version: 0.1.0 (2026-07-02)
+# version: 0.2.0 (2026-07-08)
 # generated_from: new_data/data_profile_summary.json (profiler v0.1.0, run 2026-07-02)
 # seed_source: CoverMe data dictionary rows where Notes == "Anomaly Detection"
 #              -> confirmed counts: 9 (data_feed_columns) + 8 (post_eVar) + 12 (post_event_list) = 29
 #
-# STATUS: SCAFFOLD. The profile JSONs confirm the per-sheet COUNTS but are
-# per-column aggregates — they cannot map which specific rows carry the tag.
-# Filling the placeholders requires one extraction pass over the dictionary
-# workbook (see extraction_procedure below). Tracked as an open task in
-# 10-data-profile-alignment.md.
+# STATUS: EXTRACTED. v0.2.0 fills all 29 placeholders from the business-confirmed
+# extraction of the dictionary workbook (row list provided 2026-07-08). Per-sheet
+# counts match the v0.1.0 seed prediction exactly (9 / 8 / 12). Closes open task #3
+# in 10-data-profile-alignment.md.
 #
 # validation_rules:
 #   - every source_ref must exist in data_profile_summary.json for its sheet
 #   - per-sheet entry counts must equal the seed counts (9 / 8 / 12)
 #   - metric_id unique; grain in {daily, hourly}; status in {active, candidate, deferred}
 #   - direction in {higher_is_good, higher_is_bad, context_dependent}
-#
-# extraction_procedure: |
-#   import pandas as pd
-#   xl = pd.ExcelFile("<CoverMe data dictionary workbook>")
-#   for sheet in ["data_feed_columns", "post_eVar", "post_event_list"]:
-#       df = xl.parse(sheet)
-#       print(df[df["Notes"].str.strip().str.casefold() == "anomaly detection"])
 # ------------------------------------------------------------------
 
 meta:
-  version: 0.1.0
-  updated: 2026-07-02
+  version: 0.2.0
+  updated: 2026-07-08
   default_grain: daily          # hourly reserved — enable only after >=30-day feed confirms volume
   domains: [coverme, gwam_retirement]
   notes: >
@@ -35,50 +27,319 @@ meta:
     domain: shared unless a metric is proven domain-specific. No metric columns exist
     in the hit schema — every metric here is a downstream aggregate of decoded
     post_event_list events or column/eVar population rates (02 §2).
+  report_suite_caveat: >
+    The eVar slot numbers and post_event_list IDs below are CoverMe report-suite
+    mappings. The GWAM manulifeglobalprod suite exposes different IDs (EDA S6
+    observed 10000-10099, 500-504, 20 — all unresolved); GWAM needs its own
+    dictionary / event-lookup extraction before these definitions transfer.
 
 # ------------------------------------------------------------------
 # 1) data_feed_columns — 9 tagged rows (traffic / behavioral columns)
+#    These are slicing dimensions / coverage signals, not counters:
+#    the per-grain metric is the non-blank population rate (and, for
+#    geo/os, the value-distribution shift monitored in Phase 1 class C).
 # ------------------------------------------------------------------
-data_feed_columns:   # exactly 9 entries when extracted
-  - metric_id: dfc_metric_01        # PLACEHOLDER — fill from extraction
+data_feed_columns:   # exactly 9 entries (seed count 9)
+  - metric_id: dfc_campaign
+    name: Tracking Code (campaign)
     domain: shared
     source_sheet: data_feed_columns
-    source_ref: TBD-extract         # dictionary "Column name" value
-    decode_rule: TBD                # e.g. non-null rate or per-grain count of the column
+    source_ref: campaign
+    decode_rule: population-rate
     grain: daily
-    direction: TBD
+    direction: context_dependent
     owner: TBD
     status: candidate
-  # dfc_metric_02 .. dfc_metric_09: same shape (9 total, per seed count)
+  - metric_id: dfc_geo_city
+    name: Geo City
+    domain: shared
+    source_sheet: data_feed_columns
+    source_ref: geo_city
+    decode_rule: population-rate    # plus top-value distribution shift
+    grain: daily
+    direction: context_dependent
+    owner: TBD
+    status: candidate
+  - metric_id: dfc_geo_country
+    name: Geo Country
+    domain: shared
+    source_sheet: data_feed_columns
+    source_ref: geo_country
+    decode_rule: population-rate    # plus top-value distribution shift
+    grain: daily
+    direction: context_dependent
+    owner: TBD
+    status: candidate
+  - metric_id: dfc_geo_region
+    name: Geo Region
+    domain: shared
+    source_sheet: data_feed_columns
+    source_ref: geo_region
+    decode_rule: population-rate    # plus top-value distribution shift
+    grain: daily
+    direction: context_dependent
+    owner: TBD
+    status: candidate
+  - metric_id: dfc_os
+    name: Operating System (lookup id)
+    domain: shared
+    source_sheet: data_feed_columns
+    source_ref: os
+    decode_rule: population-rate    # plus top-value distribution shift
+    grain: daily
+    direction: context_dependent
+    owner: TBD
+    status: candidate
+  - metric_id: dfc_page_url
+    name: Page URL
+    domain: shared
+    source_sheet: data_feed_columns
+    source_ref: page_url
+    decode_rule: population-rate    # NOTE: blank on link-tracking hits (88% blank in GWAM window)
+    grain: daily
+    direction: context_dependent
+    owner: TBD
+    status: candidate
+  - metric_id: dfc_pagename
+    name: Page (pagename)
+    domain: shared
+    source_sheet: data_feed_columns
+    source_ref: pagename
+    decode_rule: population-rate
+    grain: daily
+    direction: context_dependent
+    owner: TBD
+    status: candidate
+  - metric_id: dfc_referrer
+    name: Referrer
+    domain: shared
+    source_sheet: data_feed_columns
+    source_ref: referrer
+    decode_rule: population-rate
+    grain: daily
+    direction: context_dependent
+    owner: TBD
+    status: candidate
+  - metric_id: dfc_user_agent
+    name: User Agent
+    domain: shared
+    source_sheet: data_feed_columns
+    source_ref: user_agent
+    decode_rule: population-rate    # SHAPE ONLY per ADR-0007 (device fingerprint -> generalize)
+    grain: daily
+    direction: context_dependent
+    owner: TBD
+    status: candidate
 
 # ------------------------------------------------------------------
 # 2) post_eVar — 8 tagged rows (conversion-context eVars)
 # ------------------------------------------------------------------
-post_eVar:           # exactly 8 entries when extracted
-  - metric_id: evar_metric_01       # PLACEHOLDER — fill from extraction
+post_eVar:           # exactly 8 entries (seed count 8)
+  - metric_id: evar04_product_category
+    name: Product Category
     domain: shared
     source_sheet: post_eVar
-    source_ref: TBD-extract         # e.g. post_evarNN slot
-    decode_rule: population-rate    # % of hits/visits where the eVar is set (typical)
+    source_ref: post_evar4
+    decode_rule: population-rate
     grain: daily
-    direction: TBD
+    direction: context_dependent
     owner: TBD
     status: candidate
-  # evar_metric_02 .. evar_metric_08: same shape (8 total, per seed count)
+  - metric_id: evar05_product_id
+    name: Product ID
+    domain: shared
+    source_sheet: post_eVar
+    source_ref: post_evar5
+    decode_rule: population-rate
+    grain: daily
+    direction: context_dependent
+    owner: TBD
+    status: candidate
+  - metric_id: evar06_sponsor_distributor
+    name: Sponsor/Distributor/Association
+    domain: shared
+    source_sheet: post_eVar
+    source_ref: post_evar6
+    decode_rule: population-rate
+    grain: daily
+    direction: context_dependent
+    owner: TBD
+    status: candidate
+  - metric_id: evar11_quote_session_id
+    name: Quote Session ID
+    domain: shared
+    source_sheet: post_eVar
+    source_ref: post_evar11
+    decode_rule: count-distinct     # high-cardinality session id — distinct sessions per grain
+    grain: daily
+    direction: higher_is_good
+    owner: TBD
+    status: candidate
+  - metric_id: evar16_transaction_id
+    name: Transaction ID
+    domain: shared
+    source_sheet: post_eVar
+    source_ref: post_evar16
+    decode_rule: count-distinct     # high-cardinality transaction id — distinct transactions per grain
+    grain: daily
+    direction: higher_is_good
+    owner: TBD
+    status: candidate
+  - metric_id: evar52_current_page
+    name: Current Page
+    domain: shared
+    source_sheet: post_eVar
+    source_ref: post_evar52
+    decode_rule: population-rate
+    grain: daily
+    direction: context_dependent
+    owner: TBD
+    status: candidate
+  - metric_id: evar111_experience_cloud_id
+    name: Experience Cloud ID
+    domain: shared
+    source_sheet: post_eVar
+    source_ref: post_evar111
+    decode_rule: count-distinct     # identifier — SHAPE ONLY per ADR-0007 (pseudonymize in pipeline)
+    grain: daily
+    direction: context_dependent
+    owner: TBD
+    status: candidate
+  - metric_id: evar148_bot_detector
+    name: Bot Detector
+    domain: shared
+    source_sheet: post_eVar
+    source_ref: post_evar148
+    decode_rule: population-rate
+    grain: daily
+    direction: higher_is_bad        # rising bot-flag share = data-quality anomaly
+    owner: TBD
+    status: candidate
 
 # ------------------------------------------------------------------
-# 3) post_event_list — 12 tagged rows (commerce/conversion events)
-#    Expected first ACTIVE entries: the commerce events the dictionary
-#    names (Purchase, Product View, Cart Open/Add/Remove, form/quote events).
+# 3) post_event_list — 12 tagged rows: 7 instance-of-eVar counters +
+#    5 quote/application funnel events (Quote Start/Complete, Save
+#    Quote, App Start/Confirm). NOTE: no commerce events (Purchase,
+#    Cart *) carry the tag — v0.1.0's expectation comment was wrong.
 # ------------------------------------------------------------------
-post_event_list:     # exactly 12 entries when extracted
-  - metric_id: pel_metric_01        # PLACEHOLDER — likely coverme_purchase_daily
+post_event_list:     # exactly 12 entries (seed count 12)
+  - metric_id: pel_103_product_category_inst
+    name: Instance of eVar4 (Product Category)
     domain: shared
     source_sheet: post_event_list
-    source_ref: TBD-extract         # dictionary "Event" id
-    decode_rule: event-count        # count of event id occurrences per grain
+    source_ref: "103"
+    decode_rule: event-count
     grain: daily
-    direction: higher_is_good       # typical for conversion events; confirm per entry
+    direction: context_dependent
     owner: TBD
     status: candidate
-  # pel_metric_02 .. pel_metric_12: same shape (12 total, per seed count)
+  - metric_id: pel_104_product_id_inst
+    name: Instance of eVar5 (Product ID)
+    domain: shared
+    source_sheet: post_event_list
+    source_ref: "104"
+    decode_rule: event-count
+    grain: daily
+    direction: context_dependent
+    owner: TBD
+    status: candidate
+  - metric_id: pel_105_sponsor_distributor_inst
+    name: Instance of eVar6 (Sponsor/Distributor/Association)
+    domain: shared
+    source_sheet: post_event_list
+    source_ref: "105"
+    decode_rule: event-count
+    grain: daily
+    direction: context_dependent
+    owner: TBD
+    status: candidate
+  - metric_id: pel_110_quote_session_inst
+    name: Instance of eVar11 (Quote Session ID)
+    domain: shared
+    source_sheet: post_event_list
+    source_ref: "110"
+    decode_rule: event-count
+    grain: daily
+    direction: higher_is_good
+    owner: TBD
+    status: candidate
+  - metric_id: pel_115_transaction_inst
+    name: Instance of eVar16 (Transaction ID)
+    domain: shared
+    source_sheet: post_event_list
+    source_ref: "115"
+    decode_rule: event-count
+    grain: daily
+    direction: higher_is_good
+    owner: TBD
+    status: candidate
+  - metric_id: pel_151_current_page_inst
+    name: Instance of eVar52 (Current Page)
+    domain: shared
+    source_sheet: post_event_list
+    source_ref: "151"
+    decode_rule: event-count
+    grain: daily
+    direction: context_dependent
+    owner: TBD
+    status: candidate
+  - metric_id: pel_10047_bot_detector_inst
+    name: Instance of eVar148 (Bot Detector)
+    domain: shared
+    source_sheet: post_event_list
+    source_ref: "10047"
+    decode_rule: event-count
+    grain: daily
+    direction: higher_is_bad        # rising bot-flag instances = data-quality anomaly
+    owner: TBD
+    status: candidate
+  - metric_id: pel_228_quote_start
+    name: Quote Start (Custom Event 29)
+    domain: shared
+    source_sheet: post_event_list
+    source_ref: "228"
+    decode_rule: event-count
+    grain: daily
+    direction: higher_is_good
+    owner: TBD
+    status: candidate
+  - metric_id: pel_229_quote_complete
+    name: Quote Complete (Custom Event 30)
+    domain: shared
+    source_sheet: post_event_list
+    source_ref: "229"
+    decode_rule: event-count
+    grain: daily
+    direction: higher_is_good
+    owner: TBD
+    status: candidate
+  - metric_id: pel_232_save_quote
+    name: Save Quote (Custom Event 33)
+    domain: shared
+    source_sheet: post_event_list
+    source_ref: "232"
+    decode_rule: event-count
+    grain: daily
+    direction: higher_is_good
+    owner: TBD
+    status: candidate
+  - metric_id: pel_240_app_confirm
+    name: App Confirm (Custom Event 41)
+    domain: shared
+    source_sheet: post_event_list
+    source_ref: "240"
+    decode_rule: event-count
+    grain: daily
+    direction: higher_is_good
+    owner: TBD
+    status: candidate
+  - metric_id: pel_269_app_start
+    name: App Start (Custom Event 70)
+    domain: shared
+    source_sheet: post_event_list
+    source_ref: "269"
+    decode_rule: event-count
+    grain: daily
+    direction: higher_is_good
+    owner: TBD
+    status: candidate

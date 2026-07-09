@@ -46,9 +46,11 @@ with the 4–5-core-diagram consensus in the prior research.
    ingestion** — the review feeds the Identity & Privacy layer
    ([02 §9](02-solution-architecture.md); [11 §2](11-privacy-identity-governance.md);
    [ADR-0007](adr/adr-0007-identity-privacy-layer.md)).
-3. **Metric-registry extraction.** One pandas pass over the dictionary workbook's `Notes` columns to fill
-   the 29 placeholder entries in [`metric-registry.yaml`](metric-registry.yaml) (procedure embedded in the
-   file header). The profiles confirm counts; the workbook holds the row identities.
+3. ~~**Metric-registry extraction.**~~ **DONE 2026-07-08.** Business provided the 29 tagged rows
+   (9 `data_feed_columns` + 8 `post_eVar` + 12 `post_event_list`); all placeholders in
+   [`metric-registry.yaml`](metric-registry.yaml) are filled (v0.2.0). Note: the 12 events are 7
+   instance-of-eVar counters + 5 quote/app funnel events — no commerce events carry the tag. The
+   mapping is CoverMe-suite-specific; a GWAM (`manulifeglobalprod`) event-lookup pass is still open.
 4. **Correlation-key + change-event acquisition (Phase-2 entry criterion).** Add the 11 missing keys and
    onboard deployment/release logs, tag-change history, campaign calendars ([04 §2b](04-phase2-investigation-insights.md)).
 5. **Storage-permission alignment for CoverMe.** Managed-identity read on the CoverMe ADLS container for
