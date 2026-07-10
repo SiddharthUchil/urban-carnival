@@ -305,9 +305,8 @@ def ensure_frames():
         DF_W = DF_CA.filter(F.to_date(DATE_EXPR) >= F.lit(WINDOW_START))
     if DF_S is None:
         DF_S = DF_W.sample(withReplacement=False, fraction=SAMPLE_FRACTION, seed=42)
-        if CACHE_SAMPLE:
-            DF_S = DF_S.persist()
-        SAMPLE_ROWS = DF_S.count()
+        DF_S = DF_S.persist()      # always freeze: count() and per-column aggs must read identical rows
+        SAMPLE_ROWS = DF_S.count() # materializes the persisted sample
     return DF, DF_W, DF_S
 
 print(f"Config OK. table={TABLE_FQN} window={WINDOW_MONTHS}mo fraction={SAMPLE_FRACTION} "
@@ -790,6 +789,7 @@ run_section("S4b", s4b_url_scope_audit)
 # COMMAND ----------
 
 CENSUS = {}   # col -> {"dtype":..., "pop_pct":..., "apx_distinct":...}; reused by S7/S9/S10
+CORE_MIN_PCT = 99.0   # "core" = reliably populated (~always present); usable as a stable series
 
 def s5_population_census():
     global CENSUS
@@ -810,17 +810,21 @@ def s5_population_census():
 
     CENSUS = {c: {"dtype": dtypes.get(c), "pop_pct": round(100.0 * pop_counts[c] / n, 3),
                   "apx_distinct": distincts.get(c)} for c in populated}
+    core = {c for c in CENSUS if CENSUS[c]["pop_pct"] >= CORE_MIN_PCT}
 
     ranked = sorted(CENSUS.items(), key=lambda kv: -kv[1]["pop_pct"])
     emit("population_census", {
         "basis": "sample", "sample_rows": SAMPLE_ROWS,
         "n_total_cols": len(all_cols),
         "n_populated": len(populated), "n_sparse": len(sparse), "n_dead": len(dead),
+        "n_core": len(core), "core_min_pct": CORE_MIN_PCT,
         "populated": [{"col": c, **v} for c, v in ranked[:120]],
         "populated_names_beyond_top120": [c for c, _ in ranked[120:]],
         "sparse_cols": sparse[:40],
         "evar_live": sorted(c for c in populated if re.match(r"post_evar\d+$|evar\d+$", c)),
         "prop_live": sorted(c for c in populated if re.match(r"post_prop\d+$|prop\d+$", c)),
+        "evar_core": sorted(c for c in core if re.match(r"post_evar\d+$|evar\d+$", c)),
+        "prop_core": sorted(c for c in core if re.match(r"post_prop\d+$|prop\d+$", c)),
     })
 
 run_section("S5", s5_population_census)
@@ -913,12 +917,13 @@ run_section("S6", s6_event_decode)
 
 def s7_live_custom_dims():
     ensure_frames()
-    live = [c for c in CENSUS
-            if re.match(r"post_evar\d+$|evar\d+$|post_prop\d+$|prop\d+$|^post_campaign$|^campaign$", c)]
-    live = sorted(live, key=lambda c: -CENSUS[c]["pop_pct"])[:25]
+    live_all = [c for c in CENSUS
+                if re.match(r"post_evar\d+$|evar\d+$|post_prop\d+$|prop\d+$|^post_campaign$|^campaign$", c)]
+    live = sorted(live_all, key=lambda c: -CENSUS[c]["pop_pct"])[:25]
     if not live:
         emit("live_custom_dims", {"error": "no live eVar/prop/campaign columns (run S5 first)"})
         return
+    n_core = sum(1 for c in live_all if CENSUS[c]["pop_pct"] >= CORE_MIN_PCT)
 
     out = []
     for c in live:
@@ -941,7 +946,7 @@ def s7_live_custom_dims():
             "top_masked": [{"m": mask(r[c]), "len": len(str(r[c])),
                             "pct": round(100.0 * r["count"] / pop_rows, 2)} for r in top],
         })
-    emit("live_custom_dims", {"basis": "sample", "dims": out})
+    emit("live_custom_dims", {"basis": "sample", "n_live": len(live_all), "n_core": n_core, "dims": out})
 
 run_section("S7", s7_live_custom_dims)
 
