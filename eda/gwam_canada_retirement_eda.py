@@ -1349,10 +1349,41 @@ run_section("S12", s12_synthesis_spec)
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Done — what to copy back
+# MAGIC ## Run manifest — integrity check for the export
+# MAGIC Byte length + sha1 of every shareable section, computed from the exact JSON that
+# MAGIC was printed. Databricks caps very large per-cell stdout; re-hash any pasted or
+# MAGIC exported block and compare here to prove nothing was truncated.
+
+# COMMAND ----------
+
+def s_run_manifest():
+    sections = {}
+    for sid, payload in RESULTS.items():
+        body = json.dumps(payload, separators=(",", ":"), default=str)
+        sections[sid] = {"bytes": len(body),
+                         "sha1": hashlib.sha1(body.encode("utf-8")).hexdigest()}
+    emit("run_manifest", {"sections": sections, "n_sections": len(sections),
+                          "skipped": SKIPPED})
+
+run_section("run_manifest", s_run_manifest)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Done — how to hand back the results
 # MAGIC
-# MAGIC Paste every `===== BEGIN SHAREABLE: ... =====` block (and any `SKIPPED` lines), in this
-# MAGIC priority order if you need to split across messages:
+# MAGIC **Primary: export the run notebook itself.** After a full Run All, use
+# MAGIC `File → Export → IPython Notebook (.ipynb)` and drop the file in the repo. Every
+# MAGIC `===== BEGIN SHAREABLE: <id> =====` block is captured in the cell outputs, so nothing
+# MAGIC has to be copied by hand. Export the interactive-charts notebook the same way — its
+# MAGIC `chart:<id>` blocks carry the aggregate data behind each panel.
+# MAGIC
+# MAGIC **Verify nothing was truncated.** The final `run_manifest` block (and `chart:manifest`
+# MAGIC in the charts notebook) lists the byte length + sha1 of every section; re-hash an
+# MAGIC exported block and compare. If a block is cut mid-JSON, re-run just that section (each
+# MAGIC `run_section` is independent) or lower the `max_csv_lines` widget.
+# MAGIC
+# MAGIC **Fallback — copy blocks by hand** (if you can't export), in this priority order:
 # MAGIC
 # MAGIC 1. `synthesis_spec` (the consolidated master — if you only send one thing, send this)
 # MAGIC 2. `ts_daily` + `ts_events` (daily series for model design)

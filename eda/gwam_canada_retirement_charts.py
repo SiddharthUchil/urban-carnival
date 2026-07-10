@@ -32,6 +32,7 @@
 # COMMAND ----------
 
 from pyspark.sql import functions as F
+import json, math, hashlib
 
 # Plotly ships with Databricks Runtime for ML. If you are on a plain runtime, uncomment:
 # %pip install -q plotly
@@ -113,6 +114,49 @@ def local_ts():
 def trunc_period(ts_col):
     return F.date_trunc("week", ts_col) if GRANULARITY == "weekly" else F.to_date(ts_col)
 
+# --------------------------------------------------- shareable data emit ----
+# Mirrors the EDA notebook's emit() protocol: the exported .ipynb carries the
+# aggregate data behind every chart as machine-readable JSON, so a run can be
+# analysed offline without re-querying. Aggregate-only per ADR-0007.
+CHART_DATA = {}
+
+def _scrub(obj):
+    """Round floats (4dp), truncate long strings — parity with the EDA scrubber."""
+    if isinstance(obj, dict):
+        return {k: _scrub(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_scrub(v) for v in obj]
+    if isinstance(obj, str):
+        return obj if len(obj) <= 160 else obj[:160] + "...<trunc>"
+    if isinstance(obj, float):
+        return round(obj, 4) if math.isfinite(obj) else None
+    return obj
+
+def _records(pdf, date_cols=()):
+    """pandas frame -> list of plain-Python dicts (native int/float, ISO date strings).
+    Round-tripping through to_json/loads drops numpy int64/float64 and Timestamps."""
+    pdf = pdf.copy()
+    for c in date_cols:
+        if c in pdf.columns:
+            pdf[c] = pdf[c].astype(str)
+    return json.loads(pdf.to_json(orient="records"))
+
+def share(chart_id, payload):
+    """Print + register the aggregate behind a chart as a SHAREABLE JSON block."""
+    payload = _scrub(payload)
+    CHART_DATA[chart_id] = payload
+    body = json.dumps(payload, separators=(",", ":"), default=str)
+    sid = f"chart:{chart_id}"
+    print(f"===== BEGIN SHAREABLE: {sid} =====")
+    if len(body) <= 48000:
+        print(body)
+    else:
+        n_parts = math.ceil(len(body) / 40000)
+        for i in range(n_parts):
+            print(f"----- part {i+1} of {n_parts} (concatenate parts to reassemble) -----")
+            print(body[i * 40000:(i + 1) * 40000])
+    print(f"===== END SHAREABLE: {sid} =====")
+
 print(f"table={TABLE_FQN}  tz={TIMEZONE}  granularity={GRANULARITY}")
 print(f"scope: rsid={RSID_FILTER or '(off)'}  url~{URL_FILTER or '(off)'}  "
       f"country={GEO_COUNTRY}  regions={GEO_REGIONS or 'all'}  dates={START_DATE}..{END_DATE}")
@@ -155,6 +199,13 @@ print(f"scoped rows in view: {_scoped_rows:,}")
 if _scoped_rows == 0:
     print("!! 0 rows — widen the date range / clear the geo filters / check the scope widgets.")
 
+share("scope", {"table": TABLE_FQN, "rsid_filter": RSID_FILTER or None,
+                "url_filter": URL_FILTER or None, "start_date": START_DATE,
+                "end_date": END_DATE, "geo_country": GEO_COUNTRY,
+                "geo_regions": GEO_REGIONS or None, "timezone": TIMEZONE,
+                "granularity": GRANULARITY, "top_n": TOP_N,
+                "scoped_rows": _scoped_rows})
+
 # COMMAND ----------
 
 # MAGIC %md
@@ -175,6 +226,9 @@ if vis_hi and vis_lo and "visit_num" in _cols:
 
 _ts = (base_df.groupBy(trunc_period(local_ts()).alias("period")).agg(*_aggs)
               .orderBy("period").toPandas())
+
+share("traffic_ts", {"tz": TIMEZONE, "granularity": GRANULARITY,
+                     "rows": _records(_ts, date_cols=["period"])})
 
 fig = go.Figure()
 _series = [("hits", CATEGORICAL[0]), ("visits", CATEGORICAL[1]), ("visitors", CATEGORICAL[3])]
@@ -211,6 +265,9 @@ _z = [[0] * 24 for _ in range(7)]
 for _, r in _hh.iterrows():
     _z[(int(r["dow"]) + 5) % 7][int(r["hr"])] = int(r["count"])
 
+share("dow_hour", {"tz": TIMEZONE, "dow_mon_to_sun": _dow_names,
+                   "hours_0_23": [f"{h:02d}" for h in range(24)], "z": _z})
+
 fig = go.Figure(go.Heatmap(
     z=_z, x=[f"{h:02d}" for h in range(24)], y=_dow_names, colorscale=SEQ_BLUE,
     colorbar=dict(title="hits", outlinewidth=0),
@@ -234,6 +291,7 @@ if "geo_country" in _cols:
     _gc = (base_df.filter(nonblank("geo_country"))
                   .groupBy(F.upper(F.col("geo_country")).alias("iso3")).count()
                   .orderBy(F.desc("count")).toPandas())
+    share("geo_country", {"rows": _records(_gc)})
     fig = go.Figure(go.Choropleth(
         locations=_gc["iso3"], z=_gc["count"], locationmode="ISO-3",
         colorscale=SEQ_BLUE, colorbar=dict(title="hits", outlinewidth=0),
@@ -263,6 +321,7 @@ def top_bar(col, title):
         return
     pdf = (base_df.filter(nonblank(col)).groupBy(col).count()
                   .orderBy(F.desc("count")).limit(TOP_N).toPandas().iloc[::-1])
+    share(f"top_{col}", {"top_n": TOP_N, "rows": _records(pdf)})
     fig = go.Figure(go.Bar(
         x=pdf["count"], y=pdf[col].astype(str), orientation="h",
         marker=dict(color="#3987e5"),
@@ -292,6 +351,8 @@ if "language" in _cols:
     _lm = (base_df.filter(nonblank("language"))
                   .groupBy(trunc_period(local_ts()).alias("period"), label.alias("lang"))
                   .count().orderBy("period").toPandas())
+    share("language_mix", {"granularity": GRANULARITY,
+                           "rows": _records(_lm, date_cols=["period"])})
     _piv = _lm.pivot_table(index="period", columns="lang", values="count", fill_value=0)
     _order = [c for c in ["English (45)", "French (39)", "Other"] if c in _piv.columns]
     _colors = {"English (45)": CATEGORICAL[0], "French (39)": CATEGORICAL[1], "Other": "#898781"}
@@ -334,6 +395,8 @@ if _ev_col:
                   .select(trunc_period(local_ts()).alias("period"), F.explode(ids).alias("eid"))
                   .filter(F.col("eid").isin(list(_KPI_EVENTS.keys())))
                   .groupBy("period", "eid").count().orderBy("period").toPandas())
+    share("event_timeline", {"granularity": GRANULARITY, "event_names": _KPI_EVENTS,
+                             "rows": _records(_ev, date_cols=["period"])})
     fig = go.Figure()
     for i, (eid, label) in enumerate(_KPI_EVENTS.items()):
         sub = _ev[_ev["eid"] == eid]
@@ -358,11 +421,28 @@ else:
 
 _mo = (base_df.groupBy(F.date_format(local_ts(), "yyyy-MM").alias("month")).count()
               .orderBy("month").toPandas())
+share("monthly_volume", {"rows": _records(_mo)})
 fig = go.Figure(go.Bar(x=_mo["month"], y=_mo["count"], marker=dict(color="#3987e5"),
                        text=_mo["count"].map(lambda v: f"{v:,}"), textposition="outside",
                        hovertemplate="%{x}<br>hits: %{y:,}<extra></extra>"))
 fig.update_layout(title="Monthly hit volume (RRSP seasonality)", yaxis_title="hits", xaxis_title=None)
 render(fig, height=380)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Data manifest — integrity check for the export
+# MAGIC Byte length + sha1 of every `chart:<id>` block above, so a truncated `.ipynb`
+# MAGIC export can be caught offline (re-hash a block, compare against this manifest).
+
+# COMMAND ----------
+
+_manifest = {}
+for _cid, _payload in CHART_DATA.items():
+    _body = json.dumps(_payload, separators=(",", ":"), default=str)
+    _manifest[_cid] = {"bytes": len(_body),
+                       "sha1": hashlib.sha1(_body.encode("utf-8")).hexdigest()}
+share("manifest", {"charts": _manifest, "n_charts": len(_manifest)})
 
 # COMMAND ----------
 
