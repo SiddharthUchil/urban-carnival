@@ -26,13 +26,21 @@ SCOPE_URL_MODE = "en_only"
 # Current production scope -- English section root only.
 SCOPE_URL_LIKE = "%manulife.com/ca/en/personal/group-plans/group-retirement%"
 
-# Proposed broad scope: SQL LIKE patterns OR-ed together, matched case-insensitively.
-# Language-agnostic section token + French path + the standalone group-plans domain.
-# Confirm the French path against the live table (EDA S4b) before switching.
+# Proposed broad scope: SQL LIKE patterns OR-ed together, matched case-insensitively on the
+# COMPLETE url (coalesce(page_url, post_page_url) -- post_page_url is ~37% blank on this report
+# suite, EDA S4b). NOTE group-plans is the umbrella that CONTAINS group-retirement (also pulls
+# in group-benefits / business / advisor), so product sign-off is needed before activating.
 SCOPE_URL_LIKE_BROAD = [
-    "%/group-retirement%",        # en URL path + pagename section token
-    "%/retraite-collective%",     # fr URL path (verify exact slug in S4b)
-    "%manulife-group-plans.ca%",  # standalone group-plans domain
+    "%/group-retirement%",     # EN retirement subsection + pagename section token
+    "%/group-plans%",          # EN group-plans umbrella (personal/business/advisor)
+    "%/regimes-collectifs%",   # FR equivalent (particuliers/entreprises/conseillers) -- S4b-confirmed
+]
+
+# Excluded even when matched by BROAD: Adobe AEM authoring/staging hosts (content-author
+# previews, not real traffic) and non-CA Philippines paths. S4b-confirmed noise.
+SCOPE_URL_LIKE_EXCLUDE = [
+    "%adobeaemcloud.com%",
+    "%/ph/%",
 ]
 
 # --- Target (parameterized) ---

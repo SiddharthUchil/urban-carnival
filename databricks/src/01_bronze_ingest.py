@@ -15,7 +15,7 @@ common.setup_paths(dbutils)
 from pyspark.sql import functions as F
 from conf.settings import (
     resolve, SOURCE_TABLE, PARTITION_COL, SCOPE_RSID,
-    SCOPE_URL_MODE, SCOPE_URL_LIKE, SCOPE_URL_LIKE_BROAD,
+    SCOPE_URL_MODE, SCOPE_URL_LIKE, SCOPE_URL_LIKE_BROAD, SCOPE_URL_LIKE_EXCLUDE,
     BRONZE_SCHEMA, SILVER_SCHEMA, GOLD_SCHEMA, OVERLAP_DAYS,
 )
 from conf.bronze_columns import bronze_select, REQUIRED_SOURCE_COLUMNS
@@ -53,14 +53,16 @@ else:
     pred = F.col(PARTITION_COL) >= F.lit(start)   # string 'YYYY-MM-DD' compares lexically
 
 # URL scope. Default ("en_only") is the shipped English section root, applied to
-# post_page_url byte-for-byte as before. "broad" OR-s the language-agnostic patterns
-# from conf.settings (lower-cased so casing variants match). Flip SCOPE_URL_MODE only
+# post_page_url byte-for-byte as before. "broad" matches SCOPE_URL_LIKE_BROAD on the COMPLETE
+# url (coalesce(page_url, post_page_url) -- post_page_url is ~37% blank, EDA S4b) and subtracts
+# SCOPE_URL_LIKE_EXCLUDE (Adobe AEM author hosts + non-CA /ph/ paths). Flip SCOPE_URL_MODE only
 # after a re-profile -- it changes the ingested population and re-baselines downstream.
 if SCOPE_URL_MODE == "broad":
     from functools import reduce
-    _urlc = F.lower(F.col("post_page_url").cast("string"))
-    url_scope = reduce(lambda acc, p: acc | _urlc.like(p.lower()),
-                       SCOPE_URL_LIKE_BROAD, F.lit(False))
+    _urlc = F.lower(F.coalesce(F.col("page_url"), F.col("post_page_url")).cast("string"))
+    _incl = reduce(lambda acc, p: acc | _urlc.like(p.lower()), SCOPE_URL_LIKE_BROAD, F.lit(False))
+    _excl = reduce(lambda acc, p: acc | _urlc.like(p.lower()), SCOPE_URL_LIKE_EXCLUDE, F.lit(False))
+    url_scope = _incl & ~_excl
 else:
     url_scope = F.col("post_page_url").like(SCOPE_URL_LIKE)
 

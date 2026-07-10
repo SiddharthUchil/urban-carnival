@@ -661,8 +661,10 @@ run_section("S4", s4_frames)
 # COMMAND ----------
 
 # S4b runs on the rsid-only window (NOT url-scoped) so we can see what the current
-# English URL filter drops. Host/path only (query strings stripped) — no raw query
-# strings surfaced (privacy guard).
+# English URL filter drops. The breakdown is measured on the COMPLETE url —
+# coalesce(page_url, post_page_url) — because post_page_url is ~37% blank on this report
+# suite (EDA S4b), so measuring on it alone undercounts. Host/path only (query strings
+# stripped) — no raw query strings surfaced (privacy guard).
 
 def s4b_url_scope_audit():
     ensure_frames()
@@ -684,19 +686,20 @@ def s4b_url_scope_audit():
         u = F.regexp_replace(F.lower(F.col(c).cast("string")), r"^https?://", "")
         return F.regexp_extract(u, r"^([^?#]*)", 1)
 
+    def matches(c):    # null-safe: blank/null URL -> False (never NULL), so ~matches() works
+        return F.coalesce(host_path(c).contains(cur), F.lit(False)) if cur else F.lit(True)
+
     # ---- 1) column reconciliation: coverage, cardinality, today's-filter match ----
     exprs = [F.count("*").alias("rows")]
     for c in url_cols:
-        hp = host_path(c)
         exprs += [F.sum(F.when(nonblank(c), 1).otherwise(0)).alias(c + "_nb"),
-                  F.approx_count_distinct(hp).alias(c + "_dist"),
-                  F.sum(F.when(hp.contains(cur), 1).otherwise(0)).alias(c + "_cur")]
+                  F.approx_count_distinct(host_path(c)).alias(c + "_dist"),
+                  F.sum(matches(c).cast("int")).alias(c + "_cur")]
     if len(url_cols) == 2:
-        a = host_path(url_cols[0]).contains(cur)
-        b = host_path(url_cols[1]).contains(cur)
-        exprs += [F.sum(F.when(a & b, 1).otherwise(0)).alias("agree_both"),
-                  F.sum(F.when(a & ~b, 1).otherwise(0)).alias("only0"),
-                  F.sum(F.when(~a & b, 1).otherwise(0)).alias("only1")]
+        a, b = matches(url_cols[0]), matches(url_cols[1])   # null-safe -> disagreement reconciles
+        exprs += [F.sum((a & b).cast("int")).alias("agree_both"),
+                  F.sum((a & ~b).cast("int")).alias("only0"),
+                  F.sum((~a & b).cast("int")).alias("only1")]
     r = pop.agg(*exprs).collect()[0]
     total = r["rows"] or 0
     reconciliation = {"rsid_only_rows": total, "current_url_filter": URL_FILTER or None}
@@ -715,52 +718,63 @@ def s4b_url_scope_audit():
             "only_" + url_cols[1]: r["only1"],
         }
 
-    # ---- 2) host/path breakdown: retirement traffic the English filter excludes ----
-    sc = url_cols[0]                      # post_page_url preferred, page_url fallback
-    hp = host_path(sc)
+    # ---- 2) host/path breakdown on the COMPLETE url (post_page_url is ~37% blank) ----
+    complete = F.coalesce(*[F.col(c) for c in ("page_url", "post_page_url") if c in url_cols])
+    u = F.regexp_replace(F.lower(complete.cast("string")), r"^https?://", "")
+    hp = F.regexp_extract(u, r"^([^?#]*)", 1)
     host = F.regexp_extract(hp, r"^([^/]+)", 1)
-    tag = pop.filter(nonblank(sc)).select(
+    # noise = Adobe AEM authoring/staging hosts + non-CA (Philippines) paths -> not GWAM-CA traffic
+    noise = host.rlike(r"adobeaemcloud") | hp.rlike(r"/ph/")
+    tag = pop.filter(hp != F.lit("")).select(
         F.regexp_extract(hp, r"^([^/]+(?:/[^/]+){0,4})", 1).alias("host_path"),
         (hp.contains(cur) if cur else F.lit(True)).alias("cur"),
-        hp.rlike(r"group-retirement|retraite|regimes-collectif|group-plans|/retirement").alias("ret"),
+        # CA retirement / group-plans section tokens (bare "/retirement" dropped -> excludes PH)
+        hp.rlike(r"group-retirement|group-plans|regimes-collectif|retraite").alias("ret"),
+        noise.alias("noise"),
         F.when(hp.rlike(r"/ca/fr/|/fr/|/fr-ca/"), "fr")
          .when(hp.rlike(r"/ca/en/|/en/|/en-ca/"), "en").otherwise("other").alias("lang"),
         (~host.rlike(r"(^|\.)manulife\.com$")).alias("alt"))
     if CACHE_SAMPLE:
         tag = tag.persist()
 
+    addable = F.col("ret") & ~F.col("cur") & ~F.col("noise")   # real CA retirement, not yet in scope
     g = tag.agg(
         F.count("*").alias("n"),
         F.sum(F.col("cur").cast("int")).alias("cur"),
         F.sum(F.col("ret").cast("int")).alias("ret"),
-        F.sum((F.col("ret") & ~F.col("cur")).cast("int")).alias("xret"),
-        F.sum((F.col("ret") & ~F.col("cur") & (F.col("lang") == "fr")).cast("int")).alias("xfr"),
-        F.sum((F.col("ret") & ~F.col("cur") & F.col("alt")).cast("int")).alias("xalt"),
+        F.sum((F.col("ret") & ~F.col("noise")).cast("int")).alias("ret_clean"),
+        F.sum(addable.cast("int")).alias("xret"),
+        F.sum((addable & (F.col("lang") == "fr")).cast("int")).alias("xfr"),
+        F.sum((addable & F.col("alt")).cast("int")).alias("xalt"),
+        F.sum((F.col("ret") & F.col("noise")).cast("int")).alias("noise"),
     ).collect()[0]
-    ret = g["ret"] or 0
-    top_excl = [{"host_path": x["host_path"], "hits": x["n"],
-                 "lang": x["lang"], "alt_domain": bool(x["alt"])}
-                for x in (tag.filter(F.col("ret") & ~F.col("cur"))
-                             .groupBy("host_path", "lang", "alt").agg(F.count("*").alias("n"))
-                             .orderBy(F.desc("n")).limit(TOP_N).collect())]
+    ret_clean = g["ret_clean"] or 0
+    top_add = [{"host_path": x["host_path"], "hits": x["n"],
+                "lang": x["lang"], "alt_domain": bool(x["alt"])}
+               for x in (tag.filter(addable)
+                            .groupBy("host_path", "lang", "alt").agg(F.count("*").alias("n"))
+                            .orderBy(F.desc("n")).limit(TOP_N).collect())]
 
     emit("url_scope_audit", {
-        "note": "rsid-only window population; host/path only (query strings stripped).",
-        "scope_col_used": sc,
+        "note": ("rsid-only window; breakdown on coalesce(page_url, post_page_url); host/path "
+                 "only; noise = Adobe AEM author hosts + non-CA /ph/ paths, excluded from addable."),
+        "scope_col_recommended": "coalesce(page_url, post_page_url)",
         "reconciliation": reconciliation,
         "breakdown": {
             "nonblank_url_rows": g["n"],
             "current_english_filter_rows": g["cur"],
-            "retirement_related_rows": ret,
-            "excluded_retirement_rows": g["xret"],
-            "excluded_retirement_pct_of_retirement": round(100.0 * (g["xret"] or 0) / max(ret, 1), 3),
-            "excluded_french_rows": g["xfr"],
-            "excluded_alt_domain_rows": g["xalt"],
+            "retirement_related_rows": g["ret"],
+            "retirement_related_excl_noise_rows": ret_clean,
+            "addable_retirement_rows": g["xret"],
+            "addable_pct_of_retirement": round(100.0 * (g["xret"] or 0) / max(ret_clean, 1), 3),
+            "addable_french_rows": g["xfr"],
+            "addable_alt_domain_rows": g["xalt"],
+            "noise_rows_excluded": g["noise"],
         },
-        "top_excluded_retirement_host_paths": top_excl,
+        "top_addable_retirement_host_paths": top_add,
     })
     display(spark.createDataFrame(
-        top_excl or [{"host_path": "(none excluded)", "hits": 0, "lang": "-", "alt_domain": False}]))
+        top_add or [{"host_path": "(none)", "hits": 0, "lang": "-", "alt_domain": False}]))
     if CACHE_SAMPLE:
         pop.unpersist(); tag.unpersist()
 
