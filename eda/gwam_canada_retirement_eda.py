@@ -1352,7 +1352,9 @@ run_section("S12", s12_synthesis_spec)
 # MAGIC ## Run manifest — integrity check for the export
 # MAGIC Byte length + sha1 of every shareable section, computed from the exact JSON that
 # MAGIC was printed. Databricks caps very large per-cell stdout; re-hash any pasted or
-# MAGIC exported block and compare here to prove nothing was truncated.
+# MAGIC exported block and compare here to prove nothing was truncated. The sha1 is printed
+# MAGIC dash-grouped in 8-hex chunks (a bare 40-hex digest would be redacted as a hex-ID by
+# MAGIC the privacy scrubber) — strip the dashes before comparing.
 
 # COMMAND ----------
 
@@ -1360,8 +1362,11 @@ def s_run_manifest():
     sections = {}
     for sid, payload in RESULTS.items():
         body = json.dumps(payload, separators=(",", ":"), default=str)
+        digest = hashlib.sha1(body.encode("utf-8")).hexdigest()
+        # dash-grouped: a bare 40-hex digest matches the _SCRUB_PATTERNS hex-id
+        # rule and emit() would print it as <redacted:hexid>; strip '-' to compare.
         sections[sid] = {"bytes": len(body),
-                         "sha1": hashlib.sha1(body.encode("utf-8")).hexdigest()}
+                         "sha1": "-".join(digest[i:i + 8] for i in range(0, 40, 8))}
     emit("run_manifest", {"sections": sections, "n_sections": len(sections),
                           "skipped": SKIPPED})
 
