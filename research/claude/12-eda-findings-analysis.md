@@ -161,7 +161,7 @@ These conclusions are consistent with the `detect/` engine's observed behaviour 
 > These cannot be answered from the data alone. Grouped by decision they block.
 
 **Scope & history**
-1. Is **2026‑02‑01** the true launch of CA‑Retirement instrumentation, or does earlier history live under a different `rsid`/table we should union in? (158 days limits model choice.)
+1. Is **2026‑02‑01** the true launch of CA‑Retirement instrumentation, or does earlier history live under a different `rsid`/table we should union in? (158 days limits model choice.) **Partly answered:** earlier history exists under the legacy suite `rsid = manugrs` (healthy 2024‑01 → 2026‑01, collapses exactly as `manulifeglobalprod` begins) — see [`14-manugrs-cross-suite-analysis.md`](14-manugrs-cross-suite-analysis.md). Business still owns the decommission‑date confirmation and the union decision.
 2. Is the CA‑Retirement population correctly defined as `manulifeglobalprod` + that URL prefix, or are there additional pages/subdomains (e.g. app, advisor portal) that belong in scope? The S4b audit (§2) quantifies the candidates: **+629,754 retirement‑related rows (+19.7 %)** sit outside the current filter — mostly French `/ca/fr` and EN business/advisor group‑plans.
 
 **Metric semantics**

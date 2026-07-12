@@ -16,6 +16,7 @@ from pyspark.sql import functions as F
 from conf.settings import (
     resolve, SOURCE_TABLE, PARTITION_COL, SCOPE_RSID,
     SCOPE_URL_MODE, SCOPE_URL_LIKE, SCOPE_URL_LIKE_BROAD, SCOPE_URL_LIKE_EXCLUDE,
+    SCOPE_SUITE_MODE, LEGACY_SCOPE_RSID, LEGACY_SCOPE_URL_LIKE,
     BRONZE_SCHEMA, SILVER_SCHEMA, GOLD_SCHEMA, OVERLAP_DAYS,
 )
 from conf.bronze_columns import bronze_select, REQUIRED_SOURCE_COLUMNS
@@ -66,9 +67,27 @@ if SCOPE_URL_MODE == "broad":
 else:
     url_scope = F.col("post_page_url").like(SCOPE_URL_LIKE)
 
+# Suite scope. "current_only" (default) keeps exactly the shipped population:
+# rsid == SCOPE_RSID AND url_scope (two ANDed conditions, row-set-identical to the prior
+# chained .where() calls). "with_legacy" ALSO unions the pre-Storefront suite `manugrs`
+# (research/claude/14-manugrs-cross-suite-analysis.md) so its ~2.5 yr of history backfills.
+# Legacy URL lives mostly in page_url (post_page_url ~48% blank on manugrs, EDA S4b), so its
+# scope matches LEGACY_SCOPE_URL_LIKE on the COMPLETE url. Flip SCOPE_SUITE_MODE only after
+# business sign-off -- it changes the ingested population and re-baselines downstream.
+# NOTE: bronze projects post_page_url but not page_url (conf/bronze_columns.py); if legacy rows
+# are ingested, adding page_url to the bronze projection is a candidate follow-up (deferred).
+current_scope = (F.col("rsid") == F.lit(SCOPE_RSID)) & url_scope
+if SCOPE_SUITE_MODE == "with_legacy":
+    from functools import reduce
+    _legurlc = F.lower(F.coalesce(F.col("page_url"), F.col("post_page_url")).cast("string"))
+    _leg_incl = reduce(lambda acc, p: acc | _legurlc.like(p.lower()), LEGACY_SCOPE_URL_LIKE, F.lit(False))
+    legacy_scope = (F.col("rsid") == F.lit(LEGACY_SCOPE_RSID)) & _leg_incl
+    suite_scope = current_scope | legacy_scope
+else:
+    suite_scope = current_scope
+
 scoped = (src.where(pred)
-             .where(F.col("rsid") == F.lit(SCOPE_RSID))
-             .where(url_scope)
+             .where(suite_scope)
              .select(*cols))
 
 # COMMAND ----------

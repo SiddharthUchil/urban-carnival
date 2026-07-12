@@ -43,6 +43,23 @@ SCOPE_URL_LIKE_EXCLUDE = [
     "%/ph/%",
 ]
 
+# Report-suite scope mode. "current_only" ingests only the shipped suite (SCOPE_RSID);
+# "with_legacy" ALSO unions the pre-Storefront CA-Retirement suite `manugrs`, which carries
+# ~2.5 yr of history that ends exactly as manulifeglobalprod begins (2026-02-01 cutover;
+# research/claude/14-manugrs-cross-suite-analysis.md). KEEP "current_only" until the business
+# signs off unioning the legacy suite -- flipping this re-baselines every downstream KPI, and
+# only ~12 eVars are shared across the two suites (eVar-derived series are NOT splice-safe).
+SCOPE_SUITE_MODE = "current_only"
+
+# Legacy CA-Retirement suite (pre-Storefront, old site manulifeim.com/group-retirement/ca/en).
+# URL scope is a list so the S4b-confirmed French `/ca/fr` path can be appended after sign-off
+# without a shape change. Matched on the COMPLETE url (coalesce(page_url, post_page_url)) because
+# post_page_url is ~48% blank on this suite (EDA S4b, manugrs run).
+LEGACY_SCOPE_RSID = "manugrs"
+LEGACY_SCOPE_URL_LIKE = [
+    "%manulifeim.com/group-retirement/ca/en%",   # EN legacy root (shipped-equivalent)
+]
+
 # --- Target (parameterized) ---
 CATALOG_PLACEHOLDER = "__SET_ME__"
 BRONZE_SCHEMA = "gmai_pulse_bronze"

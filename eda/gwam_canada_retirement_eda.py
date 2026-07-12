@@ -782,6 +782,146 @@ run_section("S4b", s4b_url_scope_audit)
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## S4c — Multi-URL-column & pagename retirement audit
+# MAGIC Answers the manager's follow-up: `post_page_url` may not be the best column, and the data
+# MAGIC holds many other "retirement" URLs. S4b compared only `post_page_url` vs `page_url`; S4c
+# MAGIC widens the lens to **all five candidate URL columns** — `first_hit_page_url`, `page_url`,
+# MAGIC `post_page_url`, `visit_start_page_url`, `site_url` — plus **`pagename`**, and adds a
+# MAGIC **window-wide, rsid-agnostic** retirement sweep so we can size how much retirement traffic
+# MAGIC exists **beyond** the two known suites. All measured on the rsid-only window (like S4b),
+# MAGIC host/path only, no raw query strings.
+
+# COMMAND ----------
+
+# S4c reuses S4b's helpers and widgets (rsid_filter / url_filter). Two retirement matchers:
+#   RET_STRICT  = section-level tokens (aligns with S4b 'addable'; bare "/retirement" dropped so
+#                 Philippines /ph/retirement is excluded).
+#   RET_BROAD   = the manager's literal "retirement" keyword (retirement|retraite).
+# The recommended scope column stays coalesce(page_url, post_page_url) (S4b); per-column we also
+# report how much retirement traffic each column would add BEYOND that coalesce.
+
+URL_CANDIDATES = ("first_hit_page_url", "page_url", "post_page_url",
+                  "visit_start_page_url", "site_url")
+RET_STRICT = r"group-retirement|group-plans|regimes-collectif|retraite"
+RET_BROAD  = r"retirement|retraite"
+
+def s4c_url_column_audit():
+    ensure_frames()
+    _resolve_scope_cols(DF)
+    raw_window = DF.filter(F.to_date(DATE_EXPR) >= F.lit(WINDOW_START))
+    rsid_cond = (F.lower(F.trim(F.col(RSID_COL).cast("string"))) == F.lit(RSID_FILTER)
+                 if (RSID_COL and RSID_FILTER) else F.lit(True))
+    cur = (URL_FILTER or "").lower()
+
+    present = [c for c in URL_CANDIDATES if pick_col(raw_window, c)]
+    if not present:
+        emit("url_column_audit", {"error": "no candidate URL column in source"})
+        return
+
+    def hp(colexpr):   # host + path; scheme and query/fragment removed (privacy: no raw query)
+        u = F.regexp_replace(F.lower(colexpr.cast("string")), r"^https?://", "")
+        return F.regexp_extract(u, r"^([^?#]*)", 1)
+
+    pop = raw_window.filter(rsid_cond)
+    if CACHE_SAMPLE:
+        pop = pop.persist()
+
+    # recommended scope column = coalesce(page_url, post_page_url); blanks nulled so coalesce falls
+    # through (Adobe uses empty strings, not NULLs). Guard when neither column exists.
+    coal_cols = [c for c in ("page_url", "post_page_url") if c in present]
+    coal_ret = None
+    if coal_cols:
+        complete = F.coalesce(*[F.when(nonblank(c), F.col(c)) for c in coal_cols])
+        coal_ret = hp(complete).rlike(RET_STRICT)
+
+    # ---- 1) per-URL-column stats ----
+    exprs = [F.count("*").alias("rows")]
+    for c in present:
+        h = hp(F.col(c))
+        exprs += [F.sum(F.when(nonblank(c), 1).otherwise(0)).alias(c + "_nb"),
+                  F.approx_count_distinct(h).alias(c + "_dist"),
+                  F.sum(h.rlike(RET_STRICT).cast("int")).alias(c + "_rs"),
+                  F.sum(h.rlike(RET_BROAD).cast("int")).alias(c + "_rb")]
+        if cur:
+            exprs += [F.sum(F.coalesce(h.contains(cur), F.lit(False)).cast("int")).alias(c + "_cur")]
+        if coal_ret is not None:
+            exprs += [F.sum((h.rlike(RET_STRICT) & ~coal_ret).cast("int")).alias(c + "_missed")]
+    rd = pop.agg(*exprs).collect()[0].asDict()
+    total = rd["rows"] or 0
+    per_col = {}
+    for c in present:
+        nb = rd[c + "_nb"] or 0
+        per_col[c] = {
+            "blank_pct": round(100.0 * (total - nb) / max(total, 1), 3),
+            "approx_distinct": rd[c + "_dist"],
+            "rows_matching_current_filter": (rd.get(c + "_cur") if cur else None),
+            "rows_matching_retirement_strict": rd[c + "_rs"],
+            "rows_matching_retirement_broad": rd[c + "_rb"],
+            "retirement_rows_beyond_coalesce": rd.get(c + "_missed"),
+        }
+
+    # ---- 2) pagename audit (pagename values are non-sensitive; S9 prints them) ----
+    pn_col = pick_col(raw_window, "pagename", "post_pagename")
+    pagename = {"present": False}
+    if pn_col:
+        pn = F.lower(F.col(pn_col).cast("string"))
+        pr = pop.agg(
+            F.sum(F.when(nonblank(pn_col), 1).otherwise(0)).alias("nb"),
+            F.approx_count_distinct(pn).alias("dist"),
+            F.sum(pn.rlike(RET_STRICT).cast("int")).alias("rs"),
+            F.sum(pn.rlike(RET_BROAD).cast("int")).alias("rb"),
+        ).collect()[0]
+        top_pn = [{"pagename": x[pn_col], "hits": x["n"]}
+                  for x in (pop.filter(nonblank(pn_col) & pn.rlike(RET_BROAD))
+                               .groupBy(pn_col).agg(F.count("*").alias("n"))
+                               .orderBy(F.desc("n")).limit(TOP_N).collect())]
+        pagename = {
+            "present": True, "col": pn_col,
+            "blank_pct": round(100.0 * (total - (pr["nb"] or 0)) / max(total, 1), 3),
+            "approx_distinct": pr["dist"],
+            "rows_matching_retirement_strict": pr["rs"],
+            "rows_matching_retirement_broad": pr["rb"],
+            "top_retirement_pagenames": top_pn,
+        }
+
+    # ---- 3) window-wide, rsid-agnostic retirement sweep (which suites carry retirement?) ----
+    sweep = {"available": False}
+    if coal_ret is not None and RSID_COL:
+        grp = (raw_window.filter(hp(complete).rlike(RET_STRICT))
+                         .groupBy(RSID_COL).agg(F.count("*").alias("n")).collect())
+        total_ret = sum((row["n"] or 0) for row in grp)
+        top_rsids = [{"rsid": row[RSID_COL], "hits": row["n"],
+                      "pct_of_window_retirement": round(100.0 * (row["n"] or 0) / max(total_ret, 1), 3)}
+                     for row in sorted(grp, key=lambda x: -(x["n"] or 0))[:TOP_N]]
+        sweep = {"available": True,
+                 "basis": "full profiling window, all rsids, retirement_strict on coalesce(page_url,post_page_url)",
+                 "total_retirement_rows_window": total_ret,
+                 "current_scope_rsid": RSID_FILTER or None,
+                 "top_rsids_by_retirement_hits": top_rsids}
+
+    emit("url_column_audit", {
+        "note": ("rsid-only window for per-column + pagename; host/path only (no raw query); "
+                 "retirement_strict = group-retirement|group-plans|regimes-collectif|retraite "
+                 "(section tokens, excludes PH /retirement); retirement_broad = literal "
+                 "retirement|retraite; rsid_sweep is window-wide across all suites."),
+        "rsid_scope": {"rsid_col": RSID_COL, "rsid_filter": RSID_FILTER or None,
+                       "url_filter": URL_FILTER or None, "rsid_only_rows": total},
+        "recommended_scope_col": ("coalesce(" + ", ".join(coal_cols) + ")") if coal_cols else None,
+        "columns_present": present,
+        "per_url_column": per_col,
+        "pagename": pagename,
+        "rsid_retirement_sweep": sweep,
+    })
+    display(spark.createDataFrame([
+        {"url_column": c, **per_col[c]} for c in present]))
+    if CACHE_SAMPLE:
+        pop.unpersist()
+
+run_section("S4c", s4c_url_column_audit)
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## S5 — Population census (~1,198 columns)
 # MAGIC Which columns are actually populated? Batched non-blank counts on the sample,
 # MAGIC then approx-distinct only for live columns. Never prints values.
