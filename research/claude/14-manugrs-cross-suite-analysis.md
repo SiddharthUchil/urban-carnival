@@ -5,7 +5,9 @@
 > compared against the shipped `manulifeglobalprod` run analysed in
 > [`12-eda-findings-analysis.md`](12-eda-findings-analysis.md)
 > (notebook [`eda/gwam_canada_retirement_eda.ipynb`](../../eda/gwam_canada_retirement_eda.ipynb)).
-> **Data run:** production, `gwam_prod_catalog` (both runs 2026‑07‑10).
+> **Data run:** production, `gwam_prod_catalog` — `manugrs` run 2026‑07‑10, independently
+> **re‑run 2026‑07‑13** (same widgets; all exact figures reproduced); `manulifeglobalprod`
+> re‑run **2026‑07‑12** (adds S4c; manifest verified 16/16 on byte‑length and sha1).
 > **Grain of record:** daily. **Privacy regime:** ADR‑0007 (shape‑only for sensitive columns).
 
 **Why this document exists.** The manager challenged two business‑supplied assumptions: (1) the
@@ -17,11 +19,23 @@ check whether the old and new suites populate the **same columns** (and whether 
 same thing). This document answers those four questions from the executed notebooks.
 
 > **Provenance caveat.** The `manugrs` export was produced by an **earlier copy of the notebook**
-> (before the 2026‑07‑10 `event.tsv` hard‑code and the manifest‑scrubber fix). Consequences, carried
-> throughout: its `run_manifest` sha1s are all `<redacted:hexid>` (integrity is **byte‑length only**,
-> not sha1), and its event IDs are **unresolved** ("resolve via event lookup"). Every figure below is
-> reproduced from an executed cell; the merged extraction backing this doc is in
-> `scratchpad/manugrs_cross_suite_facts.json`. **A clean re‑run should use the current notebook.**
+> (before the 2026‑07‑10 manifest‑scrubber fix). Consequence, carried throughout: its `run_manifest`
+> sha1s are all `<redacted:hexid>` (integrity is **byte‑length only**, not sha1). Its event IDs print
+> as unresolved labels — but so do the current notebook's (verified on the 2026‑07‑12 new‑suite
+> re‑run): the notebook carries **no custom‑event lookup**, and IDs decode instead via the standard
+> Adobe `event.tsv` convention recorded in doc‑12 §9 Q3 (20 = Campaign View, 500–504 = clickmap,
+> `10000+k` = eVar‑instance events). Every figure below is reproduced from an executed cell; the
+> merged extraction backing this doc is in `scratchpad/manugrs_cross_suite_facts.json`.
+>
+> **Re‑run 2026‑07‑13.** The `manugrs` notebook was re‑executed fresh (widgets `rsid = manugrs`,
+> URL contains `manulifeim.com/group-retirement/ca/en`). **Every exact figure in this document
+> reproduced identically** — all‑time volume and monthly totals, window rows (1,322,835), the S4b
+> audit, census (272 populated / 186 core), events‑per‑hit (32/37, max 41). Only sample‑approximate
+> stats moved within sampling noise (fresh 5 % draw), e.g. `mcvisid` apx‑distinct 52,072 vs 62,357.
+> The re‑run used the **same pre‑fix notebook copy**, however: manifest sha1s are still
+> `<redacted:hexid>` (15 sections, byte‑length integrity only), **S4c is still absent**, and event
+> IDs still print unresolved (0 of 40). A sha1‑verifiable `manugrs` manifest + S4c requires porting
+> the current notebook's manifest fix and S4c cell into this variant first.
 
 ---
 
@@ -53,6 +67,10 @@ same thing). This document answers those four questions from the executed notebo
    ~3‑min micro‑batch cadence, same clean DQ (no bot filtering, −4/−5 h Eastern clock), same absent
    person‑level identity (`cust_visid` 100 % null, `userid` constant). The migration changed the
    *tagging*, not the plumbing.
+7. **S4c (run 2026‑07‑12) closes the URL‑column audit and the "other suites" question.** None of the
+   five URL columns holds retirement traffic beyond `coalesce(page_url, post_page_url)`;
+   `pagename`/`site_url` are unusable for scope; and a window‑wide, rsid‑agnostic sweep finds the two
+   known suites hold **99.997 %** of all strict‑retirement rows — **there is no third suite** (§4).
 
 ---
 
@@ -174,12 +192,29 @@ legacy suite makes the case even more strongly than the new one:
   support, plan‑ahead, …). Combined with the new suite's +229,928 French `/ca/fr/particuliers/…`
   rows, **the French‑scope decision now spans two domains** (`manulifeim.com` legacy + `manulife.com`
   new) and is the single largest scope question for the business.
-- **Columns still un‑audited.** Neither run has profiled `first_hit_page_url`, `visit_start_page_url`,
-  or `site_url`, nor scanned `pagename` for "retirement". The manager explicitly listed these. That gap
-  is closed by the new **S4c** section added to the EDA notebook (see
-  [`eda/gwam_canada_retirement_eda.py`](../../eda/gwam_canada_retirement_eda.py)); it audits all five
-  URL columns + `pagename` and does a window‑wide, rsid‑agnostic "retirement" sweep to size **how much
-  retirement traffic exists beyond the two known suites**. It runs on the next Databricks execution.
+- **S4c closes the column audit (executed 2026‑07‑12, new‑suite window, 7,748,349 rsid‑only rows).**
+  All five URL columns + `pagename` audited on strict retirement tokens:
+
+  | Column | Blank % | Strict‑retirement rows | Rows beyond `coalesce(page_url, post_page_url)` |
+  |---|---:|---:|---:|
+  | `page_url` | 0.013 % | 3,212,252 | **0** |
+  | `post_page_url` | 36.87 % | 1,475,087 | **0** |
+  | `first_hit_page_url` | 10.73 % | 2,782,004 | 172,389 |
+  | `visit_start_page_url` | 9.71 % | 2,875,048 | 104,532 |
+  | `site_url` | 0 % | 0 (single constant value) | 0 |
+
+  The `first_hit`/`visit_start` "extra" rows are **visit‑entry attribution**, not hit‑level pages —
+  hits elsewhere in a visit that *started* on a retirement page — so they are not scope candidates.
+  `pagename` is 39.95 % blank with only 148,934 strict matches (top names span both the
+  `manulife:ca:en:…` and new `ca-ret:personal:…` namespaces, plus `ph:` noise) — unusable for scope.
+  **`coalesce(page_url, post_page_url)` stands, and `page_url` alone already contains every
+  retirement row.**
+- **No third suite (S4c rsid‑agnostic sweep).** Across the full profiling window and *all* rsids,
+  strict‑retirement rows total **7,523,186**: `manugrs` **4,310,739 (57.30 %)** +
+  `manulifeglobalprod` **3,212,252 (42.70 %)** = **99.997 %**. The residual 195 rows sit in
+  `manusecurities` (117), `jhfswammimglobalprod` (74) and two others (≤4 each). **The two known
+  suites are the whole story** — the manager's "other capturable retirement traffic" question is
+  closed: nothing material exists outside them.
 
 ---
 
@@ -191,9 +226,11 @@ Confirming the migration changed tagging, not infrastructure — these match the
   micro‑batch** writes (median inter‑arrival 0.05 h).
 - **Every hit carries events:** `post_event_list` populated on **100 %** of hits. Legacy hits carry
   **more** events (p50/p95 = **32/37**, max 41) than the new suite (16/18, max 22) — consistent with
-  the legacy suite's larger live‑eVar set (more instance‑of‑eVar presence flags per hit). **Event IDs
-  are unresolved in this export** (old notebook); a current‑notebook re‑run will name them via
-  `event.tsv`.
+  the legacy suite's larger live‑eVar set (more instance‑of‑eVar presence flags per hit). Event IDs
+  print as unresolved labels in **both** exports — the notebook has no custom‑event lookup (confirmed
+  on the 2026‑07‑12 new‑suite re‑run: 0 of 23 IDs resolved; and on the 2026‑07‑13 `manugrs` re‑run:
+  0 of 40) — but they decode via the standard Adobe convention
+  (doc‑12 §9 Q3): `10000+k` = eVar‑instance events, matching each suite's live‑eVar set.
 - **Geography & language richer toward Canada/French:** `geo_country` **CAN 95.7 %, USA 3.3 %**;
   `geo_region` **ON 51.6 %, AB 16.2 %, BC 13.6 %, QC 4.5 %**; `language` **45 (EN) 53 %, 39 (FR)
   40.5 %**. (The new suite's higher USA 11.5 % share is worth a business check — legacy US share was
@@ -202,7 +239,8 @@ Confirming the migration changed tagging, not infrastructure — these match the
   100 % → **no server‑side bot filtering**; clock offset **−4/−5 h** (Eastern); one‑day dup check
   **0 %**.
 - **No person‑level identity:** `cust_visid`/`post_cust_visid` **100 % null**; `userid` constant;
-  visitors approximated from `mcvisid` (card 62,357 in‑window).
+  visitors approximated from `mcvisid` (sample apx‑distinct 62,357 on the 2026‑07‑10 run, 52,072 on
+  the 2026‑07‑13 re‑run — sampling noise, not a change).
 
 ---
 
@@ -214,7 +252,7 @@ Confirming the migration changed tagging, not infrastructure — these match the
 | +~2.5 yr history recoverable under `manugrs` | **Suite‑agnostic** KPIs (hits, visits, geography, language) become spliceable → seasonal/holiday models become fittable, lifting doc‑12's 158‑day ceiling. |
 | Only 12 shared eVars; 50 legacy‑only | eVar‑derived KPIs are **not** cross‑suite splice‑able until the dictionary confirms shared semantics; treat old/new eVars as separate series. |
 | `pagename` namespace renamed (`crt-public:` → `ca-ret:personal:`) | Map page taxonomies explicitly before any cross‑suite page‑level metric. |
-| Legacy traffic more French, addable `/ca/fr` | French scope is a two‑domain decision; sizing lands in S4c. |
+| Legacy traffic more French, addable `/ca/fr` | French scope is a two‑domain decision, sized in S4b (+314 K legacy, +230 K new); S4c adds that **no third suite** exists to widen it further. |
 | Same cadence / DQ / identity as new suite | The ingestion, dedupe, bot, and identity assumptions in doc 12 carry over unchanged. |
 
 To make the history splice real, the pipeline now carries a **`SCOPE_SUITE_MODE`** toggle
@@ -251,8 +289,13 @@ business signs off scope**, because flipping it re‑baselines every KPI.
 
 ## 8. Assumptions on record
 
-1. The `manugrs` export was run from an **earlier notebook copy**: manifest sha1s are redacted
-   (byte‑length integrity only) and event IDs are unresolved. A clean re‑run uses the current notebook.
+1. The `manugrs` notebook is an **earlier copy** (pre manifest‑scrubber fix): manifest sha1s are
+   redacted (byte‑length integrity only) and it has no S4c cell. The **2026‑07‑13 re‑run reproduced
+   every exact figure** in this document, so the numbers are now independently confirmed — but a
+   sha1‑verifiable manifest and a `manugrs` S4c remain pending until the current notebook's manifest
+   fix and S4c cell are ported into the variant. Event‑ID labels stay unresolved on *any* run (the
+   notebook has no custom‑event lookup); semantics come from the standard Adobe convention
+   (doc‑12 §9 Q3).
 2. `manugrs` deep‑profiling stats (S5–S11) are sampled from the **2025‑06 → 2026‑07** window, which
    includes the suite's collapse; full‑range volume figures are exact.
 3. CA‑Retirement legacy scope = `rsid = manugrs` **AND** URL contains
@@ -267,10 +310,13 @@ business signs off scope**, because flipping it re‑baselines every KPI.
 
 ### Provenance
 All figures reproduced from executed cells in `eda/gwam_canada_retirement_eda_manugrs.ipynb`
-(S1–S12 `SHAREABLE` blocks) and cross‑referenced against
-`eda/gwam_canada_retirement_eda.ipynb`, both production runs of 2026‑07‑10. Merged extraction:
-`scratchpad/manugrs_cross_suite_facts.json`. **Integrity of the `manugrs` export is byte‑length only**
-(sha1 redacted by the pre‑fix scrubber). Related records:
+(S1–S12 `SHAREABLE` blocks, production run 2026‑07‑10; **independently re‑executed 2026‑07‑13**,
+15/15 sections emitted, all exact figures identical) and cross‑referenced against
+`eda/gwam_canada_retirement_eda.ipynb` (production re‑run **2026‑07‑12**, S4c included, manifest
+verified 16/16 on byte‑length **and** sha1). Merged extraction:
+`scratchpad/manugrs_cross_suite_facts.json`. **Integrity of the `manugrs` manifests is byte‑length
+only** (sha1 redacted by the pre‑fix scrubber in both runs), mitigated by the two runs agreeing
+figure‑for‑figure. Related records:
 [`12-eda-findings-analysis.md`](12-eda-findings-analysis.md),
 [`10-data-profile-alignment.md`](10-data-profile-alignment.md),
 [`11-privacy-identity-governance.md`](11-privacy-identity-governance.md).
