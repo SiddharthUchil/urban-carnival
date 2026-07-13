@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<!-- saved from url=(0253)https://c7ddbcbf-840b-479a-afb6-17c252e14c03.frame.claudeusercontent.com/_f/1783942798-5c0f/?__frame_t=IYduO57H3tLwNU1Cx1x3sBkt.8d3edec6-335a-4a33-8343-be69771fb5b9.29a00941-9abf-456a-920f-2aff12b3dbe2.1783946684&__frame_v=manifest.21ba44c2bfde1499.json -->
+<html><script src="chrome-extension://eppiocemhmnlbhjplcgkofciiegomcon/libs/extend-native-history-api.js"></script><script src="chrome-extension://eppiocemhmnlbhjplcgkofciiegomcon/libs/requests.js"></script><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><!-- frame-runtime --><!--<base href="/_f/1783942798-5c0f/">--><base href="."><script>window.__FRAME_PREAMBLE={"capabilities":{"downloads":"downloads.DUzXFHNF.js","mcp":"mcp.Djj5DQjZ.js","self":"self.DqF_PxOe.js"},"transforms":"_transforms.DYk1Ltlh.js"}</script><script>(function(){"use strict";const X="modulepreload",Y=function(e){return"/"+e},Z={},U=function(t,n,u){let o=Promise.resolve();function i(f){const a=new Event("vite:preloadError",{cancelable:!0});if(a.payload=f,window.dispatchEvent(a),!a.defaultPrevented)throw f}return o.then(f=>{for(const a of f||[])a.status==="rejected"&&i(a.reason);return t().catch(i)})},D=["light","dark","system"];function $(e){if(e==null||typeof e!="object")return!1;const t=e.__frame_init;return t!=null&&typeof t=="object"}function q(e){if(e==null||typeof e!="object")return!1;const t=e.__frame_theme;if(t==null||typeof t!="object")return!1;const n=t.theme;return typeof n=="string"&&D.includes(n)}function M(e){if(window===top||e.type==="auxclick"&&e.button!==1)return;const t=e.composedPath?e.composedPath():[e.target];let n=null;for(let f=0;f<t.length;f++){const a=t[f];if(a&&a.matches&&a.matches("a[href],area[href]")){n=a;break}}if(!n&&e.target&&e.target.closest&&(n=e.target.closest("a[href],area[href]")),!n)return;const u=n.getAttribute("href");if(!u)return;let o,i;try{o=new URL(u,document.baseURI),i=new URL(document.baseURI).origin}catch{return}(o.protocol==="http:"||o.protocol==="https:")&&o.origin!==i&&(e.preventDefault(),parent.postMessage({__frame_nav:!0,url:o.href},"*"))}const L={};function y(e){if(window===top)return;const t=Date.now();t-(L[e]||0)<500||(L[e]=t,parent.postMessage({__frame_engaged:!0,kind:e},"*"))}const F=2e3,T=["wheel","touchstart","touchmove","keydown","pointerdown"];let k=0;function B(e){e.isTrusted&&(k=Date.now())}function z(){addEventListener("click",M,!0),addEventListener("auxclick",M,!0)}function W(){for(let e=0;e<T.length;e++)addEventListener(T[e],B,{capture:!0,passive:!0});addEventListener("scroll",e=>{e.isTrusted&&Date.now()-k<F&&y("scroll")},{capture:!0,passive:!0}),addEventListener("pointermove",e=>{e.isTrusted&&y("pointer")},{capture:!0,passive:!0}),addEventListener("click",e=>{e.isTrusted&&y("click")},{capture:!0,passive:!0})}function x(e,t,n){const u=[...t.values()].filter(o=>o.targets.some(i=>i.startsWith(e+".")));return{wrap(o,i){const f=`${e}.${o}`,a=u.filter(s=>s.targets.includes(f));return a.length===0?(...s)=>{try{return i(...s)}catch(d){return Promise.reject(d)}}:(...s)=>{let d=s;for(const c of a){const l=c.module.parameters;if(l)try{d=l(d)}catch{return Promise.reject({code:"transform_error",id:c.id,scope:e,message:"parameters transform failed"})}}let m;try{m=i(...d)}catch(c){m=Promise.reject(c)}return m.then(c=>{for(let l=a.length-1;l>=0;l--){const h=a[l],p=h.module.returns;if(p)try{c=p(c)}catch{return n({id:h.id,scope:e,leg:"returns"}),c}}return c},c=>{for(let l=a.length-1;l>=0;l--){const h=a[l],p=h.module.throws;if(p)try{c=p(c)}catch{return n({id:h.id,scope:e,leg:"throws"}),Promise.reject(c)}}return Promise.reject(c)})}}}}function H(e,t,n,u=()=>{}){const o=new Set(e.changes??[]),i=new Map;for(const f of o){const a=t[f];a&&i.set(f,a)}return{contract:e.contract,changes:o,flags:new Set(e.flags??[]),capabilities:e.capabilities??{},transforms:i,shellOrigin:n.shellOrigin,mount:n.mount,pipe:f=>x(f,i,u)}}(function(){const e=Object.defineProperty,t=globalThis,n=["RTCPeerConnection","webkitRTCPeerConnection","RTCDataChannel","RTCIceCandidate","RTCSessionDescription","RTCRtpSender","RTCRtpReceiver"];let u=0;for(let o=0;o<n.length;o++){const i=n[o];try{e(t,i,{value:void 0,writable:!1,configurable:!1})}catch{try{delete t[i]}catch{}try{e(t,i,{value:void 0,writable:!1,configurable:!0})}catch{}}typeof t[i]=="function"&&u++}if(u&&window!==top)try{parent.postMessage({__frame_rtc_lockdown_failed:u},"*")}catch{}})();const K=1e4,G=Object.freeze([...window.__FRAME_PREAMBLE?.origins??["https://claude.ai","https://preview.claude.ai"]]);function J(e){for(const t of G)if(t.endsWith(":*"))try{const n=new URL(e);if(`${n.protocol}//${n.hostname}:*`===t)return!0}catch{}else if(e===t)return!0;return!1}const w=Object.freeze({...window.__FRAME_PREAMBLE?.capabilities??{}}),E=window.__FRAME_PREAMBLE?.transforms,C=/^[\w.-]+\.js$/,V=/^[a-z][a-z0-9_-]{0,63}$/;let A=null,g=null;function P(e,t,n){try{Object.defineProperty(e,t,{value:n,writable:!1,configurable:!1,enumerable:!0})}catch{try{Object.defineProperty(e,t,{value:n,writable:!1,configurable:!0,enumerable:!0})}catch{}}}let R=!1;function N(e){const t=document.documentElement;e==="light"||e==="dark"?(t.dataset.theme=e,t.style.colorScheme=e,R=!0):R&&(delete t.dataset.theme,t.style.colorScheme="",R=!1)}const _=new Map;function Q(e,t){const n=_.get(e);if(!n)return;Object.assign(n.impl,t),n.impl.__settled=()=>Promise.reject({code:"capability_removed",message:`${e}: method not in this runtime`});const u=n.queue;n.queue=[];for(const o of u){const i=t[o.method];i?i(...o.args).then(o.resolve,o.reject):o.reject({code:"capability_removed",message:`${e}.${o.method} is not in this runtime`})}}function O(e,t){const n=_.get(e);if(!n)return;n.impl.__settled=()=>Promise.reject(t);const u=n.queue;n.queue=[];for(const o of u)o.reject(t)}const j=Object.getOwnPropertyDescriptor(window,"claude");if(window!==top&&!(j&&j.writable===!1)){z(),W();const e=j?.value??{};P(window,"claude",e);const t=s=>{const d={impl:Object.create(null),queue:[]};_.set(s,d);const m=new Proxy(d.impl,{get:(c,l)=>{if(typeof l=="string"&&!(l==="then"||l==="toJSON"||l==="valueOf"))return l==="toString"?Object.prototype.toString:(...h)=>{const p=c[l]??c.__settled;return p?p(...h):new Promise((b,S)=>{d.queue.push({method:l,args:h,resolve:b,reject:S})})}},set:()=>!1});P(e,s,m)};for(const s of Object.keys(w)){if(e[s]!==void 0){P(e,s,e[s]);continue}t(s)}let n=null,u=null,o=0;const i=s=>{s.source!==parent||!J(s.origin)||$(s.data)&&(n=s.data.__frame_init,g=s.origin,removeEventListener("message",i),clearTimeout(o),u?.())};addEventListener("message",i),parent.postMessage({__frame_connect:!0},"*");const f=new Promise(s=>{u=s,o=setTimeout(()=>{removeEventListener("message",i),s()},K)}),a=document.readyState==="loading"?new Promise(s=>document.addEventListener("DOMContentLoaded",()=>s(),{once:!0})):Promise.resolve();f.then(async()=>{if(!n||!g){for(const r of _.keys())O(r,{code:"not_granted",message:"frame initialization did not arrive - capability unavailable"});return}N(n.theme);const s=g;addEventListener("message",r=>{r.source!==parent||r.origin!==s||q(r.data)&&N(r.data.__frame_theme.theme)});const d=r=>U(()=>import("/_runtime/"+r),void 0),m=Object.keys(n.capabilities??{});for(const r of m)Object.hasOwn(w,r)||V.test(r)&&e[r]===void 0&&(t(r),O(r,{code:"capability_disabled",message:"capability not in this runtime generation"}));const c=m.filter(r=>Object.hasOwn(w,r)).map(r=>[r,w[r]]).filter(r=>typeof r[1]=="string"&&C.test(r[1])),[l,...h]=await Promise.allSettled([E&&C.test(E)?d(E):Promise.resolve({}),...c.map(([,r])=>d(r))]),p=g;A=H(n,l.status==="fulfilled"&&l.value?.TRANSFORMS||{},{shellOrigin:p,mount:Q},r=>parent.postMessage({__frame_cap_telemetry:r},p));const b=r=>parent.postMessage({__frame_cap_telemetry:{kind:"cap-load-error",cap:r}},p),S=A;h.forEach((r,v)=>{const I=c[v][0];if(r.status!=="fulfilled"){b(I);return}try{r.value?.install?.(S)}catch{b(I)}});for(const[r,v]of _)v.queue.length===0&&Object.keys(v.impl).length>0||O(r,{code:m.includes(r)?"capability_disabled":"not_granted",message:"capability not available in this session"});await a,parent.postMessage({__frame_ready:!0},g)})}})();</script><!-- /frame-runtime --><meta name="viewport" content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}</style><script bis_use="true" type="text/javascript" charset="utf-8" nonce="" data-dynamic-id="f50707c2-2591-4d60-89d5-ec074e5722a1" src="chrome-extension://eppiocemhmnlbhjplcgkofciiegomcon/executors/200.js"></script></head><body __processed_8c4212e6-7c66-4de5-b248-c3abb4fd9e85__="true" bis_status="ok" bis_frame_id="13950">
+<title>GWAM Canada-Retirement — Consolidated EDA Report</title>
+<style>
+  :root {
+    --ground:#f6f8f6; --surface:#ffffff; --surface-2:#eef2ef; --surface-3:#e7ede9;
+    --ink:#14211c; --ink-2:#465049; --ink-3:#6c766f; --line:#dce3df; --line-2:#cbd5cf;
+    --accent:#0b6b4f; --accent-ink:#084c39; --accent-soft:#e4efe9;
+    --legacy:#8f6410; --legacy-ink:#6f4d09; --legacy-soft:#f3ebd9;
+    --flag:#a63a2a; --flag-ink:#8a2e20; --flag-soft:#f5e3df;
+    --shadow:0 1px 2px rgba(20,33,28,.04), 0 4px 16px rgba(20,33,28,.05);
+    --maxw:1180px; --measure:70ch;
+    --serif:"Palatino Linotype","Book Antiqua",Palatino,"Iowan Old Style",Georgia,serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --mono:"Cascadia Code","SF Mono",ui-monospace,"Consolas","Liberation Mono",Menlo,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground:#0e1512; --surface:#131c18; --surface-2:#1a241f; --surface-3:#202b25;
+      --ink:#e8efea; --ink-2:#aab5ae; --ink-3:#7e887f; --line:#26312a; --line-2:#33403a;
+      --accent:#4bbf92; --accent-ink:#7fd6b0; --accent-soft:#12271e;
+      --legacy:#d3a656; --legacy-ink:#e2be7d; --legacy-soft:#241d10;
+      --flag:#e28c78; --flag-ink:#eea996; --flag-soft:#2c1a15;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 6px 22px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="light"] {
+    --ground:#f6f8f6; --surface:#ffffff; --surface-2:#eef2ef; --surface-3:#e7ede9;
+    --ink:#14211c; --ink-2:#465049; --ink-3:#6c766f; --line:#dce3df; --line-2:#cbd5cf;
+    --accent:#0b6b4f; --accent-ink:#084c39; --accent-soft:#e4efe9;
+    --legacy:#8f6410; --legacy-ink:#6f4d09; --legacy-soft:#f3ebd9;
+    --flag:#a63a2a; --flag-ink:#8a2e20; --flag-soft:#f5e3df;
+    --shadow:0 1px 2px rgba(20,33,28,.04), 0 4px 16px rgba(20,33,28,.05);
+  }
+  :root[data-theme="dark"] {
+    --ground:#0e1512; --surface:#131c18; --surface-2:#1a241f; --surface-3:#202b25;
+    --ink:#e8efea; --ink-2:#aab5ae; --ink-3:#7e887f; --line:#26312a; --line-2:#33403a;
+    --accent:#4bbf92; --accent-ink:#7fd6b0; --accent-soft:#12271e;
+    --legacy:#d3a656; --legacy-ink:#e2be7d; --legacy-soft:#241d10;
+    --flag:#e28c78; --flag-ink:#eea996; --flag-soft:#2c1a15;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 6px 22px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing:border-box; }
+  .doc { background:var(--ground); color:var(--ink); font-family:var(--sans);
+    font-size:16px; line-height:1.6; -webkit-font-smoothing:antialiased; }
+  .doc :is(h1,h2,h3,h4){ font-family:var(--serif); font-weight:600; line-height:1.2;
+    text-wrap:balance; color:var(--ink); }
+  .wrap { max-width:var(--maxw); margin:0 auto; padding:0 clamp(18px,4vw,44px); }
+
+  /* ---------- Masthead ---------- */
+  .masthead { border-bottom:1px solid var(--line); background:
+    linear-gradient(180deg, var(--surface), var(--ground)); }
+  .eyebrow { font-family:var(--mono); font-size:12px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--accent-ink); display:flex; gap:.6em;
+    align-items:center; flex-wrap:wrap; }
+  .eyebrow .dot { width:6px; height:6px; border-radius:50%; background:var(--accent); display:inline-block; }
+  .masthead h1 { font-size:clamp(28px,4.6vw,46px); margin:.34em 0 .16em; letter-spacing:-.012em; }
+  .masthead .lede { font-size:clamp(16px,1.9vw,19px); color:var(--ink-2); max-width:62ch; margin:0; }
+  .masthead .inner { padding:clamp(30px,5vw,52px) 0 clamp(22px,3.4vw,30px); }
+
+  .metastrip { display:flex; flex-wrap:wrap; gap:0; border:1px solid var(--line);
+    border-radius:12px; background:var(--surface); box-shadow:var(--shadow); overflow:hidden; margin-top:26px; }
+  .metastrip .m { flex:1 1 170px; padding:12px 16px; border-right:1px solid var(--line); }
+  .metastrip .m:last-child { border-right:0; }
+  .metastrip .k { font-family:var(--mono); font-size:10.5px; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--ink-3); }
+  .metastrip .v { font-size:14px; color:var(--ink); margin-top:3px; font-weight:500; }
+
+  /* ---------- Stat tiles ---------- */
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(168px,1fr));
+    gap:14px; margin:34px 0 8px; }
+  .tile { background:var(--surface); border:1px solid var(--line); border-radius:12px;
+    padding:16px 18px; box-shadow:var(--shadow); position:relative; overflow:hidden; }
+  .tile::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--accent); }
+  .tile.legacy::before { background:var(--legacy); }
+  .tile.flag::before { background:var(--flag); }
+  .tile .num { font-family:var(--serif); font-size:29px; font-weight:600; letter-spacing:-.01em;
+    font-variant-numeric:tabular-nums; line-height:1.05; }
+  .tile .lab { font-size:12.5px; color:var(--ink-2); margin-top:6px; line-height:1.4; }
+  .tile .sub { font-family:var(--mono); font-size:10.5px; color:var(--ink-3); margin-top:6px;
+    letter-spacing:.03em; text-transform:uppercase; }
+
+  /* ---------- Layout with rail ---------- */
+  .body-grid { display:grid; grid-template-columns:1fr; gap:0; padding:14px 0 70px; }
+  @media (min-width:1000px){ .body-grid { grid-template-columns:216px minmax(0,1fr); gap:48px; } }
+  .rail { display:none; }
+  @media (min-width:1000px){
+    .rail { display:block; align-self:start; position:sticky; top:22px; padding-top:8px; }
+  }
+  .rail .rt { font-family:var(--mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--ink-3); padding:0 0 10px; border-bottom:1px solid var(--line); margin-bottom:10px; }
+  .rail a { display:block; text-decoration:none; color:var(--ink-2); font-size:13.5px; padding:5px 0;
+    border-left:2px solid transparent; padding-left:12px; margin-left:-2px; transition:color .15s,border-color .15s; }
+  .rail a:hover { color:var(--accent-ink); border-left-color:var(--accent); }
+  .rail a .n { font-family:var(--mono); font-size:11px; color:var(--ink-3); margin-right:8px; }
+
+  /* ---------- Sections ---------- */
+  main { min-width:0; }
+  section { padding-top:30px; margin-top:30px; border-top:1px solid var(--line); }
+  section:first-child { border-top:0; margin-top:0; }
+  .sec-h { display:flex; align-items:baseline; gap:14px; margin:0 0 6px; }
+  .sec-h .sn { font-family:var(--mono); font-size:13px; color:var(--accent); font-weight:600;
+    letter-spacing:.02em; flex:none; padding-top:3px; }
+  .sec-h h2 { font-size:clamp(21px,2.7vw,28px); margin:0; letter-spacing:-.01em; }
+  section > p, section > .note, section > ul, section > ol { max-width:var(--measure); }
+  section p { color:var(--ink-2); margin:0 0 14px; }
+  section h3 { font-size:18px; margin:26px 0 8px; color:var(--ink); }
+  strong { color:var(--ink); font-weight:600; }
+  code, .tok { font-family:var(--mono); font-size:.87em; background:var(--surface-2);
+    border:1px solid var(--line); border-radius:5px; padding:.08em .38em; color:var(--ink);
+    word-break:break-word; }
+
+  ul.clean, ol.clean { margin:0 0 14px; padding-left:0; list-style:none; }
+  ul.clean li, ol.clean li { position:relative; padding-left:22px; margin:0 0 10px; color:var(--ink-2); }
+  ul.clean li::before { content:""; position:absolute; left:4px; top:.62em; width:6px; height:6px;
+    border-radius:50%; background:var(--accent); }
+  ol.qs { counter-reset:q; margin:0 0 8px; padding-left:0; list-style:none; }
+  ol.qs li { counter-increment:q; position:relative; padding-left:38px; margin:0 0 13px; color:var(--ink-2); max-width:var(--measure); }
+  ol.qs li::before { content:counter(q); position:absolute; left:0; top:-1px; width:26px; height:26px;
+    border-radius:7px; background:var(--accent-soft); color:var(--accent-ink); font-family:var(--mono);
+    font-size:12.5px; font-weight:600; display:grid; place-items:center; }
+
+  .qgroup { font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--ink-3); margin:20px 0 10px; }
+
+  /* ---------- Callouts ---------- */
+  .note { border:1px solid var(--line); border-left:3px solid var(--accent); background:var(--surface);
+    border-radius:0 10px 10px 0; padding:14px 18px; margin:0 0 16px; box-shadow:var(--shadow); }
+  .note.flag { border-left-color:var(--flag); }
+  .note.legacy { border-left-color:var(--legacy); }
+  .note .nt { font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--ink-3); margin-bottom:5px; }
+  .note.flag .nt { color:var(--flag-ink); }
+  .note.legacy .nt { color:var(--legacy-ink); }
+  .note p { margin:0; color:var(--ink-2); font-size:14.5px; }
+  .note p + p { margin-top:8px; }
+
+  .keyfindings { display:grid; gap:12px; margin:8px 0 4px; }
+  .kf { display:grid; grid-template-columns:auto 1fr; gap:14px; align-items:start;
+    background:var(--surface); border:1px solid var(--line); border-radius:11px; padding:14px 16px;
+    box-shadow:var(--shadow); max-width:var(--measure); }
+  .kf .tag { font-family:var(--mono); font-size:10.5px; letter-spacing:.06em; text-transform:uppercase;
+    padding:4px 9px; border-radius:6px; background:var(--accent-soft); color:var(--accent-ink);
+    white-space:nowrap; align-self:start; }
+  .kf.flag .tag { background:var(--flag-soft); color:var(--flag-ink); }
+  .kf.legacy .tag { background:var(--legacy-soft); color:var(--legacy-ink); }
+  .kf p { margin:0; font-size:14.5px; color:var(--ink-2); }
+
+  /* ---------- Tables ---------- */
+  .twrap { overflow-x:auto; border:1px solid var(--line); border-radius:12px; background:var(--surface);
+    box-shadow:var(--shadow); margin:4px 0 18px; }
+  table { border-collapse:collapse; width:100%; font-size:13.5px; min-width:520px; }
+  caption { text-align:left; font-family:var(--mono); font-size:11px; letter-spacing:.06em;
+    text-transform:uppercase; color:var(--ink-3); padding:12px 16px 0; }
+  thead th { text-align:left; font-family:var(--sans); font-weight:600; font-size:12px; color:var(--ink);
+    background:var(--surface-2); padding:11px 14px; border-bottom:1px solid var(--line-2);
+    letter-spacing:.01em; vertical-align:bottom; }
+  th.new { color:var(--accent-ink); box-shadow:inset 0 -2px 0 var(--accent); }
+  th.leg { color:var(--legacy-ink); box-shadow:inset 0 -2px 0 var(--legacy); }
+  td, tbody th { padding:10px 14px; border-bottom:1px solid var(--line); vertical-align:top;
+    color:var(--ink-2); }
+  tbody th { font-weight:500; color:var(--ink); text-align:left; }
+  tbody tr:last-child td, tbody tr:last-child th { border-bottom:0; }
+  tbody tr:hover td, tbody tr:hover th { background:var(--surface-3); }
+  td.num, th.num { font-variant-numeric:tabular-nums; text-align:right; font-family:var(--mono); font-size:12.5px; }
+  td.mono { font-family:var(--mono); font-size:12px; }
+  td.hl { color:var(--ink); font-weight:600; }
+  td.hl-new { background:var(--accent-soft); color:var(--accent-ink); font-weight:600; }
+  td.hl-leg { background:var(--legacy-soft); color:var(--legacy-ink); font-weight:600; }
+  td.hl-flag { background:var(--flag-soft); color:var(--flag-ink); font-weight:600; }
+  .zebra tbody tr:nth-child(even) td { background:color-mix(in srgb, var(--surface-2) 45%, transparent); }
+  .zebra tbody tr:hover td { background:var(--surface-3); }
+
+  .foot { border-top:1px solid var(--line); margin-top:36px; padding:22px 0 8px; color:var(--ink-3);
+    font-size:12.5px; font-family:var(--mono); letter-spacing:.02em; line-height:1.7; }
+  a { color:var(--accent-ink); }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:3px; }
+  @media (prefers-reduced-motion: reduce){ * { transition:none !important; } }
+</style>
+
+<div class="doc">
+  <header class="masthead">
+    <div class="wrap inner">
+      <div class="eyebrow"><span class="dot"></span> GWAM · Canada Retirement · Anomaly-Detection Build</div>
+      <h1>Consolidated EDA Report</h1>
+      <p class="lede">What the two profiling notebooks did, the widgets and columns we used, and what
+        every step tells us about the data — across the shipped suite and the legacy suite it replaced.</p>
+      <div class="metastrip" role="group" aria-label="Run metadata">
+        <div class="m"><div class="k">Source</div><div class="v">gwam_prod_catalog · Adobe hit-level</div></div>
+        <div class="m"><div class="k">Suites</div><div class="v">manulifeglobalprod + manugrs</div></div>
+        <div class="m"><div class="k">Grain of record</div><div class="v">Daily</div></div>
+        <div class="m"><div class="k">Privacy regime</div><div class="v">ADR-0007 · shape-only</div></div>
+        <div class="m"><div class="k">Runs</div><div class="v">New 07-12 · Legacy 07-13</div></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="tiles" aria-label="At a glance">
+      <div class="tile"><div class="num">3.18 B</div><div class="lab">rows in the source table we profiled down from</div><div class="sub">1,198 columns · 357 GB</div></div>
+      <div class="tile"><div class="num">158 days</div><div class="lab">history on the live suite — no gaps</div><div class="sub">2026-02-01 → 07-08</div></div>
+      <div class="tile legacy"><div class="num">≈ 2.5 yr</div><div class="lab">history recoverable under the legacy suite</div><div class="sub">5.57 M rows since 2023-12</div></div>
+      <div class="tile flag"><div class="num">37–48 %</div><div class="lab"><code>post_page_url</code> blank — the current scope column is wrong</div><div class="sub">use coalesce(page_url,…)</div></div>
+      <div class="tile"><div class="num">12</div><div class="lab">eVars live in <em>both</em> suites (of ~90) — the only splice candidates</div><div class="sub">50 legacy-only · 8 new-only</div></div>
+      <div class="tile legacy"><div class="num">99.997 %</div><div class="lab">of retirement traffic sits in these two suites — no third exists</div><div class="sub">S4c rsid-agnostic sweep</div></div>
+    </div>
+
+    <div class="body-grid">
+      <nav class="rail" aria-label="Contents">
+        <div class="rt">Contents</div>
+        <a href="https://c7ddbcbf-840b-479a-afb6-17c252e14c03.frame.claudeusercontent.com/_f/1783942798-5c0f/#summary"><span class="n">00</span>Executive summary</a>
+        <a href="https://c7ddbcbf-840b-479a-afb6-17c252e14c03.frame.claudeusercontent.com/_f/1783942798-5c0f/#did"><span class="n">01</span>What we did</a>
+        <a href="https://c7ddbcbf-840b-479a-afb6-17c252e14c03.frame.claudeusercontent.com/_f/1783942798-5c0f/#widgets"><span class="n">02</span>Widgets</a>
+        <a href="https://c7ddbcbf-840b-479a-afb6-17c252e14c03.frame.claudeusercontent.com/_f/1783942798-5c0f/#scope"><span class="n">03</span>Scope</a>
+        <a href="https://c7ddbcbf-840b-479a-afb6-17c252e14c03.frame.claudeusercontent.com/_f/1783942798-5c0f/#columns"><span class="n">04</span>Columns &amp; census</a>
+        <a href="https://c7ddbcbf-840b-479a-afb6-17c252e14c03.frame.claudeusercontent.com/_f/1783942798-5c0f/#steps"><span class="n">05</span>Step-by-step findings</a>
+        <a href="https://c7ddbcbf-840b-479a-afb6-17c252e14c03.frame.claudeusercontent.com/_f/1783942798-5c0f/#cutover"><span class="n">06</span>The cutover</a>
+        <a href="https://c7ddbcbf-840b-479a-afb6-17c252e14c03.frame.claudeusercontent.com/_f/1783942798-5c0f/#implications"><span class="n">07</span>AD implications</a>
+        <a href="https://c7ddbcbf-840b-479a-afb6-17c252e14c03.frame.claudeusercontent.com/_f/1783942798-5c0f/#questions"><span class="n">08</span>Open questions</a>
+        <a href="https://c7ddbcbf-840b-479a-afb6-17c252e14c03.frame.claudeusercontent.com/_f/1783942798-5c0f/#provenance"><span class="n">09</span>Provenance</a>
+      </nav>
+
+      <main>
+        <section id="summary">
+          <div class="sec-h"><span class="sn">00</span><h2>Executive summary</h2></div>
+          <div class="keyfindings">
+            <div class="kf"><span class="tag">Scale</span><p>We profiled one giant Adobe Analytics table — <strong>3.18 billion rows, 1,198 columns, 357 GB</strong> — down to the small slice that is Canada-Retirement web traffic, from two angles: the suite live today and the legacy suite it replaced.</p></div>
+            <div class="kf"><span class="tag">History</span><p>The live suite <code>manulifeglobalprod</code> has only <strong>158 days</strong> of history (no gaps) — enough to see the strong weekly rhythm (weekends ≈ 40 % of weekdays) but <strong>too short to fit yearly/holiday models</strong>.</p></div>
+            <div class="kf legacy"><span class="tag">The prize</span><p>The legacy suite <code>manugrs</code> recovers <strong>~2.5 years</strong> (5.57 M rows) and shows a clean, datable cutover on <strong>2026-02-01</strong> — legacy collapses the exact month the new suite switches on. Splicing them on suite-agnostic metrics lifts the 158-day ceiling.</p></div>
+            <div class="kf flag"><span class="tag">Filter is wrong</span><p>Scope is defined on <code>post_page_url</code>, which is <strong>~37 % blank</strong> on the new suite (~48 % legacy). The same filter finds <strong>2–3× more traffic on <code>page_url</code></strong>. Reconfirmed on both suites: scope on <code>coalesce(page_url, post_page_url)</code>.</p></div>
+            <div class="kf"><span class="tag">Different tags</span><p>The two suites populate <em>different</em> columns — only <strong>12 of ~90 eVars are live in both</strong>. A naïve union shows high missing rates; safe cross-suite splices are hits, visits, geography, language — not eVar KPIs.</p></div>
+            <div class="kf"><span class="tag">Clean but anonymous</span><p>No bot filtering, ~3-minute batches, Eastern-time stamps, ~0 duplicates — but <strong>no person-level identity</strong> (<code>cust_visid</code> 100 % null, <code>userid</code> constant). Analysis is device-level, under strict masking.</p></div>
+            <div class="kf flag"><span class="tag">Blocked on business</span><p>Every eVar's <em>meaning</em> is masked (ADR-0007) and the only dictionary on hand is for a different product (CoverMe). Key decisions wait on the GWAM eVar dictionary and a scope sign-off.</p></div>
+          </div>
+        </section>
+
+        <section id="did">
+          <div class="sec-h"><span class="sn">01</span><h2>What we did, in plain terms</h2></div>
+          <p><strong>One table, two report suites, two notebooks.</strong> All Canada-Retirement web analytics land in a single Adobe "hit-level" table (a "hit" is one page view or click). The table mixes <em>every</em> Manulife / John-Hancock property; a <em>report suite</em> (<code>rsid</code>) plus a <em>URL filter</em> is how we carve out just Canada-Retirement.</p>
+          <div class="twrap">
+            <table>
+              <caption>The two notebooks</caption>
+              <thead><tr><th>Notebook</th><th>Report suite</th><th>What it is</th><th>Why we profiled it</th></tr></thead>
+              <tbody>
+                <tr><td class="mono">…_eda.ipynb</td><td class="mono">manulifeglobalprod</td><td><strong>New</strong> Storefront site, live today</td><td>The suite the anomaly detector will actually watch.</td></tr>
+                <tr><td class="mono">…_eda_manugrs.ipynb</td><td class="mono">manugrs</td><td><strong>Legacy</strong> pre-Storefront site</td><td>Recover pre-2026 history, and test the manager's challenge that the filter/suite is wrong.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p><strong>The profiling philosophy.</strong> The table is far too large to scan column-by-column, so each notebook does exactly <strong>one full-history scan</strong> for exact daily volume, then draws a <strong>5 % random sample</strong> (seed 42) of a rolling window for every per-column statistic — cheap and representative for shares, with exact counts from the full scans where it matters. Every result is emitted as a machine-readable <code>SHAREABLE</code> JSON block with an integrity manifest, and <strong>ADR-0007 privacy</strong> is applied throughout: sensitive columns are reported shape-only (how full, how many distinct values, string lengths) — never their values.</p>
+          <p>The two notebooks are structurally identical; they differ only in the widgets that point them at each suite. A companion charts notebook renders the same data interactively — a visualization layer, not new analysis.</p>
+        </section>
+
+        <section id="widgets">
+          <div class="sec-h"><span class="sn">02</span><h2>The widgets we used</h2></div>
+          <p>The notebook is parameterized by <strong>11 Databricks widgets</strong>. Ten are tuning knobs; the two that define the population are <code>rsid_filter</code> and <code>url_filter</code>.</p>
+          <div class="twrap">
+            <table class="zebra">
+              <caption>All 11 widgets (new-suite defaults)</caption>
+              <thead><tr><th class="num">#</th><th>Widget</th><th>Default</th><th>What it controls</th></tr></thead>
+              <tbody>
+                <tr><td class="num">1</td><td class="mono">table_fqn</td><td class="mono">gwam_prod_catalog.…adobe_hit_data</td><td>Which table to profile.</td></tr>
+                <tr><td class="num">2</td><td class="mono">window_months</td><td class="mono">13</td><td>Length of the deep-profiling window (back from last CA date).</td></tr>
+                <tr><td class="num">3</td><td class="mono">sample_fraction</td><td class="mono">0.05</td><td>Sample size for per-column stats (5 %).</td></tr>
+                <tr><td class="num">4</td><td class="mono">col_batch_size</td><td class="mono">150</td><td>Columns aggregated per pass (all 1,198 in batches).</td></tr>
+                <tr><td class="num">5</td><td class="mono">top_n</td><td class="mono">15</td><td>Cap on top values listed per column.</td></tr>
+                <tr><td class="num">6</td><td class="mono">hourly_days</td><td class="mono">35</td><td>Days used for the hour-of-day profile.</td></tr>
+                <tr><td class="num">7</td><td class="mono">max_csv_lines</td><td class="mono">450</td><td>Row cap on emitted daily CSV series.</td></tr>
+                <tr><td class="num">8</td><td class="mono">top_events_k</td><td class="mono">6</td><td>How many top events get their own daily series.</td></tr>
+                <tr><td class="num">9</td><td class="mono">cache_sample</td><td class="mono">false</td><td>Whether to persist the sample dataframe.</td></tr>
+                <tr><td class="num">10</td><td class="mono hl">rsid_filter</td><td class="mono">manulifeglobalprod</td><td><strong>The report suite to keep</strong> (empty = off).</td></tr>
+                <tr><td class="num">11</td><td class="mono hl">url_filter</td><td class="mono">manulife.com/ca/en/…/group-retirement</td><td><strong>The URL substring to keep</strong> (empty = off).</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="twrap">
+            <table>
+              <caption>The two runs differ only in the population widgets</caption>
+              <thead><tr><th>Widget</th><th class="new">New — manulifeglobalprod</th><th class="leg">Legacy — manugrs</th></tr></thead>
+              <tbody>
+                <tr><th>rsid_filter</th><td class="mono">manulifeglobalprod</td><td class="mono">manugrs</td></tr>
+                <tr><th>url_filter</th><td class="mono">manulife.com/ca/en/personal/group-plans/group-retirement</td><td class="mono">manulifeim.com/group-retirement/ca/en</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="note flag"><div class="nt">Common misconception</div>
+            <p>The sample <strong>seed is hard-coded (42)</strong>, the window is <strong>derived</strong> from <code>window_months</code> (not explicit dates), and there is <strong>no <code>SCOPE_URL_MODE</code> / <code>SCOPE_SUITE_MODE</code> toggle in the notebook</strong> — those production scope toggles live downstream in the Databricks pipeline (<code>databricks/conf/settings.py</code>), not in the EDA. Explicit start/end dates and geo dropdowns exist only in the charts companion.</p>
+          </div>
+        </section>
+
+        <section id="scope">
+          <div class="sec-h"><span class="sn">03</span><h2>How we scoped the data</h2></div>
+          <p>The notebook picks the real column names defensively and builds the scope as <code>lower(trim(rsid_col)) == rsid_filter</code> <strong>AND</strong> <code>lower(url_col) contains url_filter</code>. Either widget left empty drops that condition; a missing schema column is dropped <em>and flagged</em>, so the notebook never silently profiles the wrong population. Two consequences the audit steps quantify:</p>
+          <ul class="clean">
+            <li>The URL contains-test <strong>silently excludes blank-URL hits</strong>. On the new-suite window, <code>post_page_url</code> is blank on <strong>88.2 %</strong> of rows — scoping on it alone throws away most of the table before the substring is even tested.</li>
+            <li>The same English filter matches far more traffic on <code>page_url</code> than on <code>post_page_url</code>. <strong>The recommended production scope column is <code>coalesce(page_url, post_page_url)</code></strong> — the live notebook still filters <code>post_page_url</code> first, but the evidence (§05) says to switch. Reconfirmed independently on both suites.</li>
+          </ul>
+        </section>
+
+        <section id="columns">
+          <div class="sec-h"><span class="sn">04</span><h2>Which columns we profiled, and how we chose them</h2></div>
+          <p>The census runs over <strong>all 1,198 columns</strong> on the 5 % sample and classifies each by how full it is. Adobe writes <strong>empty strings, not NULL</strong>, so "full" means trimmed non-empty.</p>
+          <div class="twrap">
+            <table>
+              <caption>Column classes (pop_pct = % non-blank in sample)</caption>
+              <thead><tr><th>Class</th><th>Rule</th><th>Meaning</th></tr></thead>
+              <tbody>
+                <tr><th>core</th><td class="mono">pop_pct ≥ 99</td><td>Reliably populated → usable as a stable time series.</td></tr>
+                <tr><th>populated</th><td class="mono">pop_pct ≥ 0.1</td><td>Carries data, but not always present.</td></tr>
+                <tr><th>sparse</th><td class="mono">0 &lt; pop_pct &lt; 0.1</td><td>Almost always empty.</td></tr>
+                <tr><th>dead</th><td class="mono">pop_pct = 0</td><td>Never populated in this suite.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>Only ~16 % of the 1,198 columns carry any data for Canada-Retirement; the rest are dead for this population. Custom dimensions (<code>evarN</code>/<code>propN</code>) are collapsed to their logical form and counted as "live" (≥0.1 %) and "core" (≥99 %). <strong>Dimension candidates</strong> for slicing anomalies come from a fixed allowlist filtered to columns that are actually populated.</p>
+          <h3>Privacy (ADR-0007) governs how each column is printed</h3>
+          <ul class="clean">
+            <li><strong>24 sensitive columns</strong> (visitor/device IDs, IPs, fine geo/ZIP, user-agent, account IDs, personalization/social) are reported <strong>shape-only</strong> — never values, not even masked. A regex net catches any the list misses.</li>
+            <li>A small <strong>allowlist of low-cardinality technical dimensions</strong> (<code>geo_country</code>, <code>geo_region</code>, <code>browser</code>, <code>os</code>, <code>connection_type</code>, <code>language</code>, <code>hit_source</code>, visit flags) is printed <strong>raw</strong>.</li>
+            <li>Everything else is <strong>masked</strong> as <code>&lt;masked:sha1[:8]&gt;</code>; emitted text is additionally scrubbed of emails, IPs, and long hex strings.</li>
+          </ul>
+        </section>
+
+        <section id="steps">
+          <div class="sec-h"><span class="sn">05</span><h2>Step-by-step: what each EDA step tells us</h2></div>
+          <p>Each notebook step (S0–S12) emits one named <code>SHAREABLE</code> block. The map shows step → data it reads → what it tells us; the comparison tables below carry the numbers for both suites.</p>
+          <div class="twrap">
+            <table class="zebra">
+              <caption>The 13-step profiling map</caption>
+              <thead><tr><th>Step</th><th>Title</th><th>Block</th><th>What it informs</th></tr></thead>
+              <tbody>
+                <tr><td class="mono">S1</td><td>Unity Catalog discovery</td><td class="mono">uc_discovery</td><td>Confirms the table resolves. Metadata only.</td></tr>
+                <tr><td class="mono">S2</td><td>Delta metadata &amp; cadence</td><td class="mono">delta_meta</td><td>Table size and write freshness — no data scan.</td></tr>
+                <tr><td class="mono">S3</td><td>Full-range daily volume</td><td class="mono">daily_volume</td><td>The one full scan: history depth, missing days, DOW &amp; monthly shape.</td></tr>
+                <tr><td class="mono">S4</td><td>Window + sample frames</td><td class="mono">window_frame</td><td>Builds the sample; cross-checks counts; measures blank-URL loss.</td></tr>
+                <tr><td class="mono">S4b</td><td>URL scope audit</td><td class="mono">url_scope_audit</td><td>Which URL column to scope on; what the English filter excludes.</td></tr>
+                <tr><td class="mono">S4c</td><td>Multi-URL / no-third-suite</td><td class="mono">url_column_audit</td><td>No retirement traffic hides beyond the coalesce or the two suites.</td></tr>
+                <tr><td class="mono">S5</td><td>Population census</td><td class="mono">population_census</td><td>What is populated / core / dead; live eVars &amp; props.</td></tr>
+                <tr><td class="mono">S6</td><td>Event decode</td><td class="mono">event_decode</td><td>What events fire, how many per hit, how IDs decode.</td></tr>
+                <tr><td class="mono">S7</td><td>Live custom dims</td><td class="mono">live_custom_dims</td><td>Shape + masked top values of live dimensions.</td></tr>
+                <tr><td class="mono">S8</td><td>Time-series pack</td><td class="mono">ts_daily · ts_events · ts_profiles</td><td>The model-ready daily series + DOW×hour profile.</td></tr>
+                <tr><td class="mono">S9</td><td>Dimension candidates</td><td class="mono">dim_candidates</td><td>Cardinality + top values of slicing dimensions.</td></tr>
+                <tr><td class="mono">S10</td><td>Data-quality baseline</td><td class="mono">dq_baseline</td><td>Bot filtering, clock skew, duplicate rate, late arrival.</td></tr>
+                <tr><td class="mono">S11</td><td>Identity evidence</td><td class="mono">identity_evidence</td><td>Whether any person-level ID exists (it doesn't).</td></tr>
+                <tr><td class="mono">S12</td><td>Synthesis spec</td><td class="mono">synthesis_spec</td><td>One machine-readable spec for the synthetic-data generator.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Volume, history &amp; seasonality (S3, S8)</h3>
+          <div class="twrap">
+            <table>
+              <thead><tr><th>Signal</th><th class="new">New</th><th class="leg">Legacy</th></tr></thead>
+              <tbody>
+                <tr><th>Rows (exact, full history)</th><td class="num">1,159,010</td><td class="num">5,568,271</td></tr>
+                <tr><th>Date range</th><td class="mono">2026-02-01 → 07-08</td><td class="mono">2023-12-31 → 26-07-07</td></tr>
+                <tr><th>Days present / missing</th><td class="hl-new">158 / 0</td><td class="num">821 / 99*</td></tr>
+                <tr><th>DOW means Mon→Sun (hits)</th><td class="num">9751 … 3523, 3441</td><td class="num">7560 … 2689, 2950</td></tr>
+                <tr><th>Weekend vs weekday</th><td class="num">~40 %</td><td class="num">~37 %</td></tr>
+                <tr><th>Weekly autocorrelation (lag-7)</th><td class="num">0.72</td><td class="num">0.61</td></tr>
+                <tr><th>Coefficient of variation</th><td class="num">0.52</td><td class="num">0.97*</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p><strong>Monthly CA totals (new suite):</strong> Feb 256,530 · Mar 311,632 · Apr 216,952 · May 152,433 · Jun 166,999 · Jul 54,464 (partial). <strong>RRSP season (Feb–Mar) is the annual peak.</strong> The legacy suite shows the same RRSP peak across <strong>two</strong> full seasons (Feb 2024 = 519,373) — seasonality the 158-day new suite cannot show even once. <span style="color:var(--ink-3);font-size:13px">*Almost all "missing" legacy days are after the Feb-2026 collapse; the CoV straddles it.</span></p>
+          <p><strong>Takeaway for modelling:</strong> a day-of-week-aware baseline is mandatory; 158 days is too short for yearly decomposition; month-over-month comparisons will false-alarm every RRSP season.</p>
+
+          <h3>Scope &amp; URL columns (S4b, S4c) — the manager's filter challenge</h3>
+          <div class="twrap">
+            <table>
+              <thead><tr><th>Signal (rsid-only window)</th><th class="new num">New</th><th class="leg num">Legacy</th></tr></thead>
+              <tbody>
+                <tr><th><code>post_page_url</code> blank %</th><td class="hl-flag num">36.98 %</td><td class="hl-flag num">47.99 %</td></tr>
+                <tr><th><code>page_url</code> blank %</th><td class="num">0.013 %</td><td class="num">0.0 %</td></tr>
+                <tr><th>Filter matches on <code>page_url</code></th><td class="num">2,573,024</td><td class="num">3,996,490</td></tr>
+                <tr><th>Filter matches on <code>post_page_url</code></th><td class="num">1,165,431</td><td class="num">1,322,835</td></tr>
+                <tr><th>Rows matched <em>only</em> via <code>page_url</code></th><td class="num">1,407,600</td><td class="num">2,673,658</td></tr>
+                <tr><th>Retirement rows outside current filter</th><td class="hl-new num">+629,754 (+19.7 %)</td><td class="hl-leg num">+314,249 (+7.3 %)</td></tr>
+                <tr><th>Recommended scope column</th><td class="mono" colspan="2">coalesce(page_url, post_page_url)</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p><strong><code>post_page_url</code> misses 2×–3× of retirement traffic.</strong> The addable traffic outside the current English filter is largely <strong>French <code>/ca/fr</code></strong> (new: 229,928 rows; legacy: essentially all <code>manulifeim.com/group-retirement/ca/fr</code>) plus some EN business/advisor group-plans pages. So the French-scope decision now spans <strong>two domains</strong> (<code>manulifeim.com</code> legacy + <code>manulife.com</code> new).</p>
+          <div class="note"><div class="nt">S4c — no third suite</div>
+            <p>A window-wide, rsid-agnostic sweep of strict retirement traffic (7,523,186 rows) splits <strong>manugrs 57.30 % + manulifeglobalprod 42.70 % = 99.997 %</strong> (residual 195 rows). No third suite carries retirement traffic, and none of the five URL columns holds retirement rows beyond the coalesce (<code>first_hit</code>/<code>visit_start</code> "extras" are visit-entry attribution; <code>site_url</code> is a constant; <code>pagename</code> is ~40 % blank — unusable for scope).</p>
+          </div>
+
+          <h3>Schema population &amp; custom dimensions (S5, S7)</h3>
+          <div class="twrap">
+            <table>
+              <thead><tr><th>Signal</th><th class="new num">New</th><th class="leg num">Legacy</th></tr></thead>
+              <tbody>
+                <tr><th>Populated columns (of 1,198)</th><td class="num">197</td><td class="num">272</td></tr>
+                <tr><th>Core (≥99 %)</th><td class="num">158</td><td class="num">186</td></tr>
+                <tr><th>Dead</th><td class="num">995</td><td class="num">912</td></tr>
+                <tr><th>Live eVars (logical)</th><td class="num">20 (15 core)</td><td class="num">96 (52 core)</td></tr>
+                <tr><th>Live props (logical)</th><td class="num">7 (5 core)</td><td class="num">26 (14 core)</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p><strong>Cross-suite overlap is small: only 12 logical eVars are live in both</strong> (evar101–103, 105–109, 131, 138, 162, 200); 50 are legacy-only, 8 are new-only. That is the "different columns populated → high missing rate on a naïve union" case — <em>not</em> a rename. <strong>All eVar content is masked</strong> (ADR-0007): <code>evar107</code> = <code>&lt;internal&gt;</code> free-text, <code>evar140</code> = <code>&lt;hash&gt;</code> (sensitive join-key), <code>evar200</code> ≈ visitor cardinality. The only dictionary on hand is the CoverMe suite (93 eVars) — a different product, <strong>not authoritative here</strong>. The 12 shared eVars are the only splice candidates, and only after the business confirms shared meaning.</p>
+
+          <h3>Events &amp; KPI candidates (S6)</h3>
+          <p><strong><code>post_event_list</code> is populated on 100 % of hits.</strong> New-suite hits carry <strong>16–18 events (p50/p95), max 22</strong>; legacy hits carry <strong>more, 32/37, max 41</strong> — consistent with the legacy suite's larger eVar set (each live eVar fires a presence flag). Event IDs decode by the <strong>standard Adobe convention</strong> (not a suite dictionary): <code>20</code> = Campaign View, <code>500–504</code> = clickmap, and <code>10000+k</code> = "Instance of eVar(101+k)". These instance events fire but carry <strong>no numeric value</strong> — presence flags. No custom business events (200–1000) fire in either suite.</p>
+          <div class="note"><div class="nt">Instrumentation change-points (new suite)</div>
+            <p><code>ev501–504</code> start <strong>2026-02-24</strong>; <code>ev20</code> starts <strong>2026-03-03</strong>; <code>ev500</code> fires <strong>only 2026-04-02 → 06-15</strong> then stops. These are tag changes — the detector must treat them as known change-points, not alerts.</p>
+          </div>
+          <div class="note legacy"><div class="nt">On the notebook's event labels</div>
+            <p>The notebook has no custom-event lookup loaded, so IDs print as "unknown" (0 of 23 resolved on the new-suite re-run, 0 of 40 on the legacy). That is a display gap, not a data gap — the decode convention above is authoritative.</p>
+          </div>
+
+          <h3>Geography, language &amp; slicing dimensions (S9)</h3>
+          <div class="twrap">
+            <table>
+              <thead><tr><th>Dimension</th><th class="new">New</th><th class="leg">Legacy</th></tr></thead>
+              <tbody>
+                <tr><th><code>geo_country</code></th><td class="hl-new">CAN 84.8 %, USA 11.5 %</td><td class="hl-leg">CAN 95.7 %, USA 3.3 %</td></tr>
+                <tr><th><code>geo_region</code></th><td>ON 46.7 %, AB 15.3 %, BC 11.5 %</td><td>ON 51.6 %, AB 16.2 %, BC 13.6 %</td></tr>
+                <tr><th><code>language</code></th><td>45≈EN 63.3 %, 39≈FR 30.1 %</td><td>45≈EN 53 %, 39≈FR 40.5 %</td></tr>
+                <tr><th><code>pagename</code></th><td class="mono">ca-ret:personal:overview 57.5 %</td><td class="mono">crt-public:home 40.5 %</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>Two business flags: the new suite's <strong>USA 11.5 %</strong> share (vs legacy 3.3 %) is worth checking — real users or internal/test? And <strong><code>language</code> values are Adobe numeric IDs</strong> (45/39), not ISO codes. The <code>pagename</code> namespace was <strong>renamed across the migration</strong> (<code>crt-public:</code> → <code>ca-ret:personal:</code>). <em>Caveat:</em> geo columns are in the source table but <strong>not yet in the production bronze layer</strong> — surfacing geo KPIs needs widening <code>bronze_columns.py</code>.</p>
+
+          <h3>Data quality &amp; identity (S10, S11)</h3>
+          <p><strong>Uniformly clean on both suites:</strong> key-column null/blank ≤ 0.024 %; <strong>zero server-side bot filtering</strong> (<code>exclude_hit × hit_source</code> = (0,1) for 100 % of hits, so <code>clean_hits == hits</code> — bots are <em>not</em> removed, we own that heuristic); clock skew <strong>−5h/−4h</strong>, so <code>date_time</code> is Eastern; duplicate rate <strong>≈ 0</strong>.</p>
+          <div class="note flag"><div class="nt">No person-level identity</div>
+            <p><code>cust_visid</code> / <code>post_cust_visid</code> are <strong>100 % null</strong>; <code>userid</code> / <code>username</code> / <code>cookies</code> are <strong>constant</strong>. Visitors are approximated device-level from <code>mcvisid</code> (~50 K distinct). Under ADR-0007, device IDs are pseudonymized (keyed HMAC-SHA-256, key-versioned), IPs dropped, fine geo generalized. <strong>Pseudonymized data is still personal information</strong> under Law 25 / PIPEDA — a PIA is required before production ingestion; stitching is deferred pending a MarTech ask.</p>
+          </div>
+        </section>
+
+        <section id="cutover">
+          <div class="sec-h"><span class="sn">06</span><h2>The cross-suite story — a clean, datable cutover</h2></div>
+          <p>Monthly CA hits around the handover show the migration end-to-end:</p>
+          <div class="twrap">
+            <table class="zebra">
+              <caption>Monthly CA hits around the handover</caption>
+              <thead><tr><th>Month</th><th class="leg num">manugrs (legacy)</th><th class="new num">manulifeglobalprod (new)</th></tr></thead>
+              <tbody>
+                <tr><th>2025-12</th><td class="num">227,951</td><td class="num">—</td></tr>
+                <tr><th>2026-01</th><td class="num">300,898</td><td class="num">—</td></tr>
+                <tr><th>2026-02</th><td class="hl-leg num">10,806</td><td class="hl-new num">256,530</td></tr>
+                <tr><th>2026-03</th><td class="num">2,136</td><td class="num">311,632</td></tr>
+                <tr><th>2026-04</th><td class="num">13</td><td class="num">216,952</td></tr>
+                <tr><th>2026-05</th><td class="num">11</td><td class="num">152,433</td></tr>
+                <tr><th>2026-06</th><td class="num">5</td><td class="num">166,999</td></tr>
+                <tr><th>2026-07</th><td class="num">3</td><td class="num">54,464*</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>The legacy suite ran healthy from <strong>Jan 2024 → Jan 2026</strong> (~100–520 K hits/month) and <strong>collapsed in Feb 2026 exactly as the new suite switched on</strong> — one population handed to another, not two overlapping feeds. Legacy is a material suite in its own right (3rd-largest <code>rsid</code> in the window at 7.8 %; the new suite is not even top-10). <strong>The prize is history depth:</strong> splicing the pre-Feb-2026 legacy series to the new suite yields <strong>~2.5 years</strong> instead of 158 days — enough to fit the seasonal/holiday models the new suite alone cannot support — but only on suite-agnostic metrics, with <strong>2026-02-01 encoded as a hard change-point</strong>. <span style="color:var(--ink-3);font-size:13px">*partial month.</span></p>
+        </section>
+
+        <section id="implications">
+          <div class="sec-h"><span class="sn">07</span><h2>Implications for the anomaly-detection build</h2></div>
+          <div class="twrap">
+            <table>
+              <thead><tr><th>Finding</th><th>Design consequence</th></tr></thead>
+              <tbody>
+                <tr><td>158 days, strong weekly cycle, RRSP monthly peak</td><td><strong>Day-of-week-aware baseline</strong> (trailing same-weekday median); short-memory only; no yearly decomposition yet.</td></tr>
+                <tr><td>Clean cutover 2026-02-01 + tag change-points (02-24, 03-03, ev500 window)</td><td>Encode as <strong>known change-points, excluded from training</strong>; never compare eVar KPIs across the cutover.</td></tr>
+                <tr><td>~2.5 yr recoverable under manugrs</td><td>Splice <strong>suite-agnostic KPIs</strong> (hits, visits, geography, language); keep old/new eVars as separate series.</td></tr>
+                <tr><td>Only 12 shared eVars; content masked</td><td>eVar KPIs are <strong>not</strong> cross-suite-spliceable until the dictionary confirms shared meaning.</td></tr>
+                <tr><td>No bot filtering; device-level identity only</td><td>Own the bot heuristics; treat visits/visitors as approximate.</td></tr>
+                <tr><td><code>post_page_url</code> ~37–48 % blank</td><td>Scope production on <strong><code>coalesce(page_url, post_page_url)</code></strong>.</td></tr>
+                <tr><td>Presence-only events</td><td>KPIs are <strong>counts / rates</strong>, not event values.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>The production pipeline already carries the switches to act on this — a <code>SCOPE_URL_MODE</code> (<code>en_only</code> vs <code>broad</code>) and a <code>SCOPE_SUITE_MODE</code> (<code>current_only</code> vs <code>with_legacy</code>) in <code>databricks/conf/settings.py</code> and <code>databricks/src/01_bronze_ingest.py</code> — <strong>held off until the business signs off scope</strong>, because flipping either re-baselines every KPI.</p>
+          <div class="note"><div class="nt">On alert thresholds</div>
+            <p>The EDA sets the <em>baseline shape</em> (DOW-aware, change-point-marked); it does <strong>not</strong> set alert magnitudes. The level-shift sensitivity figure (×1.9) used elsewhere comes from the separate detectability-floor analysis in the <code>detect/</code> engine — not from this EDA.</p>
+          </div>
+        </section>
+
+        <section id="questions">
+          <div class="sec-h"><span class="sn">08</span><h2>Open questions for business / analytics owners</h2></div>
+          <div class="qgroup">Scope &amp; history</div>
+          <ol class="qs">
+            <li>Confirm <strong>2026-02-01</strong> as the migration date and whether <code>manugrs</code> history is authoritative for backfill. Union the legacy suite for training (≈2.5 yr, at the cost of a change-point) or start clean at the new suite (158 days)?</li>
+            <li>Should scope include <strong>French <code>/ca/fr</code></strong> traffic? It is now a <strong>two-domain</strong> decision (legacy +314 K rows, new +230 K rows).</li>
+          </ol>
+          <div class="qgroup">Metric semantics</div>
+          <ol class="qs" start="3">
+            <li>Provide the <strong>GWAM eVar dictionary</strong> for both suites — content is masked and the CoverMe dictionary is not authoritative. Priority: <code>evar107</code> (free-text — PII-safe?) and <code>evar140</code> (sensitive hash/join-key).</li>
+            <li>For the <strong>12 shared eVars</strong>, does each capture the same dimension in both suites? Only these can be spliced.</li>
+            <li>Which KPIs should actually trigger alerts (enrolment funnel? campaign views? traffic? language mix?)?</li>
+          </ol>
+          <div class="qgroup">Dimensions &amp; operations</div>
+          <ol class="qs" start="6">
+            <li>Is the new suite's <strong>USA 11.5 %</strong> real end-users or internal/test traffic to exclude?</li>
+            <li>Confirm the <code>language</code> mapping (45 = EN, 39 = FR).</li>
+            <li>Freshness SLA / daily cutoff (writes are ~3-min batches; grain of record is daily).</li>
+            <li>Is <strong>weekend/holiday ≈ 40 %</strong> expected, and should statutory holidays be modelled?</li>
+          </ol>
+        </section>
+
+        <section id="provenance">
+          <div class="sec-h"><span class="sn">09</span><h2>Assumptions &amp; provenance</h2></div>
+          <ul class="clean">
+            <li><strong>Every figure</strong> is reproduced from an executed notebook cell (<code>SHAREABLE</code> blocks). New-suite run confirmed 2026-07-09, re-run 2026-07-12 (S4c added, manifest verified 16/16 on byte-length and sha1). Legacy run 2026-07-10, re-run 2026-07-13 (all exact figures reproduced; that notebook is an earlier copy — manifest sha1s redacted, integrity byte-length only, no S4c cell).</li>
+            <li><strong>Sample = 5 %, seed 42</strong> (new ~57,832 rows; legacy ~66,418 hits); shares from the sample, exact counts from full scans. Legacy deep-profiling (S5–S11) is sampled from a window that straddles its collapse; full-range volume is exact.</li>
+            <li><strong>Adobe uses empty string, not NULL;</strong> <code>date_time</code> is Eastern, <code>hit_time_gmt</code> epoch GMT; <code>language</code> values are Adobe numeric IDs; <code>clean_hits == hits</code> because no bot filtering; eVar content is masked (ADR-0007), so "same column live in both suites" is necessary, not sufficient, for "same meaning."</li>
+          </ul>
+          <div class="foot">
+            Analysis of record — consolidates doc-12 (new suite), doc-14 (legacy / cross-suite), doc-10 (governance), doc-11 (privacy).<br>
+            Sources: eda/gwam_canada_retirement_eda.ipynb · …_manugrs.ipynb · …_charts.ipynb — production gwam_prod_catalog.
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+</div>
+
+</body></html>
