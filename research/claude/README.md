@@ -71,6 +71,9 @@ when, why, and what to do"). The design rests on eight decisions:
 | 11 | [11-privacy-identity-governance.md](11-privacy-identity-governance.md) | **Privacy, identity & governance** — Identity & Privacy layer, Law 25/C-27 mapping, Synapse secure views, erasure, roles |
 | 12 | [12-eda-findings-analysis.md](12-eda-findings-analysis.md) | EDA findings from the real GWAM Databricks feed |
 | 13 | [13-global-serving-topology.md](13-global-serving-topology.md) | **Global serving topology** — React/AKS surface + BFF, Azure AI Foundry Gen-AI plane, unstructured data lane (ADLS Gen2 → AI Search), global access/residency |
+| 14 | [14-manugrs-cross-suite-analysis.md](14-manugrs-cross-suite-analysis.md) | **manugrs cross-suite analysis** — legacy vs current report suite (cutover 2026-02-01), eVar overlap, geo/language profile |
+| 15 | [15-consolidated-eda-report.md](15-consolidated-eda-report.md) | Consolidated EDA report across both report suites (stakeholder-facing) |
+| 16 | [16-e2e-production-blueprint.md](16-e2e-production-blueprint.md) | **End-to-end production blueprint & agent guidance** — standing decisions, EDDL eVar dictionary, 2-notebook EDA contract, Databricks/jobs/AKS phases; supersedes older docs on conflict |
 | — | [metric-registry.yaml](metric-registry.yaml) | Versioned Phase-1 metric registry (29 AD-tagged seeds) |
 | — | [adr/](adr/) | ADR-0001 ingestion (v2) · ADR-0002 models · ADR-0003 Gen-AI · ADR-0004 Akka · ADR-0005 Adaptive ML · ADR-0006 compute plane · ADR-0007 identity & privacy · **ADR-0008 serving topology & Gen-AI plane** |
 

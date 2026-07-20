@@ -38,7 +38,7 @@ class ColumnSpec:
     sensitive: bool
     len_p50: int | None = None
     len_max: int | None = None
-    top_masked: list = field(default_factory=list)   # [{m,len,pct}, ...] verbatim
+    top_values: list = field(default_factory=list)   # [{v,len,pct}, ...] verbatim
 
 
 @dataclass
@@ -211,7 +211,11 @@ def load_spec(spec_dir: Path = SPEC_DIR) -> Spec:
             sensitive=bool(e["sensitive_shape_only"]),
             len_p50=ln.get("p50"),
             len_max=ln.get("max"),
-            top_masked=e.get("top_masked", []),
+            # ADR-0007 §5 renamed this to top_values/`v` when EDA stopped masking
+            # business dimensions. Older spec JSON still carries top_masked/`m`,
+            # so accept both and normalize to `v`.
+            top_values=[{"v": t.get("v", t.get("m")), "len": t.get("len"), "pct": t.get("pct")}
+                        for t in (e.get("top_values") or e.get("top_masked") or [])],
         ))
 
     dims = {d["dim"]: _build_dim(d) for d in spec["dims"]}

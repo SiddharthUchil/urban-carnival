@@ -15,11 +15,15 @@
 # MAGIC 3. Capture time-series shape (seasonality, volatility) for anomaly-model design.
 # MAGIC 4. Produce a machine-readable **synthesis spec** for generating synthetic data.
 # MAGIC
-# MAGIC **Privacy (ADR-0007).** This notebook NEVER prints raw values of sensitive columns
-# MAGIC (visitor IDs, IPs, cookies, geo_zip, user_agent, userid, ...). Sensitive columns are
-# MAGIC reported shape-only (null %, cardinality, length stats). Non-allowlisted values are
-# MAGIC masked as `<masked:xxxxxxxx>` tokens. URLs are query-stripped before any grouping.
-# MAGIC A final regex scrubber redacts anything resembling an email/IP/long ID in outputs.
+# MAGIC **Data visibility (ADR-0007 §5).** Business data profiles **raw and in full** — eVars,
+# MAGIC props, events, URLs, pagenames, campaigns, referrers. Comprehensive EDA needs real
+# MAGIC values, and this feed carries no person-level identifier (`cust_visid` wholly NULL,
+# MAGIC `userid` a single constant — ADR-0007 Context §2).
+# MAGIC
+# MAGIC The one exception is direct device/network identifiers (visitor IDs, cookies, IPs,
+# MAGIC geo_zip, user_agent), reported shape-only (null %, cardinality, length stats) — because
+# MAGIC their raw values carry no analytical signal, not because EDA is restricted. URL query
+# MAGIC strings are stripped (session tokens live there); paths and hosts print in full.
 # MAGIC
 # MAGIC **How to run.** Attach to a cluster (DBR 13+ recommended), review the widgets that
 # MAGIC appear at the top after running the CONFIG cell, then Run All. Each section prints a
@@ -68,60 +72,57 @@ RSID_FILTER    = dbutils.widgets.get("rsid_filter").strip().lower()
 URL_FILTER     = dbutils.widgets.get("url_filter").strip().lower()
 
 # ------------------------------------------------------- privacy constants ----
-# ADR-0007 / doc-11 §2 disposition table (24 profiler-flagged columns).
-# Rule here: SHAPE ONLY — null%, approx-distinct, length stats. Never values,
-# not even masked. Pre- and post- variants both listed defensively.
-SENSITIVE_COLS = {
-    # visitor/device identifiers -> pseudonymize (HMAC) in the pipeline
+# ADR-0007 §5 (analysis-time visibility). EDA runs inside the governed Databricks
+# workspace against a feed that carries NO person-level identifier: cust_visid /
+# post_cust_visid are wholly NULL and userid is a single constant account value
+# (cardinality 1) — confirmed with the data owner 2026-07-04, ADR-0007 Context §2.
+#
+# Default is therefore RAW: business dimensions (eVars, props, events, URLs,
+# pagenames, campaigns, referrers, search terms) profile at full fidelity. Masking
+# them to sha1 tokens destroyed the analytical signal without protecting a person —
+# prior runs emitted whole sections of `<masked:xxxxxxxx>` that nobody could read.
+#
+# The residual exception is direct device/network identifiers, reported SHAPE ONLY
+# (null %, cardinality, length stats). The reason is analytical, not bureaucratic:
+# their raw values carry no signal. What EDA needs from `mcvisid` is "412k distinct,
+# 0.2% null" — never a specific cookie value. Shape-only costs nothing here while
+# keeping re-identifiable values out of blocks that get copied out of the workspace.
+DIRECT_IDENTIFIERS = {
+    # visitor/device identifiers -> HMAC-pseudonymized in the pipeline (ADR-0007 §2)
     "mcvisid", "visid_high", "visid_low", "post_visid_high", "post_visid_low",
     "cust_visid", "post_cust_visid", "cookies", "post_cookies", "persistent_cookie",
-    # network addresses -> drop
+    # network addresses
     "ip", "ip2", "ipv6",
-    # fine geo -> generalize
-    "geo_zip", "post_zip", "zip",
-    # device fingerprint -> generalize
-    "user_agent", "accept_language",
-    # account/system -> drop
-    "userid", "username", "user_hash",
-    # personalization / social -> pseudonymize-or-drop per review
-    "post_tnt", "tnt", "socialaccountandappids",
+    # fine geo + device fingerprint — quasi-identifiers, re-identifying in combination
+    "geo_zip", "post_zip", "zip", "user_agent",
 }
-# Pattern net for anything the explicit list misses (belt and suspenders).
-SENSITIVE_PATTERNS = re.compile(
-    r"visid|cookie|^ip[v0-9]*$|user_agent|zip$|userid|username|user_hash|"
-    r"social|email|phone|password|token|guid|mcid|aamid",
-    re.IGNORECASE,
-)
 
 def is_sensitive(col_name):
-    c = col_name.lower()
-    return c in SENSITIVE_COLS or bool(SENSITIVE_PATTERNS.search(c))
+    """True only for direct/quasi identifiers. Everything else profiles raw.
 
-# Columns whose RAW values are allowlisted for printing (low-cardinality
-# technical dims / lookup IDs / public-site path segments).
-RAW_OK_DIMS = {
-    "geo_country", "geo_region", "post_geo_country", "post_geo_region",
-    "browser", "os", "connection_type", "language", "javascript",
-    "hit_source", "exclude_hit", "duplicate_purchase", "currency",
-    "visit_num", "visit_page_num", "new_visit", "hourly_visitor",
-    "daily_visitor", "weekly_visitor", "monthly_visitor", "quarterly_visitor",
-    "yearly_visitor", "ref_type", "post_page_event", "page_event",
-}
+    Deliberately an exact-match set, not a regex: the previous pattern net matched
+    `guid|token|mcid|aamid|zip$|social` and swept in business columns that were never
+    identifiers, which is a large part of why so much output came back masked.
+    """
+    return col_name.lower() in DIRECT_IDENTIFIERS
 
 # ------------------------------------------------------------ emit helpers ----
 RESULTS = {}   # section_id -> payload (drives S12 consolidation)
 SKIPPED = {}   # section_id -> reason
 
+# Last-resort net for values that should never appear in an analytics dimension at
+# all. Deliberately minimal now: the previous version also redacted any 10+ digit run
+# and any 24+ hex run, which silently destroyed hit counts, epoch timestamps, order
+# IDs and event codes — and truncated at 160 chars, cutting long URLs mid-path.
 _SCRUB_PATTERNS = [
     (re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"), "<redacted:email>"),
     (re.compile(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b"), "<redacted:ipv4>"),
-    (re.compile(r"\b[0-9a-fA-F]{24,}\b"), "<redacted:hexid>"),
-    (re.compile(r"\b\d{10,}\b"), "<redacted:longnum>"),
 ]
+MAX_EMIT_STR = 2000
 
 def _scrub_str(s):
-    if len(s) > 160:
-        s = s[:160] + "...<trunc>"
+    if len(s) > MAX_EMIT_STR:
+        s = s[:MAX_EMIT_STR] + "...<trunc>"
     for pat, repl in _SCRUB_PATTERNS:
         s = pat.sub(repl, s)
     return s
@@ -310,7 +311,7 @@ def ensure_frames():
     return DF, DF_W, DF_S
 
 print(f"Config OK. table={TABLE_FQN} window={WINDOW_MONTHS}mo fraction={SAMPLE_FRACTION} "
-      f"batch={COL_BATCH_SIZE} top_n={TOP_N} sensitive_cols={len(SENSITIVE_COLS)}")
+      f"batch={COL_BATCH_SIZE} top_n={TOP_N} shape_only_cols={len(DIRECT_IDENTIFIERS)}")
 print(f"Scope filter: rsid={RSID_FILTER or '(off)'} url_contains={URL_FILTER or '(off)'}")
 
 # COMMAND ----------
@@ -1083,8 +1084,13 @@ def s7_live_custom_dims():
             "len": {"p50": stats["len_p50"], "avg": stats["len_avg"], "max": stats["len_max"]},
             "looks_like_url": (stats["url_frac"] or 0) > 0.5,
             "free_text": (stats["len_avg"] or 0) > 80,
-            "top_masked": [{"m": mask(r[c]), "len": len(str(r[c])),
-                            "pct": round(100.0 * r["count"] / pop_rows, 2)} for r in top],
+            # Raw values: eVar/prop contents are business semantics (form steps, plan
+            # codes, tool names) and are the whole point of profiling custom dims.
+            # Identifier-shaped columns still fall back to shape-only.
+            "top": ([] if is_sensitive(c) else
+                    [{"v": str(r[c]), "len": len(str(r[c])),
+                      "pct": round(100.0 * r["count"] / pop_rows, 2)} for r in top]),
+            "mode": "shape_only (direct identifier)" if is_sensitive(c) else "raw",
         })
     emit("live_custom_dims", {"basis": "sample", "n_live": len(live_all), "n_core": n_core, "dims": out})
 
@@ -1246,26 +1252,26 @@ def s9_dimensions():
                    .orderBy(F.desc("count")).limit(TOP_N * (3 if is_url else 1)).collect())
         pop_rows = max(SAMPLE_ROWS * CENSUS[c]["pop_pct"] / 100.0, 1)
         if is_url:
-            shape_counts = {}
-            for r in top:
-                dom, depth, seg1 = url_shape(r[c])
-                key = f"{dom} | depth={depth} | {seg1}"
-                shape_counts[key] = shape_counts.get(key, 0) + r["count"]
-            top_vals = [{"v": k, "pct": round(100.0 * v / pop_rows, 2)}
-                        for k, v in sorted(shape_counts.items(), key=lambda kv: -kv[1])[:TOP_N]]
-            mode = "url_shape(domain|depth|seg1), query-stripped"
+            # Full query-stripped URL. The previous domain|depth|seg1 reduction
+            # collapsed every Canadian page into one bucket, which made the URL
+            # dimensions useless for scope work. Query strings stay stripped —
+            # they are the one part of a URL that carries session tokens.
+            top_vals = [{"v": strip_query(r[c]), "pct": round(100.0 * r["count"] / pop_rows, 2)}
+                        for r in top[:TOP_N]]
+            mode = "raw, query-stripped"
         elif c in ("pagename", "post_pagename"):
             top_vals = [{"v": strip_query(r[c]), "pct": round(100.0 * r["count"] / pop_rows, 2)}
                         for r in top[:TOP_N]]
             mode = "raw, query-stripped"
-        elif c in RAW_OK_DIMS and not is_sensitive(c):
+        elif is_sensitive(c):
+            # Direct/quasi identifier: cardinality and null rate are the analytical
+            # facts; individual values are not. See DIRECT_IDENTIFIERS above.
+            top_vals = []
+            mode = "shape_only (direct identifier)"
+        else:
             top_vals = [{"v": str(r[c]), "pct": round(100.0 * r["count"] / pop_rows, 2)}
                         for r in top[:TOP_N]]
-            mode = "raw (allowlisted)"
-        else:
-            top_vals = [{"v": mask(r[c]), "pct": round(100.0 * r["count"] / pop_rows, 2)}
-                        for r in top[:TOP_N]]
-            mode = "masked"
+            mode = "raw"
         out.append({"dim": c, "mode": mode,
                     "coverage_pct": CENSUS[c]["pop_pct"],
                     "apx_distinct": CENSUS[c]["apx_distinct"],
@@ -1444,7 +1450,7 @@ def s12_synthesis_spec():
                 "sensitive_shape_only": is_sensitive(col)}
         if col in live_dims:
             spec["len"] = live_dims[col].get("len")
-            spec["top_masked"] = live_dims[col].get("top_masked")
+            spec["top_values"] = live_dims[col].get("top")
         schema_spec.append(spec)
 
     dv = RESULTS.get("daily_volume", {})

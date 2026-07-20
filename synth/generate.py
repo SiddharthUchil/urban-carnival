@@ -105,8 +105,8 @@ def _dim_series(rng, dim, n):
 def _masked_series(rng, col: ColumnSpec, n):
     """Reproduce masked evar/prop values: published tokens at their pct, plus a
     length-matched synthetic tail to reach apx_distinct."""
-    toks = [t["m"] for t in col.top_masked]
-    masses = [max(0.0, t["pct"]) / 100.0 for t in col.top_masked]
+    toks = [t["v"] for t in col.top_values]
+    masses = [max(0.0, t["pct"]) / 100.0 for t in col.top_values]
     top_mass = sum(masses)
     if top_mass > 1.0:
         masses = [m / top_mass for m in masses]
@@ -114,7 +114,7 @@ def _masked_series(rng, col: ColumnSpec, n):
     n_tail = max(0, col.apx_distinct - len(toks))
     tail_mass = max(0.0, 1.0 - top_mass)
     if n_tail > 0 and tail_mass > 1e-9:
-        tlen = col.len_p50 or (col.top_masked[0]["len"] if col.top_masked else 8)
+        tlen = col.len_p50 or (col.top_values[0]["len"] if col.top_values else 8)
         tail_labels = [f"<syn:{col.col}:{i:05d}:{'x' * int(tlen)}>" for i in range(n_tail)]
         w = np.array([1.0 / (i + 1) for i in range(n_tail)])
         tail_probs = tail_mass * w / w.sum()
@@ -237,7 +237,7 @@ def generate_day(spec, day, hits, visits, visitors, rng, pool, ua_pool, row_offs
                 cols[name] = np.full(n, "1", dtype=object)
             else:
                 cols[name] = _dim_series(rng, spec.dims[name], n)
-        elif c.top_masked:
+        elif c.top_values:
             cols[name] = _masked_series(rng, c, n)
         elif name == "user_agent":
             cols[name] = ua_pool[rng.integers(0, len(ua_pool), size=n)]
