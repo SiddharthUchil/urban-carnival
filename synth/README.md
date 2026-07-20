@@ -1,7 +1,7 @@
 # Synthetic data generator + anomaly injection (GMAI-Pulse)
 
 Privacy-safe local replica of the GWAM Canada-Retirement Adobe hit table, built **only**
-from the EDA output (`gwam_databricks_eda_output.md`). Real data never leaves Databricks;
+from the EDA output (`synth/gwam_databricks_eda_output.md`). Real data never leaves Databricks;
 this dataset lets us prototype anomaly detection and score recall by anomaly type locally.
 
 Every value is synthetic. Sensitive columns are shape-only fakes; masked evar/prop values
@@ -11,7 +11,7 @@ postal codes, or URLs are ever emitted.
 ## Pipeline
 
 ```
-gwam_databricks_eda_output.md
+synth/gwam_databricks_eda_output.md
         │  extract_spec.py        (parse SHAREABLE blocks -> synth/spec/*.json)
         ▼
 synth/spec/*.json

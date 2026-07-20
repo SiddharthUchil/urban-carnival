@@ -48,7 +48,8 @@ SCOPE_URL_LIKE_EXCLUDE = [
 # detection. An explicit host list, NOT a %portal% pattern: most of these hosts don't
 # contain "portal", and FR "portail" wouldn't match it. Substring match also covers
 # nonprod subdomains (stage.portal.manulife.ca, ...). Confirmed by the 2026-07-20 URL
-# scope inventory run (eda/gwam_url_scope_inventory.ipynb); candidates NOT yet ruled on:
+# scope inventory run (doc-16 §1 D8; notebook retired, output in git history at 408de5a);
+# candidates NOT yet ruled on:
 # retirement.sponsor.manulife.com (sponsor login), manulifeplan.ca, epargnemanuvie.ca.
 SCOPE_LOGIN_HOST_EXCLUDE = [
     "%portal.manulife.ca%",       # member portal (Storefront), ~130M hits on manugrs
