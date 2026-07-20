@@ -19,10 +19,33 @@
 # MAGIC Every panel is an **aggregate** (counts / rates by time or by an allow-listed dimension).
 # MAGIC No visitor IDs, IPs, cookies, user-agents, or fine geo are ever read or displayed.
 # MAGIC
+# MAGIC ### Scope — both report suites
+# MAGIC `rsid` IN (`manugrs`, `manulifeglobalprod`) AND a URL matching the `url_scope_mode`
+# MAGIC include list — default `broad`: `%/group-retirement%`, `%/group-plans%`,
+# MAGIC `%/regimes-collectifs%`. Those patterns are language- AND domain-agnostic, so one list
+# MAGIC covers both suites (`manulifeim.com`, `manulife.com`) in EN and FR. Same contract as the
+# MAGIC EDA notebook.
+# MAGIC
+# MAGIC Two exclusions: `url_scope_exclude` (AEM authoring/staging, non-CA `/ph/`) and
+# MAGIC `login_host_exclude` — the six D8 member-auth hosts, dropped in every mode. That is an
+# MAGIC explicit host list, NOT a `%portal%` pattern: four of the six carry no "portal"
+# MAGIC substring (`id.manulife.ca` alone is 62.6M hits) and the FR spelling is "portail".
+# MAGIC URL matching uses the D4 blank-guarded `coalesce(page_url, post_page_url)`.
+# MAGIC
+# MAGIC Panels aggregate across both suites; `scope.rsid_breakdown` reports per-suite row
+# MAGIC counts and `traffic_ts.rows_by_rsid` carries the time series split by suite.
+# MAGIC
 # MAGIC ### How to run
-# MAGIC Attach to a cluster (DBR 13+; Plotly ships with DBR-ML). Run the **Config** cell, adjust the
-# MAGIC widgets that appear at the top, then Run All. Each chart cell is independent — re-run one
-# MAGIC after changing a widget. Colour palette is CVD-validated (dataviz skill, dark surface).
+# MAGIC Databricks → Workspace → Import → File → select this `.py` (it imports as a notebook —
+# MAGIC the file is in Databricks "source" format). Attach to a cluster (DBR 13+; Plotly ships
+# MAGIC with DBR-ML). Run the **Config** cell, adjust the widgets that appear at the top, then
+# MAGIC Run All. Each chart cell is independent — re-run one after changing a widget. Colour
+# MAGIC palette is CVD-validated (dataviz skill, dark surface).
+# MAGIC
+# MAGIC Each panel also prints a `===== BEGIN SHAREABLE: chart:<id> =====` block; copy those
+# MAGIC back verbatim (multi-part blocks reassemble by concatenation — paste every part). If a
+# MAGIC panel is empty, check the `scope` block first: 0 rows means the date range, geo filters,
+# MAGIC or `rsid_list` / `url_scope_*` widgets excluded everything.
 
 # COMMAND ----------
 
@@ -41,8 +64,14 @@ import plotly.io as pio
 
 # ---------------------------------------------------------------- widgets ----
 dbutils.widgets.text("table_fqn", "gwam_prod_catalog.inv_typed_common.adobe_hit_data", "1. Table (catalog.schema.table)")
-dbutils.widgets.text("rsid_filter", "manulifeglobalprod", "2. rsid filter (empty = off)")
-dbutils.widgets.text("url_filter", "manulife.com/ca/en/personal/group-plans/group-retirement", "3. URL contains filter (empty = off)")
+dbutils.widgets.text("rsid_list", "manugrs,manulifeglobalprod", "2. rsid list (comma-sep, empty = off)")
+dbutils.widgets.dropdown("url_scope_mode", "broad", ["broad", "en_only", "custom"], "3. URL scope mode")
+dbutils.widgets.text("url_scope_list", "%/group-retirement%,%/group-plans%,%/regimes-collectifs%", "3b. URL patterns for custom mode (SQL LIKE)")
+dbutils.widgets.text("url_scope_exclude", "%adobeaemcloud.com%,%/ph/%", "3c. URL patterns to exclude")
+dbutils.widgets.text("login_host_exclude",
+                     "%portal.manulife.ca%,%id.manulife.ca%,%grsmembers.manulife.com%,"
+                     "%gsrs1.manulife.com%,%viproom.manulife.com%,%portail.manuvie.ca%",
+                     "3d. Individual-login hosts to exclude (D8)")
 dbutils.widgets.text("start_date", "2026-02-01", "4. Start date (YYYY-MM-DD)")
 dbutils.widgets.text("end_date", "2026-07-07", "5. End date (YYYY-MM-DD)")
 dbutils.widgets.dropdown("geo_country", "ALL",
@@ -57,8 +86,21 @@ dbutils.widgets.dropdown("granularity", "daily", ["daily", "weekly"], "9. Time g
 dbutils.widgets.text("top_n", "12", "10. Top-N for dimension bars")
 
 TABLE_FQN   = dbutils.widgets.get("table_fqn").strip()
-RSID_FILTER = dbutils.widgets.get("rsid_filter").strip().lower()
-URL_FILTER  = dbutils.widgets.get("url_filter").strip().lower()
+def _csv(widget):
+    return [p.strip().lower() for p in dbutils.widgets.get(widget).split(",") if p.strip()]
+
+RSID_LIST      = _csv("rsid_list")
+URL_SCOPE_MODE = dbutils.widgets.get("url_scope_mode").strip().lower()
+URL_EXCLUDE    = _csv("url_scope_exclude")
+LOGIN_EXCLUDE  = _csv("login_host_exclude")
+
+# Same scope contract as the EDA notebook (doc-16 D5). `broad` is the default: the
+# three patterns are language- and domain-agnostic, so one list covers manugrs
+# (manulifeim.com) and manulifeglobalprod (manulife.com), EN and FR.
+URL_SCOPE_EN_ONLY = ["%manulife.com/ca/en/personal/group-plans/group-retirement%"]
+URL_SCOPE_BROAD   = ["%/group-retirement%", "%/group-plans%", "%/regimes-collectifs%"]
+URL_INCLUDE = {"en_only": URL_SCOPE_EN_ONLY,
+               "broad":   URL_SCOPE_BROAD}.get(URL_SCOPE_MODE, _csv("url_scope_list"))
 START_DATE  = dbutils.widgets.get("start_date").strip()
 END_DATE    = dbutils.widgets.get("end_date").strip()
 GEO_COUNTRY = dbutils.widgets.get("geo_country").strip().lower()
@@ -158,8 +200,9 @@ def share(chart_id, payload):
     print(f"===== END SHAREABLE: {sid} =====")
 
 print(f"table={TABLE_FQN}  tz={TIMEZONE}  granularity={GRANULARITY}")
-print(f"scope: rsid={RSID_FILTER or '(off)'}  url~{URL_FILTER or '(off)'}  "
-      f"country={GEO_COUNTRY}  regions={GEO_REGIONS or 'all'}  dates={START_DATE}..{END_DATE}")
+print(f"scope: rsid={RSID_LIST or '(off)'}  url_mode={URL_SCOPE_MODE}  "
+      f"include={URL_INCLUDE or '(off)'}  login_hosts_excluded={len(LOGIN_EXCLUDE)}")
+print(f"       country={GEO_COUNTRY}  regions={GEO_REGIONS or 'all'}  dates={START_DATE}..{END_DATE}")
 
 # COMMAND ----------
 
@@ -173,14 +216,42 @@ print(f"scope: rsid={RSID_FILTER or '(off)'}  url~{URL_FILTER or '(off)'}  "
 _raw = spark.table(TABLE_FQN)
 _cols = set(_raw.columns)
 
-# --- scope: rsid == filter AND page URL contains filter (each optional) ---
+# --- scope: rsid IN list AND URL matches include list, minus both exclude lists ---
+def _like_any(colexpr, patterns):
+    """Null-safe OR of SQL LIKE patterns; None when `patterns` is empty. Blank/NULL
+    input yields False, never NULL, so ~_like_any(...) keeps rather than drops."""
+    if not patterns:
+        return None
+    m = None
+    for p in patterns:
+        m = colexpr.like(p) if m is None else (m | colexpr.like(p))
+    return F.coalesce(m, F.lit(False))
+
 _scope = None
-if RSID_FILTER and "rsid" in _cols:
-    _scope = (F.lower(F.trim(F.col("rsid").cast("string"))) == F.lit(RSID_FILTER))
-_url_col = "post_page_url" if "post_page_url" in _cols else ("page_url" if "page_url" in _cols else None)
-if URL_FILTER and _url_col:
-    _u = F.lower(F.col(_url_col).cast("string")).contains(URL_FILTER)
-    _scope = _u if _scope is None else (_scope & _u)
+if RSID_LIST and "rsid" in _cols:
+    _scope = F.lower(F.trim(F.col("rsid").cast("string"))).isin(RSID_LIST)
+
+# D4: blank-guarded coalesce(page_url, post_page_url) — page_url FIRST. This notebook
+# used to prefer post_page_url, which is blank 36-46% of the time vs <=0.013% for
+# page_url. Adobe writes empty strings, not NULLs, so blanks are mapped to NULL before
+# the coalesce or it would never fall through.
+_url_cols = [c for c in ("page_url", "post_page_url") if c in _cols]
+_url_col = _url_cols[0] if _url_cols else None
+_u = None
+if _url_cols:
+    _u = F.lower(F.coalesce(*[F.when(F.trim(F.col(c).cast("string")) != F.lit(""),
+                                     F.trim(F.col(c).cast("string"))) for c in _url_cols],
+                            F.lit("")))
+    _inc = _like_any(_u, URL_INCLUDE)
+    if _inc is not None:
+        _scope = _inc if _scope is None else (_scope & _inc)
+    # URL_EXCLUDE = AEM/staging + non-CA paths. LOGIN_EXCLUDE = the six D8 member-auth
+    # hosts, subtracted in every mode — an explicit host list, not a %portal% pattern,
+    # since four of the six carry no "portal" substring and FR uses "portail".
+    for _pats in (URL_EXCLUDE, LOGIN_EXCLUDE):
+        _m = _like_any(_u, _pats)
+        if _m is not None:
+            _scope = ~_m if _scope is None else (_scope & ~_m)
 base_df = _raw.filter(_scope) if _scope is not None else _raw
 
 # --- date range on the reviewer-local calendar date ---
@@ -199,12 +270,27 @@ print(f"scoped rows in view: {_scoped_rows:,}")
 if _scoped_rows == 0:
     print("!! 0 rows — widen the date range / clear the geo filters / check the scope widgets.")
 
-share("scope", {"table": TABLE_FQN, "rsid_filter": RSID_FILTER or None,
-                "url_filter": URL_FILTER or None, "start_date": START_DATE,
+# Per-suite counts: a suite at 0 means every chart below is silently single-suite.
+_rsid_breakdown = []
+if "rsid" in _cols:
+    _rsid_breakdown = [{"rsid": r["rsid"], "rows": r["count"]}
+                       for r in (base_df.groupBy("rsid").count()
+                                        .orderBy(F.desc("count")).collect())]
+    _missing = [s for s in RSID_LIST
+                if s not in {str(b["rsid"] or "").lower() for b in _rsid_breakdown}]
+    if _missing:
+        print(f"!! 0 rows for rsid(s): {_missing} — charts below cover only the rest.")
+
+share("scope", {"table": TABLE_FQN, "rsid_list": RSID_LIST or None,
+                "url_scope_mode": URL_SCOPE_MODE, "url_include": URL_INCLUDE or None,
+                "url_exclude": URL_EXCLUDE or None,
+                "login_host_exclude": LOGIN_EXCLUDE or None,
+                "url_cols_coalesced": _url_cols or None,
+                "start_date": START_DATE,
                 "end_date": END_DATE, "geo_country": GEO_COUNTRY,
                 "geo_regions": GEO_REGIONS or None, "timezone": TIMEZONE,
                 "granularity": GRANULARITY, "top_n": TOP_N,
-                "scoped_rows": _scoped_rows})
+                "scoped_rows": _scoped_rows, "rsid_breakdown": _rsid_breakdown})
 
 # COMMAND ----------
 
@@ -227,8 +313,18 @@ if vis_hi and vis_lo and "visit_num" in _cols:
 _ts = (base_df.groupBy(trunc_period(local_ts()).alias("period")).agg(*_aggs)
               .orderBy("period").toPandas())
 
+# Per-suite series alongside the combined one. The plot below draws the combined
+# view; this keeps the suites separable in the shared payload, where a shift in one
+# suite would otherwise be diluted by the other's volume.
+_ts_rsid = None
+if "rsid" in _cols and len(_rsid_breakdown) > 1:
+    _ts_rsid = (base_df.groupBy(trunc_period(local_ts()).alias("period"), F.col("rsid"))
+                       .agg(*_aggs).orderBy("period", "rsid").toPandas())
+
 share("traffic_ts", {"tz": TIMEZONE, "granularity": GRANULARITY,
-                     "rows": _records(_ts, date_cols=["period"])})
+                     "rows": _records(_ts, date_cols=["period"]),
+                     "rows_by_rsid": (_records(_ts_rsid, date_cols=["period"])
+                                      if _ts_rsid is not None else None)})
 
 fig = go.Figure()
 _series = [("hits", CATEGORICAL[0]), ("visits", CATEGORICAL[1]), ("visitors", CATEGORICAL[3])]

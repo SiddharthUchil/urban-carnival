@@ -1,8 +1,13 @@
 # 12 — GWAM Canada Retirement EDA: Findings & Analysis
 
 > **Status:** analysis of record for the exploratory profiling in
-> [`gwam_canada_retirement_eda.ipynb`](../../gwam_canada_retirement_eda.ipynb)
-> (paired source: [`eda/gwam_canada_retirement_eda.py`](../../eda/gwam_canada_retirement_eda.py)).
+> `gwam_canada_retirement_eda.ipynb`
+> (live source: [`eda/gwam_canada_retirement_eda.py`](../../eda/gwam_canada_retirement_eda.py)).
+> ⚠️ **The `.ipynb` was removed 2026-07-20** — `eda/` is now exactly two `.py` files (doc-16 D1).
+> Recover the run record with `git show <sha-before-removal>:eda/gwam_canada_retirement_eda.ipynb`.
+> Figures below describe the 2026-07-10 single-suite, English-only run; the notebook has since
+> moved to dual-rsid (`manugrs` + `manulifeglobalprod`) `broad` URL scope, so a re-run will
+> **not** reproduce them exactly.
 > **Data run:** production, `gwam_prod_catalog` (confirmed 2026‑07‑10).
 > **Grain of record:** daily. **Privacy regime:** ADR‑0007 (shape‑only for sensitive columns).
 > **Companion:** interactive charts in [`eda/gwam_canada_retirement_charts.py`](../../eda/gwam_canada_retirement_charts.py).

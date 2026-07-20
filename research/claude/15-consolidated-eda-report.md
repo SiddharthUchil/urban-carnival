@@ -7,9 +7,14 @@
 >
 > **Scope.** Two report suites in one source table:
 > the **shipped** suite `manulifeglobalprod` (new site, profiled in
-> [`eda/gwam_canada_retirement_eda.ipynb`](../../eda/gwam_canada_retirement_eda.ipynb)) and the
+> `eda/gwam_canada_retirement_eda.ipynb`) and the
 > **legacy** suite `manugrs` (old site, profiled in `eda/gwam_canada_retirement_eda_manugrs.ipynb`
 > — notebook retired 2026-07-20, recoverable at `git show 408de5a:<path>`).
+>
+> ⚠️ **Both `.ipynb` files were removed 2026-07-20.** `eda/` is now exactly two `.py` files
+> (doc-16 D1), and the surviving profiler covers **both suites in a single run** via the
+> `rsid_list` widget — the one-notebook-per-suite split this report describes no longer
+> exists. Per-suite figures now come from `window_frame.filter.rsid_breakdown` within one run.
 >
 > ⚠️ **Superseded in part (2026-07-20):** "legacy" describes the *site*, not the suite. `manugrs`
 > is still live — 320,304,305 hits through 2026-07-19, concurrent with `manulifeglobalprod`.
@@ -424,6 +429,9 @@ the business signs off scope**, because flipping either re-baselines every KPI.
   detail) · [`14-manugrs-cross-suite-analysis.md`](14-manugrs-cross-suite-analysis.md) (legacy /
   cross-suite) · [`10-data-profile-alignment.md`](10-data-profile-alignment.md) (governance) ·
   [`11-privacy-identity-governance.md`](11-privacy-identity-governance.md) (privacy). Source
-  notebooks: [`eda/gwam_canada_retirement_eda.ipynb`](../../eda/gwam_canada_retirement_eda.ipynb),
-  `eda/gwam_canada_retirement_eda_manugrs.ipynb` (retired 2026-07-20, at `408de5a`),
-  charts [`eda/gwam_canada_retirement_charts.ipynb`](../../eda/gwam_canada_retirement_charts.ipynb).
+  notebooks (all three `.ipynb` retired 2026-07-20 — recover via `git show <sha>:<path>`):
+  `eda/gwam_canada_retirement_eda.ipynb`,
+  `eda/gwam_canada_retirement_eda_manugrs.ipynb` (at `408de5a`),
+  charts `eda/gwam_canada_retirement_charts.ipynb`. Live sources:
+  [`eda/gwam_canada_retirement_eda.py`](../../eda/gwam_canada_retirement_eda.py) and
+  [`eda/gwam_canada_retirement_charts.py`](../../eda/gwam_canada_retirement_charts.py).

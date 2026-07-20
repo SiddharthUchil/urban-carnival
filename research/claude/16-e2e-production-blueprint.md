@@ -18,7 +18,7 @@
    - The large `.ipynb` files can NOT be opened with Read/NotebookEdit (too big). Edit the paired `.py` export and re-splice, or use a scripted JSON splice on the `.ipynb`. When splicing cells by key, watch for **duplicate-key collisions** — always regenerate cell ids.
    - Notebook *output* can self-truncate: a Databricks stdout cap silently dropped 22 of 200 rollup rows mid-payload in the inventory run, injecting `*** WARNING: max output size exceeded ***` between JSON fragments. When a section's payload may be large, lower its top-N or write Delta rather than trusting printed output.
    - `jupyter`/`nbformat` are **not installed** in `.venv`. To export a notebook, either install them or parse the `.ipynb` JSON with stdlib and emit the repo's Databricks format (`# Databricks notebook source`, `# COMMAND ----------`, `# MAGIC %md`).
-6. **Retired notebooks live in git history, not on disk.** `gwam_url_scope_inventory.*` and `gwam_canada_retirement_eda_manugrs.ipynb` were removed at `8ac2551`; their last content (including the full inventory run output) is at **`408de5a`**. Recover with `git show 408de5a:<path>` — do not recreate them.
+6. **Retired notebooks live in git history, not on disk.** `gwam_url_scope_inventory.*` and `gwam_canada_retirement_eda_manugrs.ipynb` were removed at `8ac2551`; their last content (including the full inventory run output) is at **`408de5a`**. A second sweep on 2026-07-20 removed `gwam_canada_retirement_eda_manugrs.py`, both paired `.ipynb` run records, and `eda/README.md` — their last content is the commit immediately before that sweep. Recover with `git show <sha>:<path>` — do not recreate them. The `.ipynb` files carried embedded run outputs (438KB / 289KB); that is the only place those particular run results existed.
 
 ---
 
@@ -26,7 +26,7 @@
 
 | ID | Decision | Detail |
 |----|----------|--------|
-| **D1** | **Exactly 2 EDA notebooks** | `eda/gwam_canada_retirement_eda.ipynb` (profiler) + `eda/gwam_canada_retirement_charts.ipynb` (interactive charts). Both cover **both rsids** (`manugrs` + `manulifeglobalprod`) and the full URL scope. All other EDA notebooks are retired/archived (§4.6). |
+| **D1** | **Exactly 2 EDA files** | `eda/gwam_canada_retirement_eda.py` (profiler) + `eda/gwam_canada_retirement_charts.py` (interactive charts) — **`.py` only, no paired `.ipynb`, no README**. Both cover **both rsids** (`manugrs` + `manulifeglobalprod`) and the full URL scope, via `rsid_list` / `url_scope_*` widgets. Run instructions live in each file's header cell. Everything else is retired to git history (§0.6). |
 | **D2** | **No masking — full data visibility** | All masking/redaction is removed: `mask()`, `RAW_OK_DIMS` gating, sha1 self-redaction, identity suppression. Analysts and agents see data as-is, at all times, to get a complete picture. ADR-0007 is being retired by a separate agent; do **not** re-introduce masking helpers. Exports that leave the company still follow corporate data-handling policy. |
 | **D3** | **URL scope is data-driven and widget-editable** ✅ **closed 2026-07-20** | The dual-rsid full-history inventory ran 2026-07-20 (output at `408de5a`). Seeded `url_scope_list` default = `%/group-retirement%`, `%/group-plans%`, `%/regimes-collectifs%` — already language-agnostic, so **no FR-specific patterns are needed**: it covers `manulifeim.com/group-retirement/ca/fr/*` and `/ca/fr/particuliers/regimes-collectifs/retraite-collective`. From here scope changes are made **only via widgets**, never by editing code. Key figures in §2. |
 | **D4** | **Coalesce everywhere — `post_page_url` alone is not a scope column** | *Rewritten 2026-07-20; the previous D4 was incoherent — it avoided `post_page_url` for breakdowns because it is blank, then filtered rows on it.* Row filtering **and** breakdowns both use `coalesce(page_url, post_page_url)`. The inventory measured `post_page_url` blank at **36.41%** (manulifeglobalprod) / **45.75%** (manugrs) vs **≤0.013%** for `page_url`. One shared helper (§4.5), used everywhere. **Last tracked violation:** [01_bronze_ingest.py:69](../../databricks/src/01_bronze_ingest.py) still does `F.col("post_page_url").like(SCOPE_URL_LIKE)` in `en_only` mode. See §5.2 for the measurement gate before changing it. |
@@ -138,13 +138,15 @@ Per this spec the URL-bearing variables are **eVar107 (+prop52)** full page URL 
 
 ```
 eda/
-├── gwam_canada_retirement_eda.ipynb     ← unified profiler, BOTH rsids, widget-driven
-├── gwam_canada_retirement_eda.py        ← paired export (source of truth for review/diff)
-├── gwam_canada_retirement_charts.ipynb  ← unified interactive charts, BOTH rsids, widget-driven
-├── gwam_canada_retirement_charts.py     ← paired export
-├── gwam_canada_retirement_eda_manugrs.py ← export-only reference for the D1 port; delete once ported
-└── README.md
+├── gwam_canada_retirement_eda.py        ← unified profiler, BOTH rsids, widget-driven
+└── gwam_canada_retirement_charts.py     ← unified interactive charts, BOTH rsids, widget-driven
 ```
+
+**Two files, `.py` only.** The `.py` *is* the artifact: Databricks imports it as a notebook
+("source" format). The paired `.ipynb` run records, the `_manugrs.py` snapshot, and
+`README.md` were removed — the README's run procedure now lives in each notebook's own
+header cell, so the instructions travel with the file you import. Recover any of them from
+git history (§0.6).
 
 **Reached 2026-07-20** — `eda/` now holds exactly two runnable notebooks. There is **no `archive/` directory**: retired notebooks were removed at `8ac2551` and git history is the archive (§0.6). Every future analysis need is met by adding a widget value or a section — never a new notebook.
 
@@ -192,17 +194,17 @@ Notebooks import it via the existing `_bootstrap`-shim pattern used by `databric
 
 ### 4.6 Consolidation work package — **this is the next wave**
 
-Steps 0, 5 and 7 are **done** (2026-07-20); 1–4 and 6 remain and are the immediate next implementation task.
+Steps 0, 1, 3, 5, 6 and 7 are **done** (2026-07-20); 2 and 4 remain.
 
 0. ~~Export the manugrs notebook~~ — **done** (`408de5a`, `eda/gwam_canada_retirement_eda_manugrs.py`). `jupyter`/`nbformat` are not installed; that export came from a stdlib JSON parse (§0.5).
-1. **Port manugrs-specific logic** — diff `gwam_canada_retirement_eda_manugrs.py` against `gwam_canada_retirement_eda.py`; move legacy event ids and the 2024-01 → 2026-07 date coverage into rsid-conditional paths of the unified notebook. Delete the manugrs `.py` once ported. ⚠️ Its header still describes a suite that ends at the cutover — that framing is wrong (D7); the suite is live.
-2. **Create `eda/_gwam_common.py`** (§4.5); refactor both `.py` exports to use it.
-3. **`rsid_filter` → `rsid_list` multiselect**; wrap scope resolution and section outputs in an rsid loop (union with an `rsid` label column for cross-suite comparison — reuse doc-14's framings).
+1. ~~Port manugrs-specific logic~~ — **nothing to port; file deleted.** ⚠️ **This step rested on a false premise.** `_manugrs.py` was never a suite variant — it was an *older snapshot of the same notebook*. Verified 2026-07-20: its `rsid_filter` default was `manulifeglobalprod` (not `manugrs`); `legacy` appeared 0× in both files; it held 0 hardcoded date literals; its scope helpers were byte-identical; and the unified notebook was a strict superset (it alone has S4c). The "legacy event ids" and "2024-01 → 2026-07 date coverage" this step described **do not exist in code** — both suites derive event ids at runtime from `post_event_list`, and the date range is a property of the data, not the notebook. Do not go looking for them again.
+2. **Create `eda/_gwam_common.py`** (§4.5); refactor both `.py` files to use it. ⚠️ Now the *only* duplication left: `_csv()`, the `URL_SCOPE_*` constants, and `like_any()`/`_like_any()` are copy-pasted across the two notebooks. Databricks `%run` or a workspace-file import is required — a plain `import` will not resolve.
+3. ~~`rsid_filter` → `rsid_list`~~ — **done.** Both notebooks take `rsid_list` (default `manugrs,manulifeglobalprod`) plus `url_scope_mode` / `url_scope_list` / `url_scope_exclude` / `login_host_exclude`. Implemented as a single `isin` scope over both suites rather than a per-rsid loop-and-union: sections stay untouched, and cross-suite comparison comes from `window_frame.filter.rsid_breakdown` (per-suite row counts, warns when a suite contributes 0) and `chart:traffic_ts.rows_by_rsid`. A full per-section rsid facet is still open if the breakdown proves insufficient.
 4. **Finish masking removal (D2)** — partially done. `RAW_OK_DIMS`/`SENSITIVE_COLS`/`url_shape()` are gone, but `mask()` survives at [gwam_canada_retirement_eda.py:170](../../eda/gwam_canada_retirement_eda.py) and stale masking prose remains around lines 80-107, 1043, 1536. Note `synth/` still consumes `<masked:...>` tokens from the committed spec — check `synth/spec/*.json` before removing the token format itself.
 5. ~~Seed `url_scope_list` from the inventory~~ — **done** (D3, §4.2).
-6. **Apply the same widget contract to the charts notebook.**
-7. ~~Retire the extra notebooks~~ — **done** (`8ac2551`). `git rm`, not an `archive/` folder; history is the archive.
-8. **Verify:** both notebooks run end-to-end on Databricks with defaults (both rsids); manifest completeness check passes; outputs contain rows for BOTH rsids; `grep -rn "mask(\|RAW_OK_DIMS" eda/*.py` returns nothing; `git ls-files 'eda/*.ipynb'` returns exactly 2.
+6. ~~Apply the same widget contract to the charts notebook~~ — **done.** Also fixed a previously untracked D4 violation there: it preferred `post_page_url` over `page_url` (blank 36-46% vs ≤0.013%), now the blank-guarded coalesce.
+7. ~~Retire the extra notebooks~~ — **done** (`8ac2551`, extended 2026-07-20). `git rm`, not an `archive/` folder; history is the archive.
+8. **Verify:** both notebooks run end-to-end on Databricks with defaults (both rsids); manifest completeness check passes; `window_frame.filter.rsid_breakdown` shows a **non-zero row count for each** of `manugrs` and `manulifeglobalprod`; `grep -rn "mask(\|RAW_OK_DIMS" eda/*.py` returns nothing; `git ls-files eda/` returns **exactly 2 files, both `.py`**.
 
 ---
 

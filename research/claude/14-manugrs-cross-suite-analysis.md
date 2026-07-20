@@ -5,7 +5,10 @@
 > recover with `git show 408de5a:eda/gwam_canada_retirement_eda_manugrs.ipynb`),
 > compared against the shipped `manulifeglobalprod` run analysed in
 > [`12-eda-findings-analysis.md`](12-eda-findings-analysis.md)
-> (notebook [`eda/gwam_canada_retirement_eda.ipynb`](../../eda/gwam_canada_retirement_eda.ipynb)).
+> (notebook `eda/gwam_canada_retirement_eda.ipynb`, also removed 2026‑07‑20 — `eda/` is now
+> exactly two `.py` files per doc-16 D1, and the surviving profiler covers **both** suites in
+> a single run, so this doc's two-notebook cross-suite method is superseded by one `rsid_list`
+> run plus `window_frame.filter.rsid_breakdown`).
 > **Data run:** production, `gwam_prod_catalog` — `manugrs` run 2026‑07‑10, independently
 > **re‑run 2026‑07‑13** (same widgets; all exact figures reproduced); `manulifeglobalprod`
 > re‑run **2026‑07‑12** (adds S4c; manifest verified 16/16 on byte‑length and sha1).

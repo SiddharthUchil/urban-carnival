@@ -6,10 +6,23 @@
 # MAGIC (`gwam_prod_catalog.inv_typed_common.adobe_hit_data`, provisional) to:
 # MAGIC
 # MAGIC **Scope.** The table holds ALL GWAM Adobe data. CA Retirement is the subset with
-# MAGIC `rsid = 'manulifeglobalprod'` AND page URL containing
-# MAGIC `manulife.com/ca/en/personal/group-plans/group-retirement` (both are widgets).
-# MAGIC All profiling sections (S4–S11) and the synthesis spec describe this subset;
-# MAGIC S3 reports total-table vs subset daily volume side by side.
+# MAGIC `rsid` IN (`manugrs`, `manulifeglobalprod`) AND a URL matching the `url_scope_mode`
+# MAGIC include list — default `broad`: `%/group-retirement%`, `%/group-plans%`,
+# MAGIC `%/regimes-collectifs%`. Those patterns are language- AND domain-agnostic, so one
+# MAGIC list covers both suites (`manulifeim.com` and `manulife.com`) in EN and FR.
+# MAGIC
+# MAGIC Two exclusions apply. `url_scope_exclude` drops AEM authoring/staging hosts and
+# MAGIC non-CA `/ph/` paths. `login_host_exclude` drops the six D8 individual-login hosts
+# MAGIC (member/auth portals) and is subtracted in EVERY mode — it is an explicit host list,
+# MAGIC NOT a `%portal%` pattern, because four of the six carry no "portal" substring
+# MAGIC (`id.manulife.ca` alone is 62.6M hits) and the FR spelling is "portail".
+# MAGIC
+# MAGIC URL matching uses the D4 blank-guarded `coalesce(page_url, post_page_url)`:
+# MAGIC `post_page_url` is blank 36-46% of the time vs <=0.013% for `page_url`, and Adobe
+# MAGIC writes empty strings rather than NULLs, so blanks are mapped to NULL before the
+# MAGIC coalesce. All of the above are widgets. All profiling sections (S4–S11) and the
+# MAGIC synthesis spec describe this subset; S3 reports total-table vs subset daily volume
+# MAGIC side by side, and `window_frame.filter.rsid_breakdown` gives per-suite row counts.
 # MAGIC 1. Fill evidence gaps: volume, history depth, load cadence, schema population census.
 # MAGIC 2. Discover real metric candidates (post_event_list event IDs, live eVars/props).
 # MAGIC 3. Capture time-series shape (seasonality, volatility) for anomaly-model design.
@@ -25,10 +38,29 @@
 # MAGIC their raw values carry no analytical signal, not because EDA is restricted. URL query
 # MAGIC strings are stripped (session tokens live there); paths and hosts print in full.
 # MAGIC
-# MAGIC **How to run.** Attach to a cluster (DBR 13+ recommended), review the widgets that
-# MAGIC appear at the top after running the CONFIG cell, then Run All. Each section prints a
-# MAGIC `===== BEGIN SHAREABLE: <id> =====` block — copy those blocks back. Sections are
-# MAGIC independent: a failure prints `SKIPPED` and the run continues.
+# MAGIC **How to run.** Databricks → Workspace → Import → File → select this `.py` (it
+# MAGIC imports as a notebook — the file is in Databricks "source" format). Attach to any
+# MAGIC cluster with Unity Catalog access (DBR 13+ recommended); a small cluster is fine,
+# MAGIC since the heavy sections run on a 5% sample. Run the **S0 config cell** once so the
+# MAGIC widgets appear, then **Run All**. Expect S1/S2 in seconds, S3 as the one full-table
+# MAGIC scan (minutes), S5–S11 on the sample, S8 two exact passes over the window.
+# MAGIC
+# MAGIC **What to paste back.** Each section prints a
+# MAGIC `===== BEGIN SHAREABLE: <id> =====` block — copy those verbatim. Multi-part blocks
+# MAGIC (`part 1 of N`) reassemble by concatenation, so paste every part. Priority order if
+# MAGIC splitting across messages: (1) `synthesis_spec`; (2) `ts_daily`, `ts_events`,
+# MAGIC `ts_profiles`; (3) `event_decode`, `live_custom_dims`, `population_census`;
+# MAGIC (4) `daily_volume`, `delta_meta`; (5) `dim_candidates`, `dq_baseline`,
+# MAGIC `identity_evidence`, `uc_discovery`, `window_frame`.
+# MAGIC
+# MAGIC **If something goes wrong.** Sections are independent: a failure prints
+# MAGIC `===== SKIPPED: <id> | <reason> =====` and the run continues — paste SKIPPED lines
+# MAGIC back too. If everything downstream is empty the scope filter matched 0 rows: check
+# MAGIC `window_frame.filter.top_rsids` for the real rsid values/casing and
+# MAGIC `window_frame.filter.rsid_breakdown` for per-suite counts, then adjust the
+# MAGIC `rsid_list` / `url_scope_*` widgets and re-run from S3. Too slow on a small cluster?
+# MAGIC Lower `sample_fraction` to 0.01 and/or `window_months` to 6 and re-run from S4
+# MAGIC (sections rebuild their frames).
 
 # COMMAND ----------
 
@@ -56,8 +88,14 @@ dbutils.widgets.text("hourly_days", "35", "6. Days for hourly profile")
 dbutils.widgets.text("max_csv_lines", "450", "7. Max CSV lines per shareable block")
 dbutils.widgets.text("top_events_k", "6", "8. Top-K events for daily series")
 dbutils.widgets.text("cache_sample", "false", "9. Persist sample df (true/false)")
-dbutils.widgets.text("rsid_filter", "manulifeglobalprod", "10. rsid filter (empty = off)")
-dbutils.widgets.text("url_filter", "manulife.com/ca/en/personal/group-plans/group-retirement", "11. URL contains filter (empty = off)")
+dbutils.widgets.text("rsid_list", "manugrs,manulifeglobalprod", "10. rsid list (comma-sep, empty = off)")
+dbutils.widgets.dropdown("url_scope_mode", "broad", ["broad", "en_only", "custom"], "11. URL scope mode")
+dbutils.widgets.text("url_scope_list", "%/group-retirement%,%/group-plans%,%/regimes-collectifs%", "12. URL patterns for custom mode (SQL LIKE)")
+dbutils.widgets.text("url_scope_exclude", "%adobeaemcloud.com%,%/ph/%", "13. URL patterns to exclude")
+dbutils.widgets.text("login_host_exclude",
+                     "%portal.manulife.ca%,%id.manulife.ca%,%grsmembers.manulife.com%,"
+                     "%gsrs1.manulife.com%,%viproom.manulife.com%,%portail.manuvie.ca%",
+                     "14. Individual-login hosts to exclude (D8)")
 
 TABLE_FQN      = dbutils.widgets.get("table_fqn").strip()
 WINDOW_MONTHS  = int(dbutils.widgets.get("window_months"))
@@ -68,8 +106,22 @@ HOURLY_DAYS    = int(dbutils.widgets.get("hourly_days"))
 MAX_CSV_LINES  = int(dbutils.widgets.get("max_csv_lines"))
 TOP_EVENTS_K   = int(dbutils.widgets.get("top_events_k"))
 CACHE_SAMPLE   = dbutils.widgets.get("cache_sample").strip().lower() == "true"
-RSID_FILTER    = dbutils.widgets.get("rsid_filter").strip().lower()
-URL_FILTER     = dbutils.widgets.get("url_filter").strip().lower()
+def _csv(widget):
+    return [p.strip().lower() for p in dbutils.widgets.get(widget).split(",") if p.strip()]
+
+RSID_LIST      = _csv("rsid_list")
+URL_SCOPE_MODE = dbutils.widgets.get("url_scope_mode").strip().lower()
+URL_EXCLUDE    = _csv("url_scope_exclude")
+LOGIN_EXCLUDE  = _csv("login_host_exclude")
+
+# Scope modes (doc-16 D5). `broad` is the EDA default: the three patterns are both
+# language- and domain-agnostic, so one list covers manugrs (manulifeim.com) and
+# manulifeglobalprod (manulife.com), EN and FR. `en_only` mirrors what the bronze
+# pipeline currently ingests, for like-for-like comparison.
+URL_SCOPE_EN_ONLY = ["%manulife.com/ca/en/personal/group-plans/group-retirement%"]
+URL_SCOPE_BROAD   = ["%/group-retirement%", "%/group-plans%", "%/regimes-collectifs%"]
+URL_INCLUDE = {"en_only": URL_SCOPE_EN_ONLY,
+               "broad":   URL_SCOPE_BROAD}.get(URL_SCOPE_MODE, _csv("url_scope_list"))
 
 # ------------------------------------------------------- privacy constants ----
 # ADR-0007 §5 (analysis-time visibility). EDA runs inside the governed Databricks
@@ -225,40 +277,96 @@ def pick_col(df, *candidates):
 RSID_COL = None   # report-suite column
 URL_COL  = None   # page-URL column
 
+URL_COLS = None   # page-URL columns present, in D4 coalesce order
+
 def _resolve_scope_cols(df):
-    global RSID_COL, URL_COL
+    global RSID_COL, URL_COL, URL_COLS
     RSID_COL = pick_col(df, "rsid", "report_suite", "reportsuite", "reportsuiteid", "post_rsid")
-    URL_COL  = pick_col(df, "post_page_url", "page_url")
+    # D4: page_url FIRST. post_page_url is blank 36.41% (manulifeglobalprod) /
+    # 45.75% (manugrs) of the time vs <=0.013% for page_url, so preferring
+    # post_page_url — as this notebook used to — silently drops ~40% of rows.
+    have = set(df.columns)
+    URL_COLS = [c for c in ("page_url", "post_page_url") if c in have]
+    URL_COL  = URL_COLS[0] if URL_COLS else None
+
+def like_any(colexpr, patterns):
+    """Null-safe OR of SQL LIKE patterns. Returns None when `patterns` is empty.
+
+    Blank/NULL input yields False, never NULL, so `~like_any(...)` stays
+    well-defined — a NULL there would silently drop the row instead of keeping it.
+    """
+    if not patterns:
+        return None
+    m = None
+    for p in patterns:
+        m = colexpr.like(p) if m is None else (m | colexpr.like(p))
+    return F.coalesce(m, F.lit(False))
+
+def url_expr(df):
+    """D4 blank-guarded coalesce(page_url, post_page_url), lowercased.
+
+    Adobe writes empty strings, not NULLs, so a plain coalesce() returns "" from
+    page_url and never falls through to post_page_url. Map blank -> NULL first,
+    then coalesce, then land on "" so the NOT LIKE exclusions stay well-defined
+    (a NULL would make ~like(...) NULL and silently drop the row).
+    """
+    if URL_COLS is None:
+        _resolve_scope_cols(df)
+    if not URL_COLS:
+        return None
+    parts = []
+    for c in URL_COLS:
+        t = F.trim(F.col(c).cast("string"))
+        parts.append(F.when(t != F.lit(""), t))
+    return F.lower(F.coalesce(*parts, F.lit("")))
 
 def scope_condition(df):
     """CA-Retirement subset selector. Returns (Column|None, meta).
 
-    rsid == RSID_FILTER (case-insensitive) AND page URL CONTAINS URL_FILTER.
-    Either widget empty -> that condition is dropped. Missing schema column ->
-    that condition is dropped and flagged in meta (so the run doesn't silently
-    profile the wrong population). NOTE: the URL 'contains' test excludes hits
-    with a blank page_url; that share is measured in S4 filter diagnostics.
+    rsid IN RSID_LIST (case-insensitive) AND the D4 coalesced URL matches any
+    URL_INCLUDE pattern AND matches none of URL_EXCLUDE AND none of the D8
+    individual-login hosts. Empty widget -> that condition is dropped. Missing
+    schema column -> dropped and flagged in meta, so the run cannot silently
+    profile the wrong population. NOTE: the include test excludes hits with a
+    blank URL; that share is measured in S4 filter diagnostics.
     """
-    if RSID_COL is None and URL_COL is None:
+    if RSID_COL is None and URL_COLS is None:
         _resolve_scope_cols(df)
     conds, active, missing = [], [], []
-    if RSID_FILTER:
+    if RSID_LIST:
         if RSID_COL:
-            conds.append(F.lower(F.trim(F.col(RSID_COL).cast("string"))) == F.lit(RSID_FILTER))
-            active.append(f"rsid[{RSID_COL}]=={RSID_FILTER}")
+            conds.append(F.lower(F.trim(F.col(RSID_COL).cast("string"))).isin(RSID_LIST))
+            active.append(f"rsid[{RSID_COL}] in {RSID_LIST}")
         else:
             missing.append("rsid (no report-suite column found)")
-    if URL_FILTER:
-        if URL_COL:
-            conds.append(F.lower(F.col(URL_COL).cast("string")).contains(URL_FILTER))
-            active.append(f"url[{URL_COL}] contains {URL_FILTER}")
-        else:
-            missing.append("url (no page_url column found)")
+    u = url_expr(df)
+    if u is None:
+        if URL_INCLUDE or URL_EXCLUDE or LOGIN_EXCLUDE:
+            missing.append("url (no page_url/post_page_url column found)")
+    else:
+        inc = like_any(u, URL_INCLUDE)
+        if inc is not None:
+            conds.append(inc)
+            active.append(f"url[coalesce{tuple(URL_COLS)}] LIKE any {URL_INCLUDE}")
+        exc = like_any(u, URL_EXCLUDE)
+        if exc is not None:
+            conds.append(~exc)
+            active.append(f"url NOT LIKE any {URL_EXCLUDE}")
+        # D8: individual-login / member-auth hosts, subtracted in EVERY mode.
+        # An explicit host list, NOT a %portal% pattern: four of the six carry no
+        # "portal" substring (id.manulife.ca alone is 62.6M hits) and the FR
+        # "portail" spelling would not match one either.
+        lex = like_any(u, LOGIN_EXCLUDE)
+        if lex is not None:
+            conds.append(~lex)
+            active.append(f"login hosts excluded [D8]: {LOGIN_EXCLUDE}")
     cond = None
     for c in conds:
         cond = c if cond is None else (cond & c)
-    meta = {"rsid_col": RSID_COL, "url_col": URL_COL,
-            "rsid_filter": RSID_FILTER or None, "url_filter": URL_FILTER or None,
+    meta = {"rsid_col": RSID_COL, "url_col": URL_COL, "url_cols_coalesced": URL_COLS,
+            "rsid_list": RSID_LIST or None, "url_scope_mode": URL_SCOPE_MODE,
+            "url_include": URL_INCLUDE or None, "url_exclude": URL_EXCLUDE or None,
+            "login_host_exclude": LOGIN_EXCLUDE or None,
             "active_conditions": active, "missing_conditions": missing,
             "scoped": cond is not None}
     return cond, meta
@@ -301,7 +409,9 @@ def ensure_frames():
 
 print(f"Config OK. table={TABLE_FQN} window={WINDOW_MONTHS}mo fraction={SAMPLE_FRACTION} "
       f"batch={COL_BATCH_SIZE} top_n={TOP_N} shape_only_cols={len(DIRECT_IDENTIFIERS)}")
-print(f"Scope filter: rsid={RSID_FILTER or '(off)'} url_contains={URL_FILTER or '(off)'}")
+print(f"Scope filter: rsid={RSID_LIST or '(off)'} url_mode={URL_SCOPE_MODE} "
+      f"include={URL_INCLUDE or '(off)'} exclude={URL_EXCLUDE or '(off)'} "
+      f"login_hosts_excluded={len(LOGIN_EXCLUDE)}")
 
 # COMMAND ----------
 
@@ -581,11 +691,14 @@ def s4_frames():
     # ---- filter diagnostics on the UNFILTERED window (rsid-only / url-only / both) ----
     cond, scope_meta = scope_condition(DF)
     raw_window = DF.filter(F.to_date(DATE_EXPR) >= F.lit(WINDOW_START))
-    rsid_cond = (F.lower(F.trim(F.col(RSID_COL).cast("string"))) == F.lit(RSID_FILTER)
-                 if (RSID_COL and RSID_FILTER) else F.lit(False))
-    url_cond = (F.lower(F.col(URL_COL).cast("string")).contains(URL_FILTER)
-                if (URL_COL and URL_FILTER) else F.lit(False))
-    url_blank_cond = (~nonblank(URL_COL)) if URL_COL else F.lit(False)
+    rsid_cond = (F.lower(F.trim(F.col(RSID_COL).cast("string"))).isin(RSID_LIST)
+                 if (RSID_COL and RSID_LIST) else F.lit(False))
+    _u = url_expr(DF)
+    _inc = like_any(_u, URL_INCLUDE) if _u is not None else None
+    url_cond = _inc if _inc is not None else F.lit(False)
+    # blank on the D4 coalesce, not on one column: a row is only URL-blank when
+    # BOTH page_url and post_page_url are empty.
+    url_blank_cond = F.lit(False) if _u is None else (_u == F.lit(""))
     diag = raw_window.agg(
         F.count("*").alias("total"),
         F.sum(F.when(rsid_cond, 1).otherwise(0)).alias("rsid_match"),
@@ -602,12 +715,28 @@ def s4_frames():
                      for r in (raw_window.groupBy(RSID_COL).count()
                                          .orderBy(F.desc("count")).limit(10).collect())]
 
+    # Per-suite row counts INSIDE the final scope. D1 requires one run to cover both
+    # suites, so a suite missing here means it contributed nothing and every downstream
+    # section is silently single-suite — the failure mode this breakdown exists to catch.
+    rsid_breakdown = []
+    if RSID_COL:
+        rsid_breakdown = [{"rsid": (str(r[RSID_COL]) if r[RSID_COL] is not None else None),
+                           "rows": r["count"],
+                           "pct_of_scope": round(100.0 * r["count"] / max(window_rows, 1), 3)}
+                          for r in (DF_W.groupBy(RSID_COL).count()
+                                        .orderBy(F.desc("count")).collect())]
+        _seen = {(b["rsid"] or "").lower() for b in rsid_breakdown}
+        _missing = [s for s in RSID_LIST if s not in _seen]
+        if _missing:
+            print(f"!!!!! WARNING: 0 rows in scope for rsid(s): {_missing} — "
+                  f"downstream sections cover only {sorted(_seen & set(RSID_LIST))}")
+
     both = diag["both"] or 0
     warning = None
     if both == 0:
         warning = ("SCOPE FILTER MATCHED 0 ROWS in the window. Downstream sections would "
                    "profile an empty frame. Check window_frame.filter.top_rsids for the "
-                   "actual rsid value/casing and adjust the rsid_filter / url_filter widgets.")
+                   "actual rsid value/casing and adjust the rsid_list / url_scope_* widgets.")
         print("!!!!! " + warning)
 
     emit("window_frame", {
@@ -624,6 +753,7 @@ def s4_frames():
             "rsid_only_match": diag["rsid_match"],
             "url_only_match": diag["url_match"],
             "both_match": both,
+            "rsid_breakdown": rsid_breakdown,
             "url_blank_rows": diag["url_blank"],
             "url_blank_pct": round(100.0 * (diag["url_blank"] or 0) / max(diag["total"], 1), 3),
             "top_rsids": top_rsids,
@@ -659,13 +789,12 @@ def s4b_url_scope_audit():
     ensure_frames()
     _resolve_scope_cols(DF)
     raw_window = DF.filter(F.to_date(DATE_EXPR) >= F.lit(WINDOW_START))
-    rsid_cond = (F.lower(F.trim(F.col(RSID_COL).cast("string"))) == F.lit(RSID_FILTER)
-                 if (RSID_COL and RSID_FILTER) else F.lit(True))
-    url_cols = [c for c in ("post_page_url", "page_url") if pick_col(raw_window, c)]
+    rsid_cond = (F.lower(F.trim(F.col(RSID_COL).cast("string"))).isin(RSID_LIST)
+                 if (RSID_COL and RSID_LIST) else F.lit(True))
+    url_cols = [c for c in ("page_url", "post_page_url") if pick_col(raw_window, c)]   # D4 order
     if not url_cols:
-        emit("url_scope_audit", {"error": "no post_page_url / page_url column in source"})
+        emit("url_scope_audit", {"error": "no page_url / post_page_url column in source"})
         return
-    cur = (URL_FILTER or "").lower()
 
     pop = raw_window.filter(rsid_cond).select(*url_cols)
     if CACHE_SAMPLE:
@@ -676,7 +805,8 @@ def s4b_url_scope_audit():
         return F.regexp_extract(u, r"^([^?#]*)", 1)
 
     def matches(c):    # null-safe: blank/null URL -> False (never NULL), so ~matches() works
-        return F.coalesce(host_path(c).contains(cur), F.lit(False)) if cur else F.lit(True)
+        m = like_any(host_path(c), URL_INCLUDE)
+        return m if m is not None else F.lit(True)
 
     # ---- 1) column reconciliation: coverage, cardinality, today's-filter match ----
     exprs = [F.count("*").alias("rows")]
@@ -691,7 +821,7 @@ def s4b_url_scope_audit():
                   F.sum((~a & b).cast("int")).alias("only1")]
     r = pop.agg(*exprs).collect()[0]
     total = r["rows"] or 0
-    reconciliation = {"rsid_only_rows": total, "current_url_filter": URL_FILTER or None}
+    reconciliation = {"rsid_only_rows": total, "current_url_include": URL_INCLUDE or None}
     for c in url_cols:
         nb = r[c + "_nb"] or 0
         reconciliation[c] = {
@@ -714,9 +844,10 @@ def s4b_url_scope_audit():
     host = F.regexp_extract(hp, r"^([^/]+)", 1)
     # noise = Adobe AEM authoring/staging hosts + non-CA (Philippines) paths -> not GWAM-CA traffic
     noise = host.rlike(r"adobeaemcloud") | hp.rlike(r"/ph/")
+    _cur_m = like_any(hp, URL_INCLUDE)
     tag = pop.filter(hp != F.lit("")).select(
         F.regexp_extract(hp, r"^([^/]+(?:/[^/]+){0,4})", 1).alias("host_path"),
-        (hp.contains(cur) if cur else F.lit(True)).alias("cur"),
+        (_cur_m if _cur_m is not None else F.lit(True)).alias("cur"),
         # CA retirement / group-plans section tokens (bare "/retirement" dropped -> excludes PH)
         hp.rlike(r"group-retirement|group-plans|regimes-collectif|retraite").alias("ret"),
         noise.alias("noise"),
@@ -783,7 +914,7 @@ run_section("S4b", s4b_url_scope_audit)
 
 # COMMAND ----------
 
-# S4c reuses S4b's helpers and widgets (rsid_filter / url_filter). Two retirement matchers:
+# S4c reuses S4b's helpers and widgets (rsid_list / url_scope_*). Two retirement matchers:
 #   RET_STRICT  = section-level tokens (aligns with S4b 'addable'; bare "/retirement" dropped so
 #                 Philippines /ph/retirement is excluded).
 #   RET_BROAD   = the manager's literal "retirement" keyword (retirement|retraite).
@@ -799,9 +930,8 @@ def s4c_url_column_audit():
     ensure_frames()
     _resolve_scope_cols(DF)
     raw_window = DF.filter(F.to_date(DATE_EXPR) >= F.lit(WINDOW_START))
-    rsid_cond = (F.lower(F.trim(F.col(RSID_COL).cast("string"))) == F.lit(RSID_FILTER)
-                 if (RSID_COL and RSID_FILTER) else F.lit(True))
-    cur = (URL_FILTER or "").lower()
+    rsid_cond = (F.lower(F.trim(F.col(RSID_COL).cast("string"))).isin(RSID_LIST)
+                 if (RSID_COL and RSID_LIST) else F.lit(True))
 
     present = [c for c in URL_CANDIDATES if pick_col(raw_window, c)]
     if not present:
@@ -832,8 +962,8 @@ def s4c_url_column_audit():
                   F.approx_count_distinct(h).alias(c + "_dist"),
                   F.sum(h.rlike(RET_STRICT).cast("int")).alias(c + "_rs"),
                   F.sum(h.rlike(RET_BROAD).cast("int")).alias(c + "_rb")]
-        if cur:
-            exprs += [F.sum(F.coalesce(h.contains(cur), F.lit(False)).cast("int")).alias(c + "_cur")]
+        if URL_INCLUDE:
+            exprs += [F.sum(like_any(h, URL_INCLUDE).cast("int")).alias(c + "_cur")]
         if coal_ret is not None:
             exprs += [F.sum((h.rlike(RET_STRICT) & ~coal_ret).cast("int")).alias(c + "_missed")]
     rd = pop.agg(*exprs).collect()[0].asDict()
@@ -844,7 +974,7 @@ def s4c_url_column_audit():
         per_col[c] = {
             "blank_pct": round(100.0 * (total - nb) / max(total, 1), 3),
             "approx_distinct": rd[c + "_dist"],
-            "rows_matching_current_filter": (rd.get(c + "_cur") if cur else None),
+            "rows_matching_current_filter": (rd.get(c + "_cur") if URL_INCLUDE else None),
             "rows_matching_retirement_strict": rd[c + "_rs"],
             "rows_matching_retirement_broad": rd[c + "_rb"],
             "retirement_rows_beyond_coalesce": rd.get(c + "_missed"),
@@ -886,7 +1016,7 @@ def s4c_url_column_audit():
         sweep = {"available": True,
                  "basis": "full profiling window, all rsids, retirement_strict on coalesce(page_url,post_page_url)",
                  "total_retirement_rows_window": total_ret,
-                 "current_scope_rsid": RSID_FILTER or None,
+                 "current_scope_rsids": RSID_LIST or None,
                  "top_rsids_by_retirement_hits": top_rsids}
 
     emit("url_column_audit", {
@@ -894,8 +1024,9 @@ def s4c_url_column_audit():
                  "retirement_strict = group-retirement|group-plans|regimes-collectif|retraite "
                  "(section tokens, excludes PH /retirement); retirement_broad = literal "
                  "retirement|retraite; rsid_sweep is window-wide across all suites."),
-        "rsid_scope": {"rsid_col": RSID_COL, "rsid_filter": RSID_FILTER or None,
-                       "url_filter": URL_FILTER or None, "rsid_only_rows": total},
+        "rsid_scope": {"rsid_col": RSID_COL, "rsid_list": RSID_LIST or None,
+                       "url_scope_mode": URL_SCOPE_MODE, "url_include": URL_INCLUDE or None,
+                       "rsid_only_rows": total},
         "recommended_scope_col": ("coalesce(" + ", ".join(coal_cols) + ")") if coal_cols else None,
         "columns_present": present,
         "per_url_column": per_col,
@@ -1450,7 +1581,9 @@ def s12_synthesis_spec():
         "meta": {
             "table": TABLE_FQN,
             "generated_at": datetime.datetime.now().isoformat(timespec="seconds"),
-            "scope": {"rsid": RSID_FILTER or None, "url_contains": URL_FILTER or None,
+            "scope": {"rsid_list": RSID_LIST or None, "url_scope_mode": URL_SCOPE_MODE,
+                      "url_include": URL_INCLUDE or None, "url_exclude": URL_EXCLUDE or None,
+                      "login_host_exclude": LOGIN_EXCLUDE or None,
                       "rsid_col": (scope_meta or {}).get("rsid_col"),
                       "url_col": (scope_meta or {}).get("url_col"),
                       "ca_share_pct": dv.get("ca_share_pct")},
@@ -1538,5 +1671,6 @@ run_section("run_manifest", s_run_manifest)
 # MAGIC
 # MAGIC **Scope reminder:** everything except `delta_meta` and the `total_hits` column of
 # MAGIC `daily_volume` describes the CA-Retirement subset. First sanity check on any run:
-# MAGIC `window_frame.filter.both_match` must be > 0 and `top_rsids` must list the expected
-# MAGIC `manulifeglobalprod` value — if not, fix the `rsid_filter` / `url_filter` widgets.
+# MAGIC `window_frame.filter.both_match` must be > 0 and `top_rsids` must list BOTH expected
+# MAGIC suites (`manugrs`, `manulifeglobalprod`) — if not, fix the `rsid_list` /
+# MAGIC `url_scope_*` widgets. `rsid_breakdown` must also show a non-zero row count for each.
