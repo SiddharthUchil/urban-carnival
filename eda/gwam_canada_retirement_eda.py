@@ -184,17 +184,6 @@ def nonblank(col_name):
 def strip_query(u):
     return str(u).split("?")[0].split("#")[0]
 
-def url_shape(u):
-    """(domain, path_depth, first_path_segment) — never the full URL."""
-    u = strip_query(u)
-    m = re.match(r"^(?:[a-z]+:)?//([^/]+)(/.*)?$", u) or re.match(r"^([^/]+)(/.*)?$", u)
-    if not m:
-        return ("<unparsed>", 0, "")
-    domain = m.group(1).lower()
-    path = m.group(2) or ""
-    segs = [s for s in path.split("/") if s]
-    return (domain, len(segs), ("/" + segs[0]) if segs else "/")
-
 def batched_agg(df, agg_exprs, batch_size):
     """Run many agg expressions in batches to dodge codegen limits.
     agg_exprs: list of (alias, Column). Returns {alias: value}."""
@@ -1231,7 +1220,8 @@ if TS_DAILY_PDF is not None:
 # MAGIC %md
 # MAGIC ## S9 — Dimension candidates
 # MAGIC Cardinality + top values of candidate slicing dimensions. Allowlisted dims print raw
-# MAGIC (lookup IDs / country codes); pagename & URL shapes are query-stripped; anything else masked.
+# MAGIC (lookup IDs / country codes); pagename & URL values are query-stripped but keep the
+# MAGIC full path; direct identifiers are shape-only.
 
 # COMMAND ----------
 

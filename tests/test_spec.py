@@ -30,7 +30,9 @@ def test_schema_shape_and_pop_clamped():
     assert all(0.0 <= c.pop <= 1.0 for c in s.columns)
     assert max(c.pop for c in s.columns) == 1.0    # 100.817 clamped to 1.0
     assert sum(c.sensitive for c in s.columns) == 16
-    assert sum(bool(c.top_masked) for c in s.columns) == 25
+    # Renamed from top_masked in ADR-0007 §5. The committed spec JSON still carries
+    # the legacy top_masked/`m` keys, so this also covers load_spec()'s back-compat path.
+    assert sum(bool(c.top_values) for c in s.columns) == 25
 
 
 def test_hour_probs_normalized():

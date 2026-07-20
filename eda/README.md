@@ -62,15 +62,21 @@ verbatim. Priority order if splitting across messages:
 
 Multi-part blocks (`part 1 of N`) reassemble by concatenation — paste all parts.
 
-## Privacy guarantees (ADR-0007 / doc-11)
+## Privacy guarantees (ADR-0007 §5 / doc-11)
 
 - Sensitive columns (visitor IDs, IPs, cookies, geo_zip, user_agent, userid, ...) are
   reported **shape-only**: null %, approximate cardinality, length stats. No values,
   not even masked ones.
-- All other high-cardinality values are masked as `<masked:xxxxxxxx>` tokens (same
-  format as `new_data/generated_data_profile.json`).
-- URLs and pagenames are query-stripped; full URLs never printed — only
-  domain + path-depth + first-segment shapes.
+- All other values are emitted **raw**. eVar/prop contents are business semantics (form
+  steps, plan codes, tool names) and profiling them is the point of the run; ADR-0007 §5
+  exempts analysis-time output from the pipeline-time masking rule. Note the committed
+  `synth/spec/*.json` still carries `<masked:xxxxxxxx>` tokens (25 schema entries) from
+  runs that predate this change — `synth/` consumes them via the back-compat path in
+  `synth/spec.py`.
+- URLs and pagenames are query-stripped, but the full path is retained. Query strings stay
+  stripped because they are the part of a URL that carries session tokens; the earlier
+  domain + path-depth + first-segment reduction was dropped because it collapsed every
+  Canadian page into a single bucket.
 - A final scrubber redacts anything resembling an email, IP, or long numeric/hex ID
   and truncates all strings to 160 chars.
 - The Delta `location` path and table properties are excluded from `delta_meta`.
