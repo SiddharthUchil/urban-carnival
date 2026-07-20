@@ -89,8 +89,8 @@ dbutils.widgets.text("max_csv_lines", "450", "7. Max CSV lines per shareable blo
 dbutils.widgets.text("top_events_k", "6", "8. Top-K events for daily series")
 dbutils.widgets.text("cache_sample", "false", "9. Persist sample df (true/false)")
 dbutils.widgets.text("rsid_list", "manugrs,manulifeglobalprod", "10. rsid list (comma-sep, empty = off)")
-dbutils.widgets.dropdown("url_scope_mode", "broad", ["broad", "en_only", "custom"], "11. URL scope mode")
-dbutils.widgets.text("url_scope_list", "%/group-retirement%,%/group-plans%,%/regimes-collectifs%", "12. URL patterns for custom mode (SQL LIKE)")
+dbutils.widgets.dropdown("url_scope_mode", "broad", ["broad", "en_only"], "11. URL scope mode (en_only = pipeline parity)")
+dbutils.widgets.text("url_scope_list", "%/group-retirement%,%/group-plans%,%/regimes-collectifs%", "12. URL include patterns — ADD URLS HERE (SQL LIKE, comma-sep)")
 dbutils.widgets.text("url_scope_exclude", "%adobeaemcloud.com%,%/ph/%", "13. URL patterns to exclude")
 dbutils.widgets.text("login_host_exclude",
                      "%portal.manulife.ca%,%id.manulife.ca%,%grsmembers.manulife.com%,"
@@ -114,14 +114,19 @@ URL_SCOPE_MODE = dbutils.widgets.get("url_scope_mode").strip().lower()
 URL_EXCLUDE    = _csv("url_scope_exclude")
 LOGIN_EXCLUDE  = _csv("login_host_exclude")
 
-# Scope modes (doc-16 D5). `broad` is the EDA default: the three patterns are both
-# language- and domain-agnostic, so one list covers manugrs (manulifeim.com) and
-# manulifeglobalprod (manulife.com), EN and FR. `en_only` mirrors what the bronze
-# pipeline currently ingests, for like-for-like comparison.
+# Scope modes (doc-16 D5). The `url_scope_list` widget is AUTHORITATIVE: whatever patterns
+# are visible there are the patterns that run, so adding a URL means editing that widget and
+# nothing else. `en_only` is the single override — it pins the one pattern the bronze
+# pipeline still ingests, so an EDA run can be compared like-for-like against production.
+#
+# The default list is language- AND domain-agnostic, so three patterns cover both suites
+# (manugrs on manulifeim.com, manulifeglobalprod on manulife.com) in EN and FR, including
+# every gap the 2026-07-20 URL scope inventory found: /ca/fr retirement (801,461 rows) via
+# %/group-retirement%, /ca/fr/particuliers/regimes-collectifs/* (183,698) via
+# %/regimes-collectifs%, and /ca/en/{business,advisor,personal}/group-plans/* (285,266+)
+# via %/group-plans%.
 URL_SCOPE_EN_ONLY = ["%manulife.com/ca/en/personal/group-plans/group-retirement%"]
-URL_SCOPE_BROAD   = ["%/group-retirement%", "%/group-plans%", "%/regimes-collectifs%"]
-URL_INCLUDE = {"en_only": URL_SCOPE_EN_ONLY,
-               "broad":   URL_SCOPE_BROAD}.get(URL_SCOPE_MODE, _csv("url_scope_list"))
+URL_INCLUDE = URL_SCOPE_EN_ONLY if URL_SCOPE_MODE == "en_only" else _csv("url_scope_list")
 
 # ------------------------------------------------------- privacy constants ----
 # ADR-0007 §5 (analysis-time visibility). EDA runs inside the governed Databricks

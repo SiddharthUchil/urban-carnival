@@ -65,8 +65,8 @@ import plotly.io as pio
 # ---------------------------------------------------------------- widgets ----
 dbutils.widgets.text("table_fqn", "gwam_prod_catalog.inv_typed_common.adobe_hit_data", "1. Table (catalog.schema.table)")
 dbutils.widgets.text("rsid_list", "manugrs,manulifeglobalprod", "2. rsid list (comma-sep, empty = off)")
-dbutils.widgets.dropdown("url_scope_mode", "broad", ["broad", "en_only", "custom"], "3. URL scope mode")
-dbutils.widgets.text("url_scope_list", "%/group-retirement%,%/group-plans%,%/regimes-collectifs%", "3b. URL patterns for custom mode (SQL LIKE)")
+dbutils.widgets.dropdown("url_scope_mode", "broad", ["broad", "en_only"], "3. URL scope mode (en_only = pipeline parity)")
+dbutils.widgets.text("url_scope_list", "%/group-retirement%,%/group-plans%,%/regimes-collectifs%", "3b. URL include patterns — ADD URLS HERE (SQL LIKE, comma-sep)")
 dbutils.widgets.text("url_scope_exclude", "%adobeaemcloud.com%,%/ph/%", "3c. URL patterns to exclude")
 dbutils.widgets.text("login_host_exclude",
                      "%portal.manulife.ca%,%id.manulife.ca%,%grsmembers.manulife.com%,"
@@ -94,13 +94,12 @@ URL_SCOPE_MODE = dbutils.widgets.get("url_scope_mode").strip().lower()
 URL_EXCLUDE    = _csv("url_scope_exclude")
 LOGIN_EXCLUDE  = _csv("login_host_exclude")
 
-# Same scope contract as the EDA notebook (doc-16 D5). `broad` is the default: the
-# three patterns are language- and domain-agnostic, so one list covers manugrs
-# (manulifeim.com) and manulifeglobalprod (manulife.com), EN and FR.
+# Same scope contract as the EDA notebook (doc-16 D5). The `url_scope_list` widget is
+# AUTHORITATIVE: the patterns visible there are the patterns that run, so adding a URL
+# means editing that widget and nothing else. `en_only` is the single override, pinning
+# the one pattern the bronze pipeline still ingests for like-for-like comparison.
 URL_SCOPE_EN_ONLY = ["%manulife.com/ca/en/personal/group-plans/group-retirement%"]
-URL_SCOPE_BROAD   = ["%/group-retirement%", "%/group-plans%", "%/regimes-collectifs%"]
-URL_INCLUDE = {"en_only": URL_SCOPE_EN_ONLY,
-               "broad":   URL_SCOPE_BROAD}.get(URL_SCOPE_MODE, _csv("url_scope_list"))
+URL_INCLUDE = URL_SCOPE_EN_ONLY if URL_SCOPE_MODE == "en_only" else _csv("url_scope_list")
 START_DATE  = dbutils.widgets.get("start_date").strip()
 END_DATE    = dbutils.widgets.get("end_date").strip()
 GEO_COUNTRY = dbutils.widgets.get("geo_country").strip().lower()
