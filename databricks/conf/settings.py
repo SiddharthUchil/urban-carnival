@@ -43,6 +43,22 @@ SCOPE_URL_LIKE_EXCLUDE = [
     "%/ph/%",
 ]
 
+# Individual-login (member/auth) hosts -- excluded from anomaly scope in EVERY mode.
+# Business rule (2026-07-20): individual page-login traffic is not considered for anomaly
+# detection. An explicit host list, NOT a %portal% pattern: most of these hosts don't
+# contain "portal", and FR "portail" wouldn't match it. Substring match also covers
+# nonprod subdomains (stage.portal.manulife.ca, ...). Confirmed by the 2026-07-20 URL
+# scope inventory run (eda/gwam_url_scope_inventory.ipynb); candidates NOT yet ruled on:
+# retirement.sponsor.manulife.com (sponsor login), manulifeplan.ca, epargnemanuvie.ca.
+SCOPE_LOGIN_HOST_EXCLUDE = [
+    "%portal.manulife.ca%",       # member portal (Storefront), ~130M hits on manugrs
+    "%id.manulife.ca%",           # login / identity, 62.6M hits
+    "%grsmembers.manulife.com%",  # legacy GRS member portal (WebSphere /wps, /passport)
+    "%gsrs1.manulife.com%",       # legacy passport JSP screens (sponsor/member)
+    "%viproom.manulife.com%",     # legacy VIP room servlet
+    "%portail.manuvie.ca%",       # FR member portal
+]
+
 # Report-suite scope mode. "current_only" ingests only the shipped suite (SCOPE_RSID);
 # "with_legacy" ALSO unions the pre-Storefront CA-Retirement suite `manugrs`, which carries
 # ~2.5 yr of history that ends exactly as manulifeglobalprod begins (2026-02-01 cutover;
