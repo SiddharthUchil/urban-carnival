@@ -2,6 +2,7 @@
 ## GMAI-Pulse · GWAM Canada-Retirement Anomaly Detection
 
 **Status:** Authoritative guidance — written 2026-07-19 for execution by Claude Opus 4.8 (or any successor agent).
+**Revised 2026-07-20** — URL scope inventory landed (D3 closed, D8 added, D4/D5 rewritten, cutover claim corrected, EDA consolidated to two notebooks).
 **Audience:** An implementation agent working in this repo. Read §0 before touching anything.
 **Scope:** All phases — data exploration, EDA, eVars, Databricks medallion pipeline, jobs/orchestration, detection, AKS serving.
 
@@ -15,8 +16,9 @@
 4. **Repo conventions:** numbered docs in `research/claude/` (next free number: **17**); ADRs as `adr-XXXX-*.md`; every EDA notebook section emits a `SHAREABLE` block (§4.4); commits follow conventional-commit style visible in `git log`.
 5. **Notebook handling gotchas (learned the hard way):**
    - The large `.ipynb` files can NOT be opened with Read/NotebookEdit (too big). Edit the paired `.py` export and re-splice, or use a scripted JSON splice on the `.ipynb`. When splicing cells by key, watch for **duplicate-key collisions** — always regenerate cell ids.
-   - `eda/gwam_canada_retirement_eda_manugrs.ipynb` currently has **no `.py` export** — export it first (`jupyter nbconvert --to script`) before mining logic from it.
-6. **Concurrent agents:** as of 2026-07-19 one agent is producing the definitive dual-rsid URL scope inventory, and another is retiring ADR-0007 masking controls. Do not duplicate or race that work — consume their outputs (§1 D3, D2).
+   - Notebook *output* can self-truncate: a Databricks stdout cap silently dropped 22 of 200 rollup rows mid-payload in the inventory run, injecting `*** WARNING: max output size exceeded ***` between JSON fragments. When a section's payload may be large, lower its top-N or write Delta rather than trusting printed output.
+   - `jupyter`/`nbformat` are **not installed** in `.venv`. To export a notebook, either install them or parse the `.ipynb` JSON with stdlib and emit the repo's Databricks format (`# Databricks notebook source`, `# COMMAND ----------`, `# MAGIC %md`).
+6. **Retired notebooks live in git history, not on disk.** `gwam_url_scope_inventory.*` and `gwam_canada_retirement_eda_manugrs.ipynb` were removed at `8ac2551`; their last content (including the full inventory run output) is at **`408de5a`**. Recover with `git show 408de5a:<path>` — do not recreate them.
 
 ---
 
@@ -26,11 +28,12 @@
 |----|----------|--------|
 | **D1** | **Exactly 2 EDA notebooks** | `eda/gwam_canada_retirement_eda.ipynb` (profiler) + `eda/gwam_canada_retirement_charts.ipynb` (interactive charts). Both cover **both rsids** (`manugrs` + `manulifeglobalprod`) and the full URL scope. All other EDA notebooks are retired/archived (§4.6). |
 | **D2** | **No masking — full data visibility** | All masking/redaction is removed: `mask()`, `RAW_OK_DIMS` gating, sha1 self-redaction, identity suppression. Analysts and agents see data as-is, at all times, to get a complete picture. ADR-0007 is being retired by a separate agent; do **not** re-introduce masking helpers. Exports that leave the company still follow corporate data-handling policy. |
-| **D3** | **URL scope is data-driven and widget-editable** | The definitive URL scope list comes from the dual-rsid full-history scope inventory run (in progress by another agent). Its result seeds the `url_scope_list` widget default; from then on scope changes are made **only via widgets**, never by editing code. |
-| **D4** | **Scope/URL column rule** | Row filtering uses `post_page_url`; host/path breakdowns use `coalesce(page_url, post_page_url)` because `post_page_url` is ~37% blank ([gwam_canada_retirement_eda.py:665,722,759](../../eda/gwam_canada_retirement_eda.py)). This rule lives in ONE shared helper (§4.5), used everywhere. |
-| **D5** | **One source of scope truth** | The EDA widget contract (§4.2) and the Databricks pipeline config (`databricks/conf/settings.py`) must resolve the same scope definition. Pipeline jobs take scope as job parameters with `settings.py` defaults (§5.2) — no more silent divergence between notebook widgets and pipeline constants. |
+| **D3** | **URL scope is data-driven and widget-editable** ✅ **closed 2026-07-20** | The dual-rsid full-history inventory ran 2026-07-20 (output at `408de5a`). Seeded `url_scope_list` default = `%/group-retirement%`, `%/group-plans%`, `%/regimes-collectifs%` — already language-agnostic, so **no FR-specific patterns are needed**: it covers `manulifeim.com/group-retirement/ca/fr/*` and `/ca/fr/particuliers/regimes-collectifs/retraite-collective`. From here scope changes are made **only via widgets**, never by editing code. Key figures in §2. |
+| **D4** | **Coalesce everywhere — `post_page_url` alone is not a scope column** | *Rewritten 2026-07-20; the previous D4 was incoherent — it avoided `post_page_url` for breakdowns because it is blank, then filtered rows on it.* Row filtering **and** breakdowns both use `coalesce(page_url, post_page_url)`. The inventory measured `post_page_url` blank at **36.41%** (manulifeglobalprod) / **45.75%** (manugrs) vs **≤0.013%** for `page_url`. One shared helper (§4.5), used everywhere. **Last tracked violation:** [01_bronze_ingest.py:69](../../databricks/src/01_bronze_ingest.py) still does `F.col("post_page_url").like(SCOPE_URL_LIKE)` in `en_only` mode. See §5.2 for the measurement gate before changing it. |
+| **D5** | **One scope vocabulary; defaults may stage** | The EDA widget contract (§4.2) and `databricks/conf/settings.py` must share the same **mode names, pattern lists, and resolution logic** (include patterns OR-ed, minus `SCOPE_URL_LIKE_EXCLUDE`, minus D8 login hosts). Their *default values* may diverge while a rollout is staged, but only when the divergence and its exit criterion are stated here. **Current sanctioned divergence:** EDA defaults to `broad` (analysts should see everything); the pipeline stays `en_only` until the P2 re-profile lands and `%/group-plans%` gets product sign-off (§5.2). |
 | **D6** | **AKS = model serving/scoring** | AKS hosts the anomaly-detection scoring service downstream of the Databricks gold layer (concrete phase, §7), aligned with `research/claude/13-global-serving-topology.md` and `adr-0008`. |
-| **D7** | **Dual-rsid is permanent** | Legacy suite `manugrs` (traffic 2024-01 → cutover 2026-02-01) and current suite `manulifeglobalprod` are BOTH in scope for all history-aware analysis. rsid selection is a widget, defaulting to both. |
+| **D7** | **Dual-rsid is permanent — and the suites are CONCURRENT** | Both `manugrs` and `manulifeglobalprod` are in scope for all analysis; rsid selection is a widget defaulting to both. ⚠️ *Corrected 2026-07-20:* `manugrs` did **not** end at the 2026-02-01 cutover. At suite level it ran **320,304,305 hits through 2026-07-19** and is still doing 8–13M/month, in parallel with `manulifeglobalprod`. Only the `manulifeim.com` marketing site wound down. Treat "with_legacy" as a **union of two live suites**, not a history splice. |
+| **D8** | **Individual-login traffic is out of anomaly scope** | Business rule, 2026-07-20. Encoded as `SCOPE_LOGIN_HOST_EXCLUDE` ([settings.py:64-77](../../databricks/conf/settings.py)) and subtracted from `suite_scope` in **every** URL/suite mode ([01_bronze_ingest.py:90-97](../../databricks/src/01_bronze_ingest.py)). An explicit **host list, not a `%portal%` pattern** — four of the six hosts don't contain "portal" and the French `portail.manuvie.ca` wouldn't match it. Row-set-identical today (no include pattern reaches those hosts), so it is defense-in-depth against future widening, which would otherwise pull in ~94% of the manugrs suite. **Not yet ruled on, deliberately still in scope:** `retirement.sponsor.manulife.com` (sponsor ≠ member), `manulifeplan.ca`, `epargnemanuvie.ca`. |
 
 ---
 
@@ -39,10 +42,14 @@
 **Goal:** production-grade anomaly detection over Adobe Analytics clickstream for Manulife GWAM **Canada Retirement** (group-retirement web properties), surfacing volume/behavior anomalies (level shifts, drops, spikes) with investigation support.
 
 **Data reality:**
-- Two report suites: `manugrs` (legacy, active 2024-01 through cutover **2026-02-01**) and `manulifeglobalprod` (current). manugrs carries ~57% of total retirement traffic in the overlap analysis window; eVar overlap between suites is partial (12 shared / 50 current-only / 8 legacy-only — see doc-14).
+- Two report suites, **both live and concurrent** (D7): `manugrs` (320,304,305 hits, 2024-01-01 → 2026-07-19) and `manulifeglobalprod` (8,412,803 hits, first seen 2026-03-10). The 2026-02-01 "cutover" applies only to the URL-filtered *marketing* population — the `manulifeim.com` site wound down while the underlying suite kept running. eVar overlap is partial (12 shared / 50 current-only / 8 legacy-only — see doc-14).
+- **⚠️ Unresolved:** the inventory puts `manulifeglobalprod`'s first unfiltered day at **2026-03-10**, but earlier scoped runs and `BACKFILL_START` say **2026-02-01**. Verify before citing either (backlog §8).
+- **Scope reality (2026-07-20 inventory).** Today's shipped filters capture **<1%** of suite traffic: on manugrs the `en_only` filter matches 0% and the legacy filter 5.10%; on manulifeglobalprod `en_only` matches 31.82%. This is mostly **by design** — ~94% of manugrs is D8 login traffic (`portal.manulife.ca` ~130M, `id.manulife.ca` 62.6M, `grsmembers.manulife.com` 64.5M, `gsrs1.manulife.com` 24.4M), whose paths spell `groupretirement` **unhyphenated** and so evade retirement regexes anyway.
+- **Genuinely uncovered retirement traffic:** 1,393,973 hits (manugrs) + 661,226 (manulifeglobalprod) match the retirement regex, aren't noise, and no shipped filter ingests them. Overwhelmingly **French** — `manulifeim.com/group-retirement/ca/fr/*` (801,461 at the root), `/ca/fr/particuliers/regimes-collectifs/retraite-collective` (183,698) — plus EN audience variants `/ca/en/{business,advisor}/group-plans/*` and `/ca/en/personal/group-plans/resources` (285,266). The `broad` pattern set already covers all of these (D3); `epargnemanuvie.ca` does not and is blocked on the D8 ruling.
+- On `manulifeglobalprod`, **36.29%** of retirement-regex matches are noise (`/ph/` Philippines pages + AEM authoring hosts) — the existing `SCOPE_URL_LIKE_EXCLUDE` is doing real work.
 - ~1,198 columns in the raw census; ~96 live eVars in manugrs.
 - Event decoding is incomplete: custom events (10000+ range) resolve to "unknown" in `ADOBE_STD_EVENTS`; the `event.tsv` lookup (`new_data/event.tsv`) was never wired into the notebooks — see §8 backlog.
-- French-language traffic is material (manugrs ~40.5% vs ~30.1% current suite) — URL scope must not silently drop `/fr/` paths.
+- French-language traffic is material (manugrs ~40.5% vs ~30.1% current suite) — URL scope must not silently drop `/fr/` paths. The inventory confirmed this is the **single largest scope gap**; `LEGACY_SCOPE_URL_LIKE` now carries the FR legacy root alongside EN.
 - ⚠️ Earlier profiling assumed `eVar166`/`eVar169` are URL-type fields; the EDDL spec **contradicts this** (§3.4). Reconcile before building eVar-based rules.
 
 **Repo layout (what exists today):**
@@ -135,10 +142,11 @@ eda/
 ├── gwam_canada_retirement_eda.py        ← paired export (source of truth for review/diff)
 ├── gwam_canada_retirement_charts.ipynb  ← unified interactive charts, BOTH rsids, widget-driven
 ├── gwam_canada_retirement_charts.py     ← paired export
-└── archive/                             ← retired notebooks (manugrs variant, url_scope_inventory)
+├── gwam_canada_retirement_eda_manugrs.py ← export-only reference for the D1 port; delete once ported
+└── README.md
 ```
 
-Exactly **two** runnable EDA notebooks. Every future analysis need is met by adding a widget value or a section — never a new notebook.
+**Reached 2026-07-20** — `eda/` now holds exactly two runnable notebooks. There is **no `archive/` directory**: retired notebooks were removed at `8ac2551` and git history is the archive (§0.6). Every future analysis need is met by adding a widget value or a section — never a new notebook.
 
 ### 4.2 Widget contract (both notebooks share it verbatim)
 
@@ -147,8 +155,10 @@ Config is 100% `dbutils.widgets` — already true in the `.py` exports (66 widge
 | Widget | Type | Default | Notes |
 |--------|------|---------|-------|
 | `rsid_list` | multiselect | `manugrs,manulifeglobalprod` | Replaces single-value `rsid_filter` text widget ([gwam_canada_retirement_eda.py:50-72](../../eda/gwam_canada_retirement_eda.py)). All sections loop/union over selected rsids and label outputs by rsid. |
-| `url_scope_list` | text (newline/comma-separated LIKE patterns) | seeded from scope-inventory run (D3) | Add/remove patterns here — never in code. Blank entry = no URL filter. |
-| `url_scope_mode` | dropdown: `en_only` / `broad` / `custom` | `broad` | `custom` uses `url_scope_list` verbatim; `en_only`/`broad` apply the named pattern sets (kept in the shared helper, mirroring `settings.py`). |
+| `url_scope_list` | text (newline/comma-separated LIKE patterns) | `%/group-retirement%`<br>`%/group-plans%`<br>`%/regimes-collectifs%` | **Seeded from the 2026-07-20 inventory (D3 closed).** Already language-agnostic — covers EN *and* FR, personal/business/advisor. Add/remove patterns here — never in code. Blank entry = no URL filter. |
+| `url_scope_mode` | dropdown: `en_only` / `broad` / `custom` | `broad` | `custom` uses `url_scope_list` verbatim; `en_only`/`broad` apply the named pattern sets (kept in the shared helper, mirroring `settings.py`). **Diverges from the pipeline's `en_only` by design — see D5.** |
+| `url_scope_exclude` | text (LIKE patterns) | `%adobeaemcloud.com%`<br>`%/ph/%` | Noise subtracted after includes. Mirrors `SCOPE_URL_LIKE_EXCLUDE`; removes 36.29% of manulifeglobalprod regex matches. |
+| `login_host_exclude` | text (LIKE patterns) | the 6 D8 hosts | Individual-login hosts, subtracted in every mode (D8). Mirrors `SCOPE_LOGIN_HOST_EXCLUDE`. Analysts who need to *study* login traffic clear this widget deliberately — it is never silently off. |
 | `start_date` / `end_date` | text (YYYY-MM-DD) | full history → today | Feeds `resolve_date_expr()`. |
 | `window_months` | text int | `13` | Rolling-window sections. |
 | `granularity` | dropdown: `daily`/`weekly` | `daily` | Time-series sections. |
@@ -163,15 +173,15 @@ Config is 100% `dbutils.widgets` — already true in the `.py` exports (66 widge
 Keep the existing S0–S12 spine of `gwam_canada_retirement_eda.py`, now rsid-looped:
 S0 config · S1 UC-discovery · S2 delta metadata · S3 daily volume · S4 analysis window · **S4b URL-scope audit** · **S4c URL-column audit** · S5 census · S6 event decode · S7 live eVars/props · S8 time-series profiles · S9 dimensions · S10 data quality · S11 identity evidence (now unmasked, per D2) · S12 synthesis.
 
-S4b/S4c absorb everything `gwam_url_scope_inventory.py` did (scope coverage, addable-rows audit, per-column URL profiling) — that notebook then retires.
+S4b/S4c absorb everything `gwam_url_scope_inventory.py` did (scope coverage, addable-rows audit, per-column URL profiling) — **that notebook is now retired** (`8ac2551`; last content at `408de5a`). Port from the git version, and carry over its two load-bearing behaviours: the **blank-guarded coalesce** (Adobe writes empty strings, not NULLs, so a plain `coalesce` returns `""` from `page_url` and never falls through) and **ID generalization** (`/member/12345` → `/member/{id}`) without which rollups shatter into singleton rows.
 
 ### 4.4 SHAREABLE emit + manifest protocol (keep, unredacted)
 
 Every section emits `===== BEGIN SHAREABLE: <id> =====` JSON via `emit()` ([gwam_canada_retirement_eda.py:142](../../eda/gwam_canada_retirement_eda.py)); the run ends with a `run_manifest` of per-section byte counts + sha1s. **Keep this protocol** — it is how runs are verified reproducible (16/16 manifest check). Under D2 the manifest's sha1 **self-redaction is removed**: hashes and payloads are emitted in full.
 
-### 4.5 Shared helper module — `eda/_gwam_common.py`
+### 4.5 Shared helper module — `eda/_gwam_common.py` *(does NOT exist yet — create it)*
 
-Extract the helpers currently duplicated across `gwam_canada_retirement_eda.py`, `gwam_canada_retirement_charts.py`, `gwam_url_scope_inventory.py`:
+Extract the helpers currently duplicated across `gwam_canada_retirement_eda.py`, `gwam_canada_retirement_charts.py`, and the retired `gwam_url_scope_inventory.py` (`git show 408de5a:eda/gwam_url_scope_inventory.py`):
 - `resolve_date_expr(df)` (fallback chain — [gwam_canada_retirement_eda.py:216](../../eda/gwam_canada_retirement_eda.py))
 - `_resolve_scope_cols` / `scope_condition` (rsid + URL filter — lines 240–244), now accepting a **list** of rsids and a **list** of URL patterns
 - the D4 coalesce rule
@@ -180,16 +190,19 @@ Extract the helpers currently duplicated across `gwam_canada_retirement_eda.py`,
 
 Notebooks import it via the existing `_bootstrap`-shim pattern used by `databricks/` (repo-root `sys.path` insert), so the module works in both Databricks Repos and local runs.
 
-### 4.6 Consolidation work package (for Opus 4.8)
+### 4.6 Consolidation work package — **this is the next wave**
 
-1. `jupyter nbconvert --to script eda/gwam_canada_retirement_eda_manugrs.ipynb` → diff against `gwam_canada_retirement_eda.py`; port any manugrs-specific logic (legacy event ids, date coverage 2024-01→2026-02) into the rsid-conditional paths of the unified notebook.
-2. Create `eda/_gwam_common.py` (§4.5); refactor both `.py` exports to use it.
-3. Replace `rsid_filter` text widget with `rsid_list` multiselect; wrap scope resolution and section outputs in an rsid loop (union with an `rsid` label column where cross-suite comparison is wanted — reuse doc-14's comparison framings).
-4. Remove all masking: `mask()`, `RAW_OK_DIMS`, redaction gating, manifest sha1 self-redaction (D2).
-5. Seed `url_scope_list` default from the scope-inventory agent's output when it lands (D3).
-6. Apply the same widget contract to the charts notebook.
-7. Rebuild both `.ipynb` from the `.py` exports (scripted splice; regenerate cell ids), move `gwam_canada_retirement_eda_manugrs.ipynb` and `gwam_url_scope_inventory.*` to `eda/archive/`.
-8. **Verify:** both notebooks run end-to-end on Databricks with defaults (both rsids); manifest completeness check passes; outputs contain rows for BOTH rsids; `grep -ri "mask(\|RAW_OK_DIMS" eda/` returns nothing; exactly 2 runnable notebooks remain in `eda/`.
+Steps 0, 5 and 7 are **done** (2026-07-20); 1–4 and 6 remain and are the immediate next implementation task.
+
+0. ~~Export the manugrs notebook~~ — **done** (`408de5a`, `eda/gwam_canada_retirement_eda_manugrs.py`). `jupyter`/`nbformat` are not installed; that export came from a stdlib JSON parse (§0.5).
+1. **Port manugrs-specific logic** — diff `gwam_canada_retirement_eda_manugrs.py` against `gwam_canada_retirement_eda.py`; move legacy event ids and the 2024-01 → 2026-07 date coverage into rsid-conditional paths of the unified notebook. Delete the manugrs `.py` once ported. ⚠️ Its header still describes a suite that ends at the cutover — that framing is wrong (D7); the suite is live.
+2. **Create `eda/_gwam_common.py`** (§4.5); refactor both `.py` exports to use it.
+3. **`rsid_filter` → `rsid_list` multiselect**; wrap scope resolution and section outputs in an rsid loop (union with an `rsid` label column for cross-suite comparison — reuse doc-14's framings).
+4. **Finish masking removal (D2)** — partially done. `RAW_OK_DIMS`/`SENSITIVE_COLS`/`url_shape()` are gone, but `mask()` survives at [gwam_canada_retirement_eda.py:170](../../eda/gwam_canada_retirement_eda.py) and stale masking prose remains around lines 80-107, 1043, 1223, 1535. Note `synth/` still consumes `<masked:...>` tokens from the committed spec — check `synth/spec/*.json` before removing the token format itself.
+5. ~~Seed `url_scope_list` from the inventory~~ — **done** (D3, §4.2).
+6. **Apply the same widget contract to the charts notebook.**
+7. ~~Retire the extra notebooks~~ — **done** (`8ac2551`). `git rm`, not an `archive/` folder; history is the archive.
+8. **Verify:** both notebooks run end-to-end on Databricks with defaults (both rsids); manifest completeness check passes; outputs contain rows for BOTH rsids; `grep -rn "mask(\|RAW_OK_DIMS" eda/*.py` returns nothing; `git ls-files 'eda/*.ipynb'` returns exactly 2.
 
 ---
 
@@ -197,15 +210,19 @@ Notebooks import it via the existing `_bootstrap`-shim pattern used by `databric
 
 ### 5.1 Current state
 
-Medallion pipeline `databricks/src/`: `00_freshness_guard` → `01_bronze_ingest` → `02_silver_conform` → `03_gold_kpis` → `04_detect`, with `common/`, `silver_lib/`, `gold_lib/`. Config is **hardcoded** in [databricks/conf/settings.py](../../databricks/conf/settings.py): `SCOPE_RSID` (line 17), `SCOPE_URL_MODE` (24), `SCOPE_URL_LIKE` (27), `SCOPE_URL_LIKE_BROAD` (33), `_EXCLUDE` (41), `SCOPE_SUITE_MODE="current_only"` (52), `LEGACY_SCOPE_RSID="manugrs"` (58), `LEGACY_SCOPE_URL_LIKE` (59). Only `target_catalog` resolves from job params today.
+Medallion pipeline `databricks/src/`: `00_freshness_guard` → `01_bronze_ingest` → `02_silver_conform` → `03_gold_kpis` → `04_detect`, with `common.py`, `silver_lib.py`, `gold_lib.py` (flat modules, not packages). Config is **hardcoded** in [databricks/conf/settings.py](../../databricks/conf/settings.py) — line numbers as of 2026-07-20: `SCOPE_RSID` (19), `SCOPE_URL_MODE` (32), `SCOPE_URL_LIKE` (35), `SCOPE_URL_LIKE_BROAD` (49), `SCOPE_URL_LIKE_EXCLUDE` (57), `SCOPE_LOGIN_HOST_EXCLUDE` (70), `SCOPE_SUITE_MODE="current_only"` (91), `LEGACY_SCOPE_RSID` (99), `LEGACY_SCOPE_URL_LIKE` (100). Only `target_catalog` resolves from job params today.
+
+**Known D4 violation:** [01_bronze_ingest.py:69](../../databricks/src/01_bronze_ingest.py) filters on `post_page_url` alone in `en_only` mode. D8 exclusion is applied correctly in all modes (lines 90-97).
 
 ### 5.2 Required changes (D5, D7)
 
 1. Extend `resolve(dbutils)` so **rsid list, URL mode, URL pattern list, suite mode, and date range** all resolve from job parameters / widgets first, falling back to `settings.py` defaults. Same names as the §4.2 widget contract.
-2. Default `SCOPE_SUITE_MODE` → `both` (D7): bronze ingests both rsids, silver conforms them onto one schema with an `rsid` column, gold KPIs are computed per-rsid **and** combined.
-3. Reuse the pipeline's existing `event_list` normalization; do not re-implement it in notebooks.
-4. **Partition-predicate gotcha:** `process_date` filters must be **dtype-aware** to get Delta partition pruning — build the predicate to match the column's actual type (date vs string) instead of relying on implicit casts, otherwise full scans.
-5. Best practices to enforce: idempotent MERGE writes keyed on natural keys; freshness guard stays as job gate; explicit schemas at ingest (no inference in prod); table properties documented; unit-test `silver_lib`/`gold_lib` transforms against `data/synth/` fixtures.
+2. **D4 migration — measure before changing.** Run one cheap query first: count rows matching `SCOPE_URL_LIKE` on `post_page_url` vs on `coalesce(page_url, post_page_url)`, for `rsid=manulifeglobalprod` since `BACKFILL_START`. If the delta is ≈0, land the coalesce fix as a no-op; if material, sequence it with the P3 backfill. **Do not quote the 36.41% population blank rate as the in-scope loss** — much of that blank mass is D8 login traffic that is out of scope anyway; the true in-scope delta is unmeasured. **Prerequisite:** bronze projects `post_page_url` but *not* `page_url` ([01_bronze_ingest.py:78-79](../../databricks/src/01_bronze_ingest.py), `conf/bronze_columns.py`) — adding `page_url` to the projection is now a D4 blocker, no longer "deferred".
+3. Default `SCOPE_SUITE_MODE` → `both` (D7): bronze ingests both rsids, silver conforms them onto one schema with an `rsid` column, gold KPIs are computed per-rsid **and** combined. ⚠️ This is only safe *because of* D8 — without the login-host exclusion, `both` would pull ~320M rows of member-portal traffic into bronze. Confirm `SCOPE_LOGIN_HOST_EXCLUDE` is applied before flipping.
+4. **`SCOPE_URL_MODE` flip is gated, not blocked.** Remaining conditions: P2 re-profile of the widened population, and product sign-off on `%/group-plans%` (it is the umbrella containing group-benefits/business/advisor). Any flip must run as a full `mode=backfill` with gold truncated — flipping under `mode=incremental` writes a step change mid-series that the detector reads as a level-shift anomaly.
+5. Reuse the pipeline's existing `event_list` normalization; do not re-implement it in notebooks.
+6. **Partition-predicate gotcha:** `process_date` filters must be **dtype-aware** to get Delta partition pruning — build the predicate to match the column's actual type (date vs string) instead of relying on implicit casts, otherwise full scans.
+7. Best practices to enforce: idempotent MERGE writes keyed on natural keys; freshness guard stays as job gate; explicit schemas at ingest (no inference in prod); table properties documented; unit-test `silver_lib`/`gold_lib` transforms against `data/synth/` fixtures.
 
 ---
 
@@ -256,11 +273,15 @@ Build order & best practices:
 - Docs: new findings → next numbered doc; decisions → ADR; this blueprint updated when a standing decision changes.
 
 **Backlog (known gaps, in priority order)**
-1. Consume URL-scope inventory agent output → seed `url_scope_list` defaults (D3).
-2. Wire `new_data/event.tsv` into S6 event decode (the doc-14 provenance caveat references a fix that was never implemented) so custom events (10004–10048+, legacy ids) stop resolving as "unknown".
-3. `uc_discovery` scope conditions still reference `post_page_url` only — align with D4 helper.
-4. **Reconcile §3 EDDL spec vs S7 live-eVar census per rsid** — includes resolving the eVar166/eVar169 URL-type contradiction (§3.4). Blocks eVar-based detection rules.
-5. Asset bundle adoption (§6.2).
+1. **D4 measurement gate** (§5.2 step 2) — the one query that decides whether the `post_page_url` → coalesce fix is a no-op or a re-baseline. Blocks the D4 code change and the `page_url` bronze projection.
+2. **Finish D2 masking removal** — `mask()` survives at `eda/gwam_canada_retirement_eda.py:170` plus stale prose (§4.6 step 4). Check `synth/spec/*.json` first: the generator still consumes `<masked:...>` tokens.
+3. **Rule on the three unclassified hosts (D8):** `retirement.sponsor.manulife.com` (sponsor portal — sponsor ≠ individual member, so probably IN scope), `manulifeplan.ca`, `epargnemanuvie.ca` (FR brand domain, `/15120cwretraite` paths; no current pattern matches it either way).
+4. **Resolve the `manulifeglobalprod` start-date discrepancy** — inventory says first unfiltered day 2026-03-10; `BACKFILL_START` and earlier scoped runs say 2026-02-01. One of them is wrong and `BACKFILL_START` depends on the answer.
+5. Wire `new_data/event.tsv` into S6 event decode (the doc-14 provenance caveat references a fix that was never implemented) so custom events (10004–10048+, legacy ids) stop resolving as "unknown".
+6. `uc_discovery` scope conditions still reference `post_page_url` only — align with the D4 helper.
+7. **Reconcile §3 EDDL spec vs S7 live-eVar census per rsid** — includes resolving the eVar166/eVar169 URL-type contradiction (§3.4). Blocks eVar-based detection rules.
+8. Asset bundle adoption (§6.2).
+9. ~~Consume URL-scope inventory output → seed `url_scope_list`~~ — **done 2026-07-20** (D3).
 
 ---
 
@@ -268,7 +289,7 @@ Build order & best practices:
 
 | # | Phase | Deliverable | Verify |
 |---|-------|-------------|--------|
-| P0 | Scope freeze | URL scope list from inventory agent; masking removal landed | scope list checked into widget defaults; no `mask(`/`RAW_OK_DIMS` in `eda/` |
+| P0 | Scope freeze | ⏳ **in progress** — URL scope list seeded ✅ (D3), login-host rule landed ✅ (D8), notebooks consolidated ✅; masking removal still partial | scope list checked into widget defaults ✅; `grep -rn "mask(\|RAW_OK_DIMS" eda/*.py` returns nothing ❌ (backlog #2) |
 | P1 | eVar dictionary | §3 cross-checked vs S7 census per rsid | every live eVar has a name or an explicit "unmapped" flag; eVar166/169 contradiction resolved |
 | P2 | EDA consolidation | Exactly 2 widget-driven dual-rsid notebooks (§4.6) | §4.6 step 8 checklist |
 | P3 | Pipeline unification | `resolve()` param-driven scope; `SCOPE_SUITE_MODE=both`; dtype-aware `process_date` predicates | end-to-end run green on both rsids; partition pruning confirmed in query plan |
@@ -279,4 +300,4 @@ Build order & best practices:
 
 ---
 
-*Doc 16 · created 2026-07-19 · supersedes scattered guidance in docs 02/12/14/15 where they conflict.*
+*Doc 16 · created 2026-07-19 · revised 2026-07-20 (URL scope inventory landed) · supersedes scattered guidance in docs 02/12/14/15 where they conflict — including their 2026-02-01 cutover framing (D7) and any reference to the retired EDA notebooks.*

@@ -8,8 +8,12 @@
 > **Scope.** Two report suites in one source table:
 > the **shipped** suite `manulifeglobalprod` (new site, profiled in
 > [`eda/gwam_canada_retirement_eda.ipynb`](../../eda/gwam_canada_retirement_eda.ipynb)) and the
-> **legacy** suite `manugrs` (old site, profiled in
-> [`eda/gwam_canada_retirement_eda_manugrs.ipynb`](../../eda/gwam_canada_retirement_eda_manugrs.ipynb)).
+> **legacy** suite `manugrs` (old site, profiled in `eda/gwam_canada_retirement_eda_manugrs.ipynb`
+> — notebook retired 2026-07-20, recoverable at `git show 408de5a:<path>`).
+>
+> ⚠️ **Superseded in part (2026-07-20):** "legacy" describes the *site*, not the suite. `manugrs`
+> is still live — 320,304,305 hits through 2026-07-19, concurrent with `manulifeglobalprod`.
+> See doc-16 §1 D7 / §2.
 >
 > **Data runs.** Production `gwam_prod_catalog`. New suite confirmed 2026-07-09, re-run 2026-07-12
 > (adds the S4c URL audit). Legacy suite run 2026-07-10, independently re-run 2026-07-13 (all
@@ -421,5 +425,5 @@ the business signs off scope**, because flipping either re-baselines every KPI.
   cross-suite) · [`10-data-profile-alignment.md`](10-data-profile-alignment.md) (governance) ·
   [`11-privacy-identity-governance.md`](11-privacy-identity-governance.md) (privacy). Source
   notebooks: [`eda/gwam_canada_retirement_eda.ipynb`](../../eda/gwam_canada_retirement_eda.ipynb),
-  [`eda/gwam_canada_retirement_eda_manugrs.ipynb`](../../eda/gwam_canada_retirement_eda_manugrs.ipynb),
+  `eda/gwam_canada_retirement_eda_manugrs.ipynb` (retired 2026-07-20, at `408de5a`),
   charts [`eda/gwam_canada_retirement_charts.ipynb`](../../eda/gwam_canada_retirement_charts.ipynb).

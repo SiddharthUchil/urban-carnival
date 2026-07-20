@@ -13,25 +13,41 @@ from __future__ import annotations
 SOURCE_TABLE = "gwam_prod_catalog.inv_typed_common.adobe_hit_data"
 PARTITION_COL = "process_date"
 
-# GWAM Canada-Retirement subset: rsid + retirement URL. EDA: 1,151,474 hits, 157 days.
+# GWAM Canada-Retirement subset: rsid + retirement URL. EDA: 1,151,474 hits, 157 days
+# -- that is the en_only figure, NOT the suite total (the 2026-07-20 inventory measured
+# 8,412,803 unfiltered hits on this rsid; en_only captures 31.8% of them).
 SCOPE_RSID = "manulifeglobalprod"
 
 # URL scope mode. "en_only" reproduces the shipped population exactly (single English
 # section root, applied to post_page_url). "broad" widens to a language-agnostic,
-# multi-domain retirement scope. KEEP "en_only" until EDA S4b quantifies the excluded
-# volume and the widened population is re-profiled -- flipping this re-baselines every
-# downstream KPI, detector threshold, and injected-anomaly calibration.
+# multi-domain retirement scope.
+#
+# KEEP "en_only". The 2026-07-20 scope inventory satisfied the first half of the old
+# gate (excluded volume is now quantified: doc-16 §1 D3) but two conditions remain --
+# the widened population has not been re-profiled (phase P2), and "%/group-plans%"
+# still needs the product sign-off noted below. Flipping re-baselines every downstream
+# KPI, detector threshold, and injected-anomaly calibration; done under
+# mode=incremental it also writes a step change mid-series that the detector reads as
+# a level-shift anomaly. Any flip must be a full mode=backfill with gold truncated.
 SCOPE_URL_MODE = "en_only"
 
 # Current production scope -- English section root only.
 SCOPE_URL_LIKE = "%manulife.com/ca/en/personal/group-plans/group-retirement%"
 
 # Proposed broad scope: SQL LIKE patterns OR-ed together, matched case-insensitively on the
-# COMPLETE url (coalesce(page_url, post_page_url) -- post_page_url is ~37% blank on this report
-# suite, EDA S4b). NOTE group-plans is the umbrella that CONTAINS group-retirement (also pulls
-# in group-benefits / business / advisor), so product sign-off is needed before activating.
+# COMPLETE url (coalesce(page_url, post_page_url) -- post_page_url measured 36.41% blank on
+# this suite and 45.75% on manugrs, vs <=0.013% for page_url; 2026-07-20 inventory).
+# NOTE group-plans is the umbrella that CONTAINS group-retirement (also pulls in
+# group-benefits / business / advisor), so product sign-off is needed before activating.
+#
+# These patterns are already language-agnostic: the 2026-07-20 inventory confirmed they
+# cover every French path it found -- manulifeim.com/group-retirement/ca/fr/* via
+# "%/group-retirement%" and /ca/fr/particuliers/regimes-collectifs/retraite-collective via
+# "%/regimes-collectifs%". No FR-specific additions are needed here. Known NOT covered:
+# epargnemanuvie.ca (separate FR brand domain, blocked on the SCOPE_LOGIN_HOST_EXCLUDE
+# ruling below) and the unhyphenated "groupretirement" portal paths (login, excluded by design).
 SCOPE_URL_LIKE_BROAD = [
-    "%/group-retirement%",     # EN retirement subsection + pagename section token
+    "%/group-retirement%",     # EN retirement subsection + pagename section token; also FR /ca/fr
     "%/group-plans%",          # EN group-plans umbrella (personal/business/advisor)
     "%/regimes-collectifs%",   # FR equivalent (particuliers/entreprises/conseillers) -- S4b-confirmed
 ]
@@ -62,19 +78,28 @@ SCOPE_LOGIN_HOST_EXCLUDE = [
 
 # Report-suite scope mode. "current_only" ingests only the shipped suite (SCOPE_RSID);
 # "with_legacy" ALSO unions the pre-Storefront CA-Retirement suite `manugrs`, which carries
-# ~2.5 yr of history that ends exactly as manulifeglobalprod begins (2026-02-01 cutover;
-# research/claude/14-manugrs-cross-suite-analysis.md). KEEP "current_only" until the business
-# signs off unioning the legacy suite -- flipping this re-baselines every downstream KPI, and
-# only ~12 eVars are shared across the two suites (eVar-derived series are NOT splice-safe).
+# ~2.5 yr of marketing-site history (research/claude/14-manugrs-cross-suite-analysis.md).
+#
+# The "2026-02-01 clean cutover" holds only for the URL-FILTERED marketing population: the
+# 2026-07-20 inventory measured manugrs still running 8-13M hits/month through 2026-07-19 at
+# suite level, in parallel with manulifeglobalprod. Only the manulifeim.com marketing site
+# wound down. So "with_legacy" is a union of two CONCURRENT suites, not a history splice.
+#
+# KEEP "current_only" until the business signs off unioning the legacy suite -- flipping this
+# re-baselines every downstream KPI, and only ~12 eVars are shared across the two suites
+# (eVar-derived series are NOT splice-safe).
 SCOPE_SUITE_MODE = "current_only"
 
-# Legacy CA-Retirement suite (pre-Storefront, old site manulifeim.com/group-retirement/ca/en).
-# URL scope is a list so the S4b-confirmed French `/ca/fr` path can be appended after sign-off
-# without a shape change. Matched on the COMPLETE url (coalesce(page_url, post_page_url)) because
-# post_page_url is ~48% blank on this suite (EDA S4b, manugrs run).
+# Legacy CA-Retirement suite (pre-Storefront, old site manulifeim.com/group-retirement/ca).
+# Matched on the COMPLETE url (coalesce(page_url, post_page_url)) because post_page_url
+# measured 45.75% blank on this suite (2026-07-20 inventory; the earlier ~48% was sampled).
+# The FR root is included: the inventory found manulifeim.com/group-retirement/ca/fr to be the
+# single largest uncovered retirement prefix (801,461 hits). Inert while SCOPE_SUITE_MODE is
+# "current_only" -- that branch is dead code -- so this carries no re-baseline risk today.
 LEGACY_SCOPE_RSID = "manugrs"
 LEGACY_SCOPE_URL_LIKE = [
     "%manulifeim.com/group-retirement/ca/en%",   # EN legacy root (shipped-equivalent)
+    "%manulifeim.com/group-retirement/ca/fr%",   # FR legacy root -- 801,461 hits, 2026-07-20 inventory
 ]
 
 # --- Target (parameterized) ---

@@ -1,7 +1,8 @@
 # 14 — GWAM Canada Retirement: `manugrs` legacy suite & cross-suite analysis
 
 > **Status:** analysis of record for the `rsid = manugrs` profiling run in
-> [`eda/gwam_canada_retirement_eda_manugrs.ipynb`](../../eda/gwam_canada_retirement_eda_manugrs.ipynb),
+> `eda/gwam_canada_retirement_eda_manugrs.ipynb` (notebook retired 2026‑07‑20;
+> recover with `git show 408de5a:eda/gwam_canada_retirement_eda_manugrs.ipynb`),
 > compared against the shipped `manulifeglobalprod` run analysed in
 > [`12-eda-findings-analysis.md`](12-eda-findings-analysis.md)
 > (notebook [`eda/gwam_canada_retirement_eda.ipynb`](../../eda/gwam_canada_retirement_eda.ipynb)).
@@ -9,6 +10,12 @@
 > **re‑run 2026‑07‑13** (same widgets; all exact figures reproduced); `manulifeglobalprod`
 > re‑run **2026‑07‑12** (adds S4c; manifest verified 16/16 on byte‑length and sha1).
 > **Grain of record:** daily. **Privacy regime:** ADR‑0007 (shape‑only for sensitive columns).
+>
+> ⚠️ **Superseded in part (2026‑07‑20).** Every figure below is scoped to the *URL‑filtered
+> marketing* population and remains valid as such. But the **"clean cutover" reading does not
+> hold at suite level**: an unfiltered full‑history inventory measured `manugrs` at
+> **320,304,305 hits running through 2026‑07‑19**, concurrent with `manulifeglobalprod`. Only the
+> `manulifeim.com` marketing site wound down at 2026‑02‑01. See doc‑16 §1 D7 / §2.
 
 **Why this document exists.** The manager challenged two business‑supplied assumptions: (1) the
 CA‑Retirement URL filter `post_page_url LIKE '…/ca/en/personal/group-plans/group-retirement'`, and
