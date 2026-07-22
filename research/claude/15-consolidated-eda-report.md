@@ -20,6 +20,18 @@
 > is still live — 320,304,305 hits through 2026-07-19, concurrent with `manulifeglobalprod`.
 > See doc-16 §1 D7 / §2.
 >
+> ⚠️ **Revised 2026-07-22 — two changes invalidate parts of this report as written.**
+> **(a) The eVar dictionary now exists.** `data/EDDL_datalayer.xlsx` (25 tabs) was added
+> 2026-07-19 and parsed into [`16-e2e-production-blueprint.md`](16-e2e-production-blueprint.md) §3.
+> Statements below that eVar meanings are unknowable, and that CoverMe is "the only dictionary on
+> hand," are **obsolete** — see §5.4 and §8.
+> **(b) The privacy regime inverted.** ADR-0007 §5 was *revised, not retired*: business dimensions
+> (eVars, props, events, URLs, pagenames, campaigns, referrers, search terms) now profile **raw and
+> in full**; only direct device/network identifiers stay shape-only. Every "content is masked"
+> claim below is **obsolete** — see §4.
+> Sections rewritten for this: §2 (widgets), §3 (scope), §4 (privacy), §5.3, §5.4, §5.8, §7, §8,
+> and the new **§8b (EDA exit criteria)**. Numeric findings from the profiling runs are unchanged.
+>
 > **Data runs.** Production `gwam_prod_catalog`. New suite confirmed 2026-07-09, re-run 2026-07-12
 > (adds the S4c URL audit). Legacy suite run 2026-07-10, independently re-run 2026-07-13 (all
 > figures reproduced). **Grain of record: daily.** **Privacy regime: ADR-0007** (shape-only for
@@ -51,12 +63,18 @@
   both**, so a naïve union would show high missing rates. Cross-suite splicing is safe only on
   suite-agnostic signals (hit/visit counts, geography, language, page names) — not on eVar KPIs.
 - **The data is clean but anonymous.** No server-side bot filtering, near-real-time ~3-minute
-  batches, Eastern-time timestamps, ~0 duplicate rate — but **no person-level identity** exists
-  (`cust_visid` 100 % null, `userid` constant); analysis is device-level only, under strict
-  privacy masking.
-- **Every eVar's *meaning* is masked** (ADR-0007) and the only data dictionary on hand is for a
-  *different* product (CoverMe). Several decisions below wait on the business supplying the GWAM
-  eVar dictionary and confirming scope.
+  batches, Eastern-time timestamps, ~0 duplicate rate — but **no person-level identity is
+  populated** (`cust_visid` 100 % null, `userid` constant); analysis is device-level only.
+- **We now have the GWAM eVar dictionary.** `data/EDDL_datalayer.xlsx` (25 tabs, added 2026-07-19)
+  supersedes the CoverMe workbook. It **names all 12 cross-suite eVars** and resolves the two
+  unknowns this report previously flagged as blocking: **eVar107 = full page URL** and
+  **eVar140 = Medallia UUID** (§5.4). The workbook contains **no rsid names**, so it says what each
+  variable *should* mean — not which suite implements it. That gap is now the open question (§8).
+- **Three findings emerge only from combining the dictionary with the profiling runs**, and all
+  three need action before build (§8b): **eVar107 is a URL field that the S4c scope audit never
+  tested**; **eVar132–134 are spec'd as Member Customer IDs**, which would be person-level identity
+  if populated; and under the new raw-by-default regime **eVar131 (ECID) and eVar108 (User Agent)
+  print raw** because the sensitivity check matches literal column names, not eVar semantics.
 
 ---
 
@@ -82,22 +100,32 @@ We profiled two suites:
 3. Emits each result as a machine-readable **`SHAREABLE` JSON block** so the findings can be lifted
    into these documents without re-running Databricks, plus an integrity **run-manifest** (byte
    length + sha1 per block).
-4. Applies **ADR-0007 privacy** throughout: sensitive columns are reported **shape-only** (how full,
-   how many distinct values, string lengths) — **never their values**.
+4. Applies **ADR-0007 privacy** throughout — but note the regime **inverted in 2026-07**: business
+   dimensions now print raw, and only direct device/network identifiers are shape-only. See §4.
 
-The two notebooks are structurally identical; they differ only in the widget values that point them
-at each suite. A companion notebook, `gwam_canada_retirement_charts.ipynb`, renders the same data
-as interactive charts (traffic over time, day-of-week heatmap, country map, language mix, event
-timeline, RRSP seasonality) — it is a visualization layer, not new analysis.
+The two notebooks were structurally identical, differing only in the widget values pointing them at
+each suite. **Both were retired 2026-07-20** and replaced by a single dual-rsid profiler,
+[`eda/gwam_canada_retirement_eda.py`](../../eda/gwam_canada_retirement_eda.py), which covers both
+suites in one run via `rsid_list` (§2); per-suite figures come from
+`window_frame.filter.rsid_breakdown`. The companion
+[`eda/gwam_canada_retirement_charts.py`](../../eda/gwam_canada_retirement_charts.py) renders the
+same data as interactive charts (traffic over time, day-of-week heatmap, country map, language mix,
+event timeline, RRSP seasonality) — a visualization layer, not new analysis. The table above is
+retained because **the figures in this report come from those historical runs**.
 
 ---
 
 ## 2. The widgets we used
 
-The notebook is parameterized by **11 Databricks widgets** (dropdown/text inputs at the top). Ten
-are tuning knobs; the two that define the population are `rsid_filter` and `url_filter`.
+> **Rewritten 2026-07-22.** The 11-widget, one-suite-per-run contract described here previously was
+> replaced by commits `1fb274b` and `5e2a220`. The live profiler
+> ([`eda/gwam_canada_retirement_eda.py`](../../eda/gwam_canada_retirement_eda.py)) now takes
+> **14 widgets** and profiles **both suites in a single run**.
 
-| # | Widget | Default (new suite) | What it controls |
+Nine widgets are tuning knobs; **five define the population**: `rsid_list`, `url_scope_mode`,
+`url_scope_list`, `url_scope_exclude`, `login_host_exclude`.
+
+| # | Widget | Default | What it controls |
 |---|---|---|---|
 | 1 | `table_fqn` | `gwam_prod_catalog.inv_typed_common.adobe_hit_data` | Which table to profile. |
 | 2 | `window_months` | `13` | Length of the deep-profiling window (counts back from the last CA date). |
@@ -108,37 +136,41 @@ are tuning knobs; the two that define the population are `rsid_filter` and `url_
 | 7 | `max_csv_lines` | `450` | Row cap on emitted daily CSV series. |
 | 8 | `top_events_k` | `6` | How many top events get their own daily series. |
 | 9 | `cache_sample` | `false` | Whether to persist the sample dataframe. |
-| 10 | **`rsid_filter`** | `manulifeglobalprod` | **The report suite to keep** (empty = off). |
-| 11 | **`url_filter`** | `manulife.com/ca/en/personal/group-plans/group-retirement` | **The URL substring to keep** (empty = off). |
+| 10 | **`rsid_list`** | `manugrs,manulifeglobalprod` | **Report suites to keep** — comma-separated, **both by default** (doc-16 D7). |
+| 11 | **`url_scope_mode`** | `broad` | `broad` = use `url_scope_list`; `en_only` = pin to the single English pattern for pipeline parity. |
+| 12 | **`url_scope_list`** | `%/group-retirement%,%/group-plans%,%/regimes-collectifs%` | **Authoritative URL include patterns** (SQL `LIKE`). Add URLs here. |
+| 13 | **`url_scope_exclude`** | `%adobeaemcloud.com%,%/ph/%` | URL patterns to drop (authoring host, Philippines). |
+| 14 | **`login_host_exclude`** | authenticated hosts | Member-portal / auth hosts excluded by business rule (doc-16 D8). |
 
-**The two runs differ only in the population widgets:**
-
-| Widget | New suite (`manulifeglobalprod`) | Legacy suite (`manugrs`) |
-|---|---|---|
-| `rsid_filter` | `manulifeglobalprod` | `manugrs` |
-| `url_filter` | `manulife.com/ca/en/personal/group-plans/group-retirement` | `manulifeim.com/group-retirement/ca/en` |
-
-**What is *not* a widget (common misconception).** The sample **seed is hard-coded (42)**, the
-window is **derived** from `window_months` (not explicit start/end dates), and there is **no
-`SCOPE_URL_MODE` / `SCOPE_SUITE_MODE` toggle in the notebook** — those production scope toggles live
-downstream in the Databricks pipeline ([`databricks/conf/settings.py`](../../databricks/conf/settings.py)),
-not in the EDA. Explicit `start_date` / `end_date` and geo dropdowns exist only in the *charts*
-companion.
+**Correction to the previous version of this section.** It stated there is "no `SCOPE_URL_MODE`
+toggle in the notebook." That is now **false** — `url_scope_mode` is widget 11, and `en_only`
+reproduces the pipeline's default scope. What remains true: the sample **seed is hard-coded (42)**,
+the window is **derived** from `window_months` rather than explicit dates, and there is still **no
+`SCOPE_SUITE_MODE`** in the EDA (dual-rsid is now permanent, so the toggle is unnecessary here; the
+production equivalent lives in [`databricks/conf/settings.py`](../../databricks/conf/settings.py)).
+Explicit `start_date` / `end_date` and geo dropdowns exist only in the *charts* companion.
 
 ---
 
 ## 3. How we scoped the data
 
 The notebook picks the real column names defensively (`rsid` from `rsid|report_suite|reportsuite…`,
-URL from `post_page_url|page_url`) and builds the scope as:
+URL from `post_page_url|page_url`). **As of `5e2a220` the scope is list-based**, not a single
+substring:
 
 ```
-lower(trim(rsid_col)) == rsid_filter   AND   lower(url_col) contains url_filter
+lower(trim(rsid_col)) IN rsid_list
+  AND  ( url_col LIKE ANY url_scope_list )         -- or the single EN pattern if url_scope_mode=en_only
+  AND  NOT ( url_col LIKE ANY url_scope_exclude )
+  AND  NOT ( host      LIKE ANY login_host_exclude )
 ```
 
-Either widget left empty drops that condition; a missing schema column is dropped **and flagged** in
-the run metadata, so the notebook never silently profiles the wrong population. Two consequences the
-audit sections (S4/S4b/S4c) quantify:
+Any widget left empty drops that condition; a missing schema column is dropped **and flagged** in
+the run metadata, so the notebook never silently profiles the wrong population. The
+`login_host_exclude` clause encodes the business rule that authenticated member-portal traffic
+(`portal.manulife.ca`, `id.manulife.ca`, `grsmembers.manulife.com`, `gsrs1.manulife.com`) is out of
+scope — this is why suite-level `manugrs` volume (320 M hits) dwarfs the ~5.6 M in scope. Two
+consequences the audit sections (S4/S4b/S4c) quantify:
 
 - The **URL contains-test silently excludes blank-URL hits**. On the new-suite window,
   `post_page_url` is blank on **88.2 %** of rows; scoping on it alone therefore throws away most of
@@ -167,15 +199,30 @@ population. **Custom dimensions** (`evarN`/`post_evarN`, `propN`/`post_propN`) a
 logical form and counted as "live" (≥0.1 %) and "core" (≥99 %). **Dimension candidates** for slicing
 anomalies (S9) come from a fixed allowlist filtered to columns that are actually populated.
 
-**Privacy (ADR-0007) governs how each column is printed:**
+**Privacy (ADR-0007 §5) governs how each column is printed — this regime was inverted in 2026-07:**
 
-- **24 sensitive columns** (visitor/device IDs, IP addresses, fine geo/ZIP, user-agent, account IDs,
-  personalization/social) are reported **shape-only** — never values, not even masked. A regex net
-  (`visid|cookie|ip|user_agent|zip|userid|…`) catches any the list misses.
-- A small **allowlist of low-cardinality technical dimensions** (`geo_country`, `geo_region`,
-  `browser`, `os`, `connection_type`, `language`, `hit_source`, visit flags…) is printed **raw**.
-- Everything else is **masked** as `<masked:sha1[:8]>`; emitted text is additionally scrubbed of
-  emails, IPs, and long hex strings.
+The old rule was *mask by default, allowlist a few technical dimensions*. It was abandoned because
+it destroyed the analytical signal without protecting a person: whole sections came back as
+unreadable `<masked:xxxxxxxx>` tokens, and the regex net (`guid|token|mcid|aamid|zip$|social`) swept
+in business columns that were never identifiers. The current rule is the reverse:
+
+- **Business dimensions print raw and in full** — eVars, props, events, URLs, pagenames, campaigns,
+  referrers, search terms. The justification is that this feed carries **no person-level
+  identifier** (`cust_visid` wholly NULL, `userid` a single constant — confirmed with the data owner
+  2026-07-04).
+- **Direct device/network identifiers print shape-only** (null %, cardinality, length stats). The
+  set is **16 exact column names**, not a pattern: `mcvisid`, `visid_high/low`,
+  `post_visid_high/low`, `cust_visid`, `post_cust_visid`, `cookies`, `post_cookies`,
+  `persistent_cookie`, `ip`, `ip2`, `ipv6`, `geo_zip`, `post_zip`, `zip`, `user_agent`.
+- **URL query strings are stripped** (session tokens live there); paths and hosts print in full.
+- The residual scrub net is **deliberately minimal**: emails and IPv4 literals only, with a
+  2,000-character truncation cap.
+
+> ⚠️ **Gap this creates — see §8b item 3.** `is_sensitive()` is an **exact match** against those 16
+> names. It has no knowledge of eVar *semantics*. The EDDL dictionary shows several live eVars carry
+> exactly the content that set exists to protect — **eVar131 = Anonymous ID (ECID)** and
+> **eVar108 = User Agent** are both in the live 12-eVar cross-suite set, and both now print raw.
+> `user_agent` is shape-only while `evar108`, which holds the same string, is not.
 
 ---
 
@@ -255,6 +302,16 @@ traffic**, and none of the five URL columns holds retirement rows beyond the coa
 (`first_hit_page_url`/`visit_start_page_url` "extras" are visit-entry attribution, not hit-level
 pages; `site_url` is a single constant; `pagename` is ~40 % blank — unusable for scope).
 
+> ⚠️ **The S4c sweep is narrower than it reads — see §8b item 1.** "All five candidate URL columns"
+> means exactly `first_hit_page_url`, `page_url`, `post_page_url`, `visit_start_page_url`,
+> `site_url` (`URL_CANDIDATES` in the profiler). The EDDL dictionary now identifies
+> **eVar107 (+prop52) as the primary full page URL field** — `document.url` split into
+> Domain / Hash / Query / Path — and **eVar107 is live in both suites**. It was never tested as a
+> scope source. The claim "no retirement traffic hides beyond the coalesce" is therefore
+> **unproven for eVar107/prop52**, and the same applies to **eVar194** (click href) and
+> **eVar127** (download URL). Until S4c is widened, treat the coalesce as *best known*, not *proven
+> complete*.
+
 ### 5.4 Schema population & custom dimensions (S5, S7)
 
 | Signal | New suite | Legacy suite |
@@ -266,14 +323,52 @@ pages; `site_url` is a single constant; `pagename` is ~40 % blank — unusable f
 | Live props (logical) | prop51–57 (5 core) | 26 (14 core) |
 
 The legacy suite lights up **more** columns because it carries a larger live-eVar set. **Cross-suite
-overlap is small: only 12 logical eVars are live in both** (evar101–103, 105–109, 131, 138, 162,
-200); **50 are legacy-only, 8 are new-only**. That is the "different columns are populated → high
-missing rate on a naïve union" case the manager anticipated — *not* a rename. **All eVar *content*
-is masked** (ADR-0007): e.g. `evar107` = `<internal>` free-text (card ~734, ≤262 chars), `evar140` =
-`<hash>` (sensitive join-key), `evar200` ≈ visitor cardinality (identity-like). The only dictionary
-in `new_data/` is the **CoverMe** suite (93 eVars) — a *different* product, **not authoritative
-here**. The 12 shared eVars are the only splice candidates, and only after the business confirms each
-means the same thing in both suites.
+overlap is small: only 12 logical eVars are live in both**; **50 are legacy-only, 8 are new-only**.
+That is the "different columns are populated → high missing rate on a naïve union" case the manager
+anticipated — *not* a rename.
+
+**The 12 shared eVars now have names** (EDDL `Global Data Layer_GPMSS_IT` + per-entity tabs, doc-16
+§3.1). These are the only cross-suite splice candidates:
+
+| eVar | EDDL meaning | Note for detection |
+|---|---|---|
+| eVar101 | Page Name (`web.webPageDetails.name`) | Slicing dimension; pairs with `pagename`. |
+| eVar102 | Page Type (Non-Txn / Txn) | Funnel segmentation. |
+| eVar103 | Site Type (PWS / CWS / Sign-in hub) | **PWS = public, CWS = customer**; group retirement is CWS. |
+| eVar105 | Brand \| Line of Business \| Segment | Segment ∈ CA / JH / GWAM / Asia — the scope discriminator. |
+| eVar106 | Country \| Region \| City | ⚠️ fine geo, delimited multi-value. |
+| **eVar107** | **Full Page URL \| Domain \| Hash \| Query \| Path** | **Resolves the old `<internal>` free-text mystery** — card ~734, ≤262 chars is exactly a URL. Pairs with prop52. |
+| eVar108 | User Agent (`navigator.userAgent`) | ⚠️ prints raw — see §4 and §8b item 3. |
+| eVar109 | Language (pairs prop54) | Cross-check against the numeric `language` IDs (45/39). |
+| eVar131 | **Anonymous ID (ECID)** | ⚠️ device identifier printing raw — §8b item 3. |
+| eVar138 | User Type | Member vs sponsor vs advisor segmentation. |
+| eVar162 | Search Keywords (pairs prop71) | ⚠️ conflicts with CAR applicability — §5.4 note below. |
+| eVar200 | Onetrust Categories-ID | ⚠️ conflicts with the profiled cardinality — note below. |
+
+**Two previously-blocking unknowns are resolved.** `evar107` = full page URL (above), and
+**`evar140` = Medallia UUID** — a survey-platform identifier, not the "sensitive join-key" this
+report previously guessed. Both were listed as *priority* asks in §8 Q3; both are now answered by
+the spec.
+
+**Two dictionary-vs-data conflicts remain open:**
+- **eVar200.** EDDL says *Onetrust Categories-ID* (consent-category grouping, expected to be
+  low-cardinality). Profiling measured it at **≈ visitor cardinality**, i.e. identity-like. Either
+  the suite reuses the slot, or the field carries a per-visitor consent receipt. Do not use it as a
+  KPI until reconciled.
+- **eVar162.** EDDL says *Search Keywords*, but the `EDDL ready for CAR` tab marks **Searches as
+  not CAR-applicable**. A search field that is live in both retirement suites contradicts that.
+
+**The CoverMe dictionary is formally superseded.** Worth recording why it misled: the profile in
+`new_data/data_profile_summary.json` is a profile **of the CoverMe dictionary spreadsheets
+themselves** (5 files, 509 rows total — `input_root` is a local Desktop path), *not* of GWAM hit
+data. Any eVar "type" read from that file describes spreadsheet cells, not production traffic.
+
+**Critical caveat — the workbook names no rsids.** EDDL is a *planning* spec: its "Report Suite
+Mapping" column is blank throughout. It establishes what each variable **should** mean; it cannot
+confirm that `manugrs` and `manulifeglobalprod` implement it, or implement it identically. So the
+12 shared eVars remain splice candidates **pending a per-rsid confirmation** (§8b item 2), and the
+known spec-internal conflicts (Platform eVar110↔185, Domain eVar107↔121, eVar122 dual meaning,
+DKPIs legacy numbering) must be flagged rather than guessed.
 
 ### 5.5 Events & KPI candidates (S6)
 
@@ -293,6 +388,21 @@ eVar set (each live eVar fires a presence flag). **Event IDs decode by the stand
 > **Note on the notebook's event labels.** The notebook has **no custom-event lookup** loaded, so
 > IDs print as "unknown" (0 of 23 resolved on the new-suite re-run, 0 of 40 on the legacy re-run).
 > That is a display gap, not a data gap — the decode convention above is authoritative.
+> **`new_data/event.tsv` is that lookup** and is already in the repo (e.g. `10006` = *Instance of
+> eVar107*, `10065` = *Instance of eVar166*, `10068` = *Instance of eVar169*). Loading it would
+> resolve the labels; that wiring was scoped previously but never implemented.
+
+> **The eVar166 / eVar169 contradiction (doc-16 backlog #4) — narrowed.** EDDL says
+> **eVar166 = Product ID** and assigns **no meaning to eVar169**; doc-16 §3.4 records an earlier
+> claim that production profiling tagged both as *URL-type* in `manugrs`. On review that claim
+> **has no traceable source in this repo** — the only eVar166/169 references are the
+> instance-of-eVar rows in `event.tsv` above and empty cells in the CoverMe workbook profile
+> (100 % null, `distinct_count: 0`; the "float" type is the default inference for an empty column,
+> not evidence of content). Two corrections follow: doc-16's "**eVar169 does not exist**" is too
+> strong — the Adobe slot exists and has an instance event (`10068`); what does not exist is an
+> *EDDL meaning* for it. And "event169 = Video Complete" is a **different ID space** from
+> instance-of-eVar169. Resolution still requires the per-rsid live-eVar census (§8b item 2), but
+> nothing currently contradicts the spec.
 
 ### 5.6 Geography, language & slicing dimensions (S9)
 
@@ -328,9 +438,20 @@ Daily ratios: **~1.36 hits/visit, ~1.09 visits/visitor** (new); ~1.43 / ~1.08 (l
 **ADR-0007**, visitor/device IDs are **pseudonymized** with keyed HMAC-SHA-256 (key in Azure Key
 Vault, deterministic, key-versioned for crypto-erase); IPs are dropped; fine geo/ZIP is generalized
 to region; user-agent is generalized to browser family. **Pseudonymized data is still personal
-information** under Law 25 / PIPEDA, so masking and RBAC stay mandatory, and a **PIA is required
-before production ingestion**. Person-level stitching is **deferred** pending a MarTech ask (capture
-a login/customer ID in a dedicated eVar) and classification approval.
+information** under Law 25 / PIPEDA, so RBAC stays mandatory and a **PIA is required before
+production ingestion**.
+
+> **The dictionary changes the identity question — see §8b item 4.** This report previously deferred
+> person-level stitching "pending a MarTech ask to capture a login/customer ID in a dedicated eVar."
+> **EDDL shows that ask is already specified**: `eVar132 / eVar133 / eVar134` = **Primary /
+> Secondary / Tertiary Member Customer ID**, with `eVar131` = Anonymous ID (ECID),
+> `eVar136` = Email (hashed), and `eVar137` = Age \| Gender \| Spouse Age \| Spouse Gender \|
+> #Dependents \| Smoking. None of eVar132–134 appears in the live cross-suite set, and the
+> "no person-level identity" finding above rests on `cust_visid` / `userid` — **not** on these
+> columns, which were never checked by name. The question is no longer *"can we ask for a customer
+> ID?"* but **"are eVar132–134 populated in either suite today?"** If any is, the privacy posture
+> changes materially: the feed would carry direct customer identifiers, the PIA scope widens, and
+> the raw-by-default regime in §4 would need revisiting before the next EDA run emits blocks.
 
 ---
 
@@ -366,7 +487,10 @@ with **2026-02-01 encoded as a hard change-point**.
 | 158 days, strong weekly cycle, RRSP monthly peak | **Day-of-week-aware baseline** (trailing same-weekday median / seasonal-naïve); short-memory methods only; no yearly decomposition yet. |
 | Clean, datable cutover at 2026-02-01 + tag change-points (2026-02-24, 2026-03-03, ev500 window 2026-04-02→06-15) | Encode these as **known change-points, excluded from training**; never compare eVar KPIs across the suite cutover. |
 | ~2.5 yr recoverable under `manugrs` | Splice **suite-agnostic KPIs** (hits, visits, geography, language) to lift the 158-day ceiling; keep old/new eVars as separate series. |
-| Only 12 shared eVars; content masked | eVar-derived KPIs are **not** cross-suite-spliceable until the dictionary confirms shared meaning. |
+| Only 12 shared eVars; **now named** via EDDL | eVar-derived KPIs are cross-suite-spliceable **only after a per-rsid census confirms the spec holds in each suite** — the workbook names no rsids. |
+| eVar107/194/127 are URL fields never audited for scope | **Widen S4c** before freezing scope; the coalesce is best-known, not proven complete. |
+| eVar131 (ECID) + eVar108 (User Agent) print raw under the new regime | Extend the sensitivity check to **eVar semantics**, not just literal column names, before the next run emits blocks. |
+| eVar132–134 spec'd as Member Customer IDs | **Check population before the PIA.** If live, the feed carries direct customer identifiers and the privacy posture changes. |
 | No bot filtering; device-level identity only | Own the bot heuristics; treat visits/visitors as approximate. |
 | `post_page_url` ~37–48 % blank | Scope production on **`coalesce(page_url, post_page_url)`**. |
 | Presence-only events | KPIs are **counts/rates**, not event values. |
@@ -387,27 +511,84 @@ the business signs off scope**, because flipping either re-baselines every KPI.
 
 ## 8. Open questions for business / analytics owners
 
-**Scope & history**
+> **Updated 2026-07-22 after the EDDL dictionary landed.** Q3 is now **closed**; Q4 is **narrowed**
+> from "what do these mean?" to "does the spec hold per suite?". Five questions are new (Q10–Q14),
+> and three of them (Q10, Q12, Q13) are **blocking** — they change scope, privacy posture, or both.
+
+### Closed by the dictionary
+
+| Was | Now |
+|---|---|
+| **Q3** — provide the GWAM eVar dictionary; priority `evar107`, `evar140` | ✅ **Closed.** `data/EDDL_datalayer.xlsx`, 25 tabs, parsed in doc-16 §3. **eVar107 = Full Page URL**, **eVar140 = Medallia UUID**. CoverMe formally superseded (§5.4). |
+
+### Still open — scope & history
+
 1. Confirm **2026-02-01** as the migration date and whether `manugrs` history is authoritative for
    backfill. Union the legacy suite for training (≈2.5 yr, at the cost of a change-point) or start
    clean at the new suite (158 days)?
 2. Should scope include **French `/ca/fr`** traffic? It is now a **two-domain** decision
    (`manulifeim.com` legacy +314 K rows, `manulife.com` new +230 K rows).
+10. 🚩 **Blocking — does scope need to consider `eVar107`?** EDDL calls it the primary page-URL
+    field, and the S4c audit never tested it (§5.3). If eVar107 carries retirement hits the
+    `coalesce(page_url, post_page_url)` scope misses, the scope decision reopens. Also ask whether
+    **eVar121 (Domain)** duplicates eVar107, which the spec flags as a conflict.
+11. Reconcile the **unfiltered `manulifeglobalprod` first-day discrepancy**: the scoped run reports
+    2026-02-01, the unfiltered inventory reports **2026-03-10**. Which is the true suite start?
 
-**Metric semantics**
-3. Provide the **GWAM eVar dictionary** for *both* suites — content is masked, and the CoverMe
-   dictionary is not authoritative. Priority: `evar107` (`<internal>` free-text — PII-safe to
-   surface?) and `evar140` (sensitive hash/join-key).
-4. For the **12 shared eVars**, does each capture the **same dimension** in both suites? Only these
-   can be spliced.
+### Still open — metric semantics
+
+4. **Narrowed.** For the **12 shared eVars** (now named, §5.4), does each carry the **same content
+   in both `manugrs` and `manulifeglobalprod`**? EDDL contains **no rsid mapping**, so it cannot
+   answer this — it needs either the Adobe report-suite variable map per rsid, or the census in
+   §8b item 2.
 5. Which KPIs should actually trigger alerts (enrolment funnel? campaign views? traffic? language
-   mix?)?
+   mix?)? EDDL's `EDDL ready for CAR` tab gives a starting cut: **CAR-applicable = Yes** for page
+   views, errors, transactions, user IDs, LOB/segment, referrers, downloads, exits, product,
+   policy IDs; **No** for searches, registrations, logins, campaign, link tracking.
+12. 🚩 **Blocking — resolve the two dictionary-vs-data conflicts** in §5.4: **eVar200**
+    (spec'd Onetrust Categories-ID, profiled at visitor cardinality) and **eVar162** (spec'd Search
+    Keywords, but Searches are marked not-CAR-applicable). Neither can feed a KPI as-is.
+13. 🚩 **Blocking — are `eVar132 / 133 / 134` (Primary / Secondary / Tertiary Member Customer ID)
+    populated in either suite?** See §5.8. A "yes" makes this a feed carrying direct customer
+    identifiers and widens the PIA before any production ingestion.
+14. Confirm the **spec conflicts EDDL flags internally** rather than guessing: Platform
+    eVar110 ↔ eVar185, Domain eVar107 ↔ eVar121, eVar122 dual meaning (Login Step vs Error
+    Description), event164 dual meaning, Purchase-ID event165 ↔ event167, and the **DKPIs tab's
+    legacy numbering** — is DKPIs genuinely superseded, or live for some suite?
 
-**Dimensions & operations**
+### Still open — dimensions & operations
+
 6. Is the new suite's **USA 11.5 %** real end-users or internal/test traffic to exclude?
-7. Confirm the `language` mapping (45 = EN, 39 = FR).
+7. Confirm the `language` mapping (45 = EN, 39 = FR) — and cross-check against **eVar109 /
+   prop54**, which EDDL says carry language directly and may be more readable than numeric IDs.
 8. Freshness SLA / daily cutoff (writes are ~3-min batches; grain of record is daily).
 9. Is **weekend/holiday ≈ 40 %** expected, and should statutory holidays be modelled?
+15. Confirm the **authenticated-host exclusion** (`portal.manulife.ca`, `id.manulife.ca`,
+    `grsmembers.manulife.com`, `gsrs1.manulife.com`) is correct and complete. It removes the large
+    majority of suite-level `manugrs` volume, so a wrong list silently changes every baseline.
+
+---
+
+## 8b. EDA exit criteria — what must be true before build proceeds
+
+> **Added 2026-07-22.** The profiling runs themselves are complete and reproduced. What is *not*
+> complete is the reconciliation between those runs and the dictionary that arrived afterwards.
+> These five items are the gate. Items 1–4 are **repo-side work we can do without waiting on
+> stakeholders**; item 5 is the stakeholder gate.
+
+| # | Item | Why it blocks | Done when |
+|---|---|---|---|
+| 1 | **Widen the S4c URL audit to `evar107`/`post_evar107`, `prop52`, `evar194`, `evar127`** | The "no retirement traffic beyond the coalesce" conclusion is unproven for the field EDDL calls the *primary* page URL (§5.3). Scope is the foundation every KPI sits on. | S4c reports retirement-hit counts for those columns and either confirms zero incremental rows or quantifies them. |
+| 2 | **Per-rsid live-eVar census cross-referenced against EDDL** | Resolves Q4 (same meaning per suite), doc-16 backlog #4 (eVar166/169), and the eVar200/eVar162 conflicts in one pass. The unified dual-rsid profiler already emits `live_custom_dims` per rsid — this is a join, not a new run. | A table of `rsid × eVar × EDDL meaning × populated % × cardinality`, with mismatches flagged. |
+| 3 | **Extend the sensitivity check to eVar semantics** | `is_sensitive()` matches 16 literal column names, so **eVar131 (ECID)** and **eVar108 (User Agent)** print raw today (§4), and eVar136/137 would too if live. Every SHAREABLE block copied out of the workspace carries this. | `DIRECT_IDENTIFIERS` (or an EDDL-derived map) covers identifier-bearing eVars; a re-run emits no raw ECID or user-agent values. |
+| 4 | **Check `evar132/133/134` population explicitly** | Determines whether person-level identity exists (§5.8). Drives the PIA scope and possibly the whole privacy regime. | Census reports populated % for all three in both suites. |
+| 5 | **Stakeholder sign-off on scope** (Q1, Q2, Q10, Q15) | `SCOPE_URL_MODE` / `SCOPE_SUITE_MODE` are held deliberately — flipping either **re-baselines every KPI**, so it must happen before baselines are fit, not after. | Written confirmation of suite union, French inclusion, eVar107 handling, and the login-host list. |
+
+**What is already sufficient and needs no further EDA:** volume/history/seasonality (§5.2), the
+day-of-week and RRSP shape driving baseline design, data-quality posture (§5.7 — no bot filtering,
+Eastern timestamps, ~0 duplicates), the cutover date and change-points (§6), and the event decode
+convention (§5.5). Detection design can proceed against these **while items 1–4 run**, provided no
+eVar-derived KPI and no frozen scope ships before item 5.
 
 ---
 
@@ -422,9 +603,19 @@ the business signs off scope**, because flipping either re-baselines every KPI.
   sample, exact counts on full scans. Deep-profiling stats (S5–S11) on the legacy suite are sampled
   from a window that straddles its collapse; full-range volume is exact.
 - **Adobe uses empty string, not NULL**; `date_time` is Eastern, `hit_time_gmt` epoch GMT;
-  `language` values are Adobe numeric IDs; `clean_hits == hits` because no bot filtering is applied;
-  eVar/prop *content* is masked (ADR-0007) so "same column live in both suites" is necessary, not
-  sufficient, for "same meaning."
+  `language` values are Adobe numeric IDs; `clean_hits == hits` because no bot filtering is applied.
+  "Same column live in both suites" remains **necessary but not sufficient** for "same meaning" —
+  the reason has changed, though: no longer because content is masked (it is not, §4), but because
+  **EDDL carries no rsid mapping** and so cannot confirm either suite implements the spec (§5.4).
+- **Dictionary provenance (2026-07-22).** `data/EDDL_datalayer.xlsx`, 25 tabs, verified by direct
+  read: authoritative = `Global Data Layer_GPMSS_IT` + the 15 per-entity tabs; `DKPIs` is a
+  conflicting legacy numbering; CAR applicability lives in `EDDL ready for CAR` /
+  `EDDL for CAR_WIP`. Parsing note: the environment has **no `openpyxl`/`xlrd`** — the workbook must
+  be read via stdlib `zipfile` + XML. Full transcription in doc-16 §3.
+- **Claims retired in this revision**, recorded so they are not reintroduced: "the only dictionary
+  on hand is CoverMe"; "every eVar's meaning is masked"; "24 sensitive columns + regex net + raw
+  allowlist"; "11 widgets, `rsid_filter`/`url_filter`"; "there is no `SCOPE_URL_MODE` toggle in the
+  notebook"; and the unsourced "eVar166/169 are URL-type in `manugrs`" (§5.5).
 - **Related records:** [`12-eda-findings-analysis.md`](12-eda-findings-analysis.md) (new suite, full
   detail) · [`14-manugrs-cross-suite-analysis.md`](14-manugrs-cross-suite-analysis.md) (legacy /
   cross-suite) · [`10-data-profile-alignment.md`](10-data-profile-alignment.md) (governance) ·
