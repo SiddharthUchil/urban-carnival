@@ -25,17 +25,18 @@
 > 2026-07-19 and parsed into [`16-e2e-production-blueprint.md`](16-e2e-production-blueprint.md) §3.
 > Statements below that eVar meanings are unknowable, and that CoverMe is "the only dictionary on
 > hand," are **obsolete** — see §5.4 and §8.
-> **(b) The privacy regime inverted.** ADR-0007 §5 was *revised, not retired*: business dimensions
-> (eVars, props, events, URLs, pagenames, campaigns, referrers, search terms) now profile **raw and
-> in full**; only direct device/network identifiers stay shape-only. Every "content is masked"
-> claim below is **obsolete** — see §4.
+> **(b) The privacy regime inverted, then went full-raw.** ADR-0007 §5 was *revised, not retired*:
+> business dimensions (eVars, props, events, URLs, pagenames, campaigns, referrers, search terms)
+> profile **raw and in full**, and as of the **2026-07-23 full-raw revision** the direct
+> device/network identifiers do too — **no shape-only carve-out remains**. Every "content is
+> masked" and "identifier is shape-only" claim below is **obsolete** — see §4 and ADR-0007 §5.
 > Sections rewritten for this: §2 (widgets), §3 (scope), §4 (privacy), §5.3, §5.4, §5.8, §7, §8,
 > and the new **§8b (EDA exit criteria)**. Numeric findings from the profiling runs are unchanged.
 >
 > **Data runs.** Production `gwam_prod_catalog`. New suite confirmed 2026-07-09, re-run 2026-07-12
 > (adds the S4c URL audit). Legacy suite run 2026-07-10, independently re-run 2026-07-13 (all
-> figures reproduced). **Grain of record: daily.** **Privacy regime: ADR-0007** (shape-only for
-> sensitive columns). This document consolidates and does not replace the two analyses of record,
+> figures reproduced). **Grain of record: daily.** **Privacy regime: ADR-0007 §5** (full-raw as of
+> 2026-07-23 — all columns incl. identifiers). This document consolidates and does not replace the two analyses of record,
 > [`12-eda-findings-analysis.md`](12-eda-findings-analysis.md) (new suite) and
 > [`14-manugrs-cross-suite-analysis.md`](14-manugrs-cross-suite-analysis.md) (legacy / cross-suite);
 > governance detail lives in [`10-data-profile-alignment.md`](10-data-profile-alignment.md) and

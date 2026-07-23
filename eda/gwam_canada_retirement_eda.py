@@ -28,15 +28,16 @@
 # MAGIC 3. Capture time-series shape (seasonality, volatility) for anomaly-model design.
 # MAGIC 4. Produce a machine-readable **synthesis spec** for generating synthetic data.
 # MAGIC
-# MAGIC **Data visibility (ADR-0007 §5).** Business data profiles **raw and in full** — eVars,
-# MAGIC props, events, URLs, pagenames, campaigns, referrers. Comprehensive EDA needs real
-# MAGIC values, and this feed carries no person-level identifier (`cust_visid` wholly NULL,
-# MAGIC `userid` a single constant — ADR-0007 Context §2).
+# MAGIC **Data visibility (ADR-0007 §5, full-raw revision 2026-07-23).** EVERY column profiles
+# MAGIC **raw and in full** — eVars, props, events, URLs, pagenames, campaigns, referrers, AND
+# MAGIC the direct/quasi-identifier set (visitor IDs, cookies, IPs, geo_zip, user_agent, tracking
+# MAGIC eVars). There is no shape-only carve-out: a comprehensive view of all in-scope columns
+# MAGIC was the explicit requirement, and this feed carries no person-level identifier in scope
+# MAGIC (`cust_visid` wholly NULL, `userid` a single constant — ADR-0007 Context §2).
 # MAGIC
-# MAGIC The one exception is direct device/network identifiers (visitor IDs, cookies, IPs,
-# MAGIC geo_zip, user_agent), reported shape-only (null %, cardinality, length stats) — because
-# MAGIC their raw values carry no analytical signal, not because EDA is restricted. URL query
-# MAGIC strings are stripped (session tokens live there); paths and hosts print in full.
+# MAGIC URL query strings profile raw by default (the `strip_url_query` widget strips them).
+# MAGIC ⚠ SHAREABLE blocks now carry raw identifiers/PII (IPs, postal codes, device IDs) — a
+# MAGIC human read-through is required before any block leaves the governed workspace.
 # MAGIC
 # MAGIC **How to run.** Databricks → Workspace → Import → File → select this `.py` (it
 # MAGIC imports as a notebook — the file is in Databricks "source" format). Attach to any
@@ -83,10 +84,10 @@ dbutils.widgets.text("table_fqn", "gwam_prod_catalog.inv_typed_common.adobe_hit_
 dbutils.widgets.text("window_months", "13", "2. Deep-profiling window (months)")
 dbutils.widgets.text("sample_fraction", "0.05", "3. Sample fraction for per-column stats")
 dbutils.widgets.text("col_batch_size", "150", "4. Columns per aggregation batch")
-dbutils.widgets.text("top_n", "15", "5. Top-N cap for value lists")
+dbutils.widgets.text("top_n", "25", "5. Top-N cap for value lists")
 dbutils.widgets.text("hourly_days", "35", "6. Days for hourly profile")
 dbutils.widgets.text("max_csv_lines", "450", "7. Max CSV lines per shareable block")
-dbutils.widgets.text("top_events_k", "6", "8. Top-K events for daily series")
+dbutils.widgets.text("top_events_k", "12", "8. Top-K events for daily series")
 dbutils.widgets.text("cache_sample", "false", "9. Persist sample df (true/false)")
 dbutils.widgets.text("rsid_list", "manugrs,manulifeglobalprod", "10. rsid list (comma-sep, empty = off)")
 dbutils.widgets.dropdown("url_scope_mode", "broad", ["broad", "en_only"], "11. URL scope mode (en_only = pipeline parity)")
@@ -96,6 +97,9 @@ dbutils.widgets.text("login_host_exclude",
                      "%portal.manulife.ca%,%id.manulife.ca%,%grsmembers.manulife.com%,"
                      "%gsrs1.manulife.com%,%viproom.manulife.com%,%portail.manuvie.ca%",
                      "14. Individual-login hosts to exclude (D8)")
+dbutils.widgets.text("max_profiled_cols", "1200", "15. Max columns emitted with full stats (raise for full coverage)")
+dbutils.widgets.dropdown("strip_url_query", "false", ["false", "true"], "16. Strip URL query strings before profiling")
+dbutils.widgets.text("event_lookup_path", "new_data/event.tsv", "17. Event-ID lookup TSV (blank = inline map only)")
 
 TABLE_FQN      = dbutils.widgets.get("table_fqn").strip()
 WINDOW_MONTHS  = int(dbutils.widgets.get("window_months"))
@@ -106,6 +110,9 @@ HOURLY_DAYS    = int(dbutils.widgets.get("hourly_days"))
 MAX_CSV_LINES  = int(dbutils.widgets.get("max_csv_lines"))
 TOP_EVENTS_K   = int(dbutils.widgets.get("top_events_k"))
 CACHE_SAMPLE   = dbutils.widgets.get("cache_sample").strip().lower() == "true"
+MAX_PROFILED_COLS = int(dbutils.widgets.get("max_profiled_cols"))
+STRIP_URL_QUERY   = dbutils.widgets.get("strip_url_query").strip().lower() == "true"
+EVENT_LOOKUP_PATH = dbutils.widgets.get("event_lookup_path").strip()
 def _csv(widget):
     return [p.strip().lower() for p in dbutils.widgets.get(widget).split(",") if p.strip()]
 
@@ -128,64 +135,81 @@ LOGIN_EXCLUDE  = _csv("login_host_exclude")
 URL_SCOPE_EN_ONLY = ["%manulife.com/ca/en/personal/group-plans/group-retirement%"]
 URL_INCLUDE = URL_SCOPE_EN_ONLY if URL_SCOPE_MODE == "en_only" else _csv("url_scope_list")
 
-# ------------------------------------------------------- privacy constants ----
-# ADR-0007 §5 (analysis-time visibility). EDA runs inside the governed Databricks
-# workspace against a feed that carries NO person-level identifier: cust_visid /
+# -------------------------------------------------------- privacy stance ------
+# ADR-0007 §5 (analysis-time visibility), full-raw revision 2026-07-23. EDA runs
+# inside the governed Databricks workspace against a feed that carries NO
+# person-level identifier in the login-excluded marketing scope: cust_visid /
 # post_cust_visid are wholly NULL and userid is a single constant account value
 # (cardinality 1) — confirmed with the data owner 2026-07-04, ADR-0007 Context §2.
 #
-# Default is therefore RAW: business dimensions (eVars, props, events, URLs,
-# pagenames, campaigns, referrers, search terms) profile at full fidelity. Masking
-# them to sha1 tokens destroyed the analytical signal without protecting a person —
-# prior runs emitted whole sections of `<masked:xxxxxxxx>` that nobody could read.
+# Per the data-owner decision recorded in ADR-0007 §5, EVERY column now profiles and
+# emits RAW values — including the direct/quasi-identifier set (mcvisid, visid_*,
+# cookies, ip/ip2/ipv6, geo_zip, user_agent) and tracking eVars (ECID eVar131,
+# Medallia UUID eVar140). There is NO shape-only carve-out: a comprehensive view of
+# all in-scope columns was the explicit requirement.
 #
-# The residual exception is direct device/network identifiers, reported SHAPE ONLY
-# (null %, cardinality, length stats). The reason is analytical, not bureaucratic:
-# their raw values carry no signal. What EDA needs from `mcvisid` is "412k distinct,
-# 0.2% null" — never a specific cookie value. Shape-only costs nothing here while
-# keeping re-identifiable values out of blocks that get copied out of the workspace.
-DIRECT_IDENTIFIERS = {
-    # visitor/device identifiers -> HMAC-pseudonymized in the pipeline (ADR-0007 §2)
-    "mcvisid", "visid_high", "visid_low", "post_visid_high", "post_visid_low",
-    "cust_visid", "post_cust_visid", "cookies", "post_cookies", "persistent_cookie",
-    # network addresses
-    "ip", "ip2", "ipv6",
-    # fine geo + device fingerprint — quasi-identifiers, re-identifying in combination
-    "geo_zip", "post_zip", "zip", "user_agent",
+# This changes NOTHING about the shipped pipeline — HMAC-SHA-256 pseudonymization at
+# Bronze->Silver (ADR-0007 §2) still stands. Only what the EDA notebook PRINTS widens.
+PII_EXPORT_WARNING = (
+    "PII NOTICE (ADR-0007 §5): SHAREABLE blocks below carry RAW identifiers and PII "
+    "(IPs, postal codes, device IDs, User-Agent, tracking eVars). They may leave the "
+    "governed Databricks workspace only after a human read-through."
+)
+print("\n" + "=" * 78 + "\n" + PII_EXPORT_WARNING + "\n" + "=" * 78 + "\n")
+
+# --------------------------------------------------------- semantic labels ----
+# EDDL eVar/prop dictionary (research/claude/16-e2e-production-blueprint.md), keyed by
+# variable number; applies to both `evarN` and `post_evarN`. Labels are EDDL-derived
+# annotations only (not logic) — a few eVars carry documented semantic conflicts
+# (e.g. 107↔121 domain, 110↔185 platform); see doc-16 before trusting an edge label.
+EVAR_LABELS = {
+    101: "Page Name", 102: "Page Type", 103: "Site Type", 104: "Content Type",
+    105: "Brand|Line of Business|Segment", 106: "Country|Region|City",
+    107: "Full Page URL|Domain|Hash|Query|Path", 108: "User Agent", 109: "Language",
+    110: "Platform", 121: "Domain (Page)", 122: "Login Step",
+    126: "Download File Label", 127: "Download URL",
+    131: "Anonymous ID (ECID)", 132: "Primary Member Customer ID",
+    133: "Secondary Member Customer ID", 134: "Tertiary Member Customer ID",
+    135: "Login Method", 136: "Email (hashed)",
+    137: "Age|Gender|Spouse Age|Spouse Gender|#Dependents|Smoking",
+    138: "User Type", 139: "User Sub-Type", 140: "Medallia UUID",
+    144: "Navigation History", 145: "New vs Repeat",
+    161: "Search Results", 162: "Search Keywords", 163: "Search Type",
+    181: "Error Code", 182: "Error Description", 183: "Error Type",
+    184: "Error Category", 185: "Platform", 189: "Link Region",
+    191: "Form Name", 192: "Form Step", 193: "Link Click Name", 194: "Link Click Href",
+    199: "Google ID (GLID)", 200: "OneTrust Categories-ID",
 }
-
-def is_sensitive(col_name):
-    """True only for direct/quasi identifiers. Everything else profiles raw.
-
-    Deliberately an exact-match set, not a regex: the previous pattern net matched
-    `guid|token|mcid|aamid|zip$|social` and swept in business columns that were never
-    identifiers, which is a large part of why so much output came back masked.
-    """
-    return col_name.lower() in DIRECT_IDENTIFIERS
+PROP_LABELS = {
+    51: "Page Title", 52: "Page URL parts", 53: "Bot Detector", 54: "Language",
+    55: "Previous Page / Referrer", 56: "Navigation Position", 57: "New vs Repeat",
+}
+_VAR_RE = re.compile(r"(?:post_)?(evar|prop)(\d+)$")
+def dim_label(col):
+    """EDDL semantic label for evarN/propN columns; '' when unknown."""
+    m = _VAR_RE.match(str(col).lower())
+    if not m:
+        return ""
+    n = int(m.group(2))
+    return (EVAR_LABELS if m.group(1) == "evar" else PROP_LABELS).get(n, "")
 
 # ------------------------------------------------------------ emit helpers ----
 RESULTS = {}   # section_id -> payload (drives S12 consolidation)
 SKIPPED = {}   # section_id -> reason
 
-# Last-resort net for values that should never appear in an analytics dimension at
-# all. Deliberately minimal now: the previous version also redacted any 10+ digit run
-# and any 24+ hex run, which silently destroyed hit counts, epoch timestamps, order
-# IDs and event codes — and truncated at 160 chars, cutting long URLs mid-path.
-_SCRUB_PATTERNS = [
-    (re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"), "<redacted:email>"),
-    (re.compile(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b"), "<redacted:ipv4>"),
-]
+# Emit-time FORMATTING only (ADR-0007 §5 full-raw). Values are NOT redacted: the
+# earlier email/IPv4 scrubbers were removed with the data-owner decision to profile
+# identifiers raw. This keeps only display hygiene — truncate absurdly long strings so a
+# single value can't blow the Databricks per-cell stdout cap, and round floats.
 MAX_EMIT_STR = 2000
 
 def _scrub_str(s):
     if len(s) > MAX_EMIT_STR:
         s = s[:MAX_EMIT_STR] + "...<trunc>"
-    for pat, repl in _SCRUB_PATTERNS:
-        s = pat.sub(repl, s)
     return s
 
 def _scrub(obj):
-    """Walk a payload: truncate strings, redact email/IP/long-ID lookalikes, round floats."""
+    """Walk a payload: truncate over-long strings and round floats. No PII redaction."""
     if isinstance(obj, dict):
         return {(_scrub_str(k) if isinstance(k, str) else k): _scrub(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
@@ -224,10 +248,6 @@ def run_section(section_id, fn):
         traceback.print_exc()
 
 # ------------------------------------------------------------ data helpers ----
-def mask(v):
-    """SHA1-truncated token; matches new_data/generated_data_profile.json format."""
-    return "<masked:" + hashlib.sha1(str(v).encode("utf-8")).hexdigest()[:8] + ">"
-
 def qcol(col_name):
     """F.col with backtick quoting — the schema has dotted column names
     (mobileappperformanceappid.*) that unquoted F.col parses as struct access."""
@@ -240,6 +260,10 @@ def nonblank(col_name):
 
 def strip_query(u):
     return str(u).split("?")[0].split("#")[0]
+
+def maybe_strip(u):
+    """Strip URL query/fragment only when the strip_url_query widget is on; else raw."""
+    return strip_query(u) if STRIP_URL_QUERY else str(u)
 
 def batched_agg(df, agg_exprs, batch_size):
     """Run many agg expressions in batches to dodge codegen limits.
@@ -413,7 +437,7 @@ def ensure_frames():
     return DF, DF_W, DF_S
 
 print(f"Config OK. table={TABLE_FQN} window={WINDOW_MONTHS}mo fraction={SAMPLE_FRACTION} "
-      f"batch={COL_BATCH_SIZE} top_n={TOP_N} shape_only_cols={len(DIRECT_IDENTIFIERS)}")
+      f"batch={COL_BATCH_SIZE} top_n={TOP_N} max_cols={MAX_PROFILED_COLS} emit_mode=raw-all")
 print(f"Scope filter: rsid={RSID_LIST or '(off)'} url_mode={URL_SCOPE_MODE} "
       f"include={URL_INCLUDE or '(off)'} exclude={URL_EXCLUDE or '(off)'} "
       f"login_hosts_excluded={len(LOGIN_EXCLUDE)}")
@@ -1084,9 +1108,9 @@ def s5_population_census():
         "n_total_cols": len(all_cols),
         "n_populated": len(populated), "n_sparse": len(sparse), "n_dead": len(dead),
         "n_core": len(core), "core_min_pct": CORE_MIN_PCT,
-        "populated": [{"col": c, **v} for c, v in ranked[:120]],
-        "populated_names_beyond_top120": [c for c, _ in ranked[120:]],
-        "sparse_cols": sparse[:40],
+        "populated": [{"col": c, "label": dim_label(c), **v} for c, v in ranked[:MAX_PROFILED_COLS]],
+        "populated_names_beyond_cap": [c for c, _ in ranked[MAX_PROFILED_COLS:]],
+        "sparse_cols": sparse,
         "evar_live": sorted(c for c in populated if re.match(r"post_evar\d+$|evar\d+$", c)),
         "prop_live": sorted(c for c in populated if re.match(r"post_prop\d+$|prop\d+$", c)),
         "evar_core": sorted(c for c in core if re.match(r"post_evar\d+$|evar\d+$", c)),
@@ -1107,8 +1131,52 @@ run_section("S5", s5_population_census)
 
 ADOBE_STD_EVENTS = {
     "1": "purchase", "2": "product_view", "10": "cart_open", "11": "checkout",
-    "12": "cart_add", "13": "cart_remove", "14": "cart_view",
+    "12": "cart_add", "13": "cart_remove", "14": "cart_view", "20": "campaign_view",
 }
+
+def _load_event_lookup(path):
+    """Best-effort load of an event-ID -> label TSV (id<TAB>label per line). Returns {}
+    if the path is blank or unreadable — the notebook then falls back to the inline map
+    plus the Instance-of-eVar formula. Works from a Databricks Repo/Git folder or local."""
+    if not path:
+        return {}
+    for cand in (path, "/Workspace/" + path.lstrip("/"), "./" + path):
+        try:
+            with open(cand, "r", encoding="utf-8") as fh:
+                out = {}
+                for line in fh:
+                    parts = line.rstrip("\n").split("\t")
+                    if len(parts) >= 2 and parts[0].strip():
+                        out[parts[0].strip()] = parts[1].strip()
+                if out:
+                    print(f"event lookup: loaded {len(out)} ids from {cand}")
+                    return out
+        except OSError:
+            continue
+    print(f"event lookup: {path} not readable — using inline map + eVar-instance formula")
+    return {}
+
+EVENT_LOOKUP = _load_event_lookup(EVENT_LOOKUP_PATH)
+
+def decode_event(eid):
+    """Resolve an Adobe post_event_list numeric ID to a label. Order: loaded TSV ->
+    inline standard events -> 'Instance of eVarN' formula (100-199 -> eVar1-100,
+    10000-10099 -> eVar101-200) -> unknown. Formula ranges verified against event.tsv."""
+    e = str(eid)
+    if e in EVENT_LOOKUP:
+        return EVENT_LOOKUP[e]
+    if e in ADOBE_STD_EVENTS:
+        return ADOBE_STD_EVENTS[e]
+    try:
+        n = int(e)
+    except (TypeError, ValueError):
+        return "unknown — resolve via event lookup / data dictionary"
+    if 100 <= n <= 199:
+        return f"Instance of eVar{n - 99}"
+    if 10000 <= n <= 10099:
+        return f"Instance of eVar{n - 9899}"
+    return "unknown — resolve via event lookup / data dictionary"
+
 TOP_EVENT_IDS = []   # filled here; used by S8
 
 def s6_event_decode():
@@ -1154,7 +1222,7 @@ def s6_event_decode():
         eid = r["event_id"]
         event_freq.append({
             "event_id": eid,
-            "label": ADOBE_STD_EVENTS.get(eid, "unknown — resolve via event lookup / data dictionary"),
+            "label": decode_event(eid),
             "hits_with_pct": round(100.0 * (r["hits_with"] or 0) / hits, 3),
             "instances": r["instances"],
             "has_value_pct": round(100.0 * (r["with_value"] or 0) / r["instances"], 2) if r["instances"] else None,
@@ -1176,8 +1244,8 @@ run_section("S6", s6_event_decode)
 
 # MAGIC %md
 # MAGIC ## S7 — Live eVars / props / campaign
-# MAGIC Shape + masked top-value distributions for the live custom dimensions
-# MAGIC (feeds the 8 post_eVar registry slots and the synthetic generator).
+# MAGIC Shape + RAW top-value distributions for every live custom dimension
+# MAGIC (feeds the post_eVar registry slots and the synthetic generator; ADR-0007 §5).
 
 # COMMAND ----------
 
@@ -1185,7 +1253,7 @@ def s7_live_custom_dims():
     ensure_frames()
     live_all = [c for c in CENSUS
                 if re.match(r"post_evar\d+$|evar\d+$|post_prop\d+$|prop\d+$|^post_campaign$|^campaign$", c)]
-    live = sorted(live_all, key=lambda c: -CENSUS[c]["pop_pct"])[:25]
+    live = sorted(live_all, key=lambda c: -CENSUS[c]["pop_pct"])[:MAX_PROFILED_COLS]
     if not live:
         emit("live_custom_dims", {"error": "no live eVar/prop/campaign columns (run S5 first)"})
         return
@@ -1204,18 +1272,18 @@ def s7_live_custom_dims():
         pop_rows = max(SAMPLE_ROWS * CENSUS[c]["pop_pct"] / 100.0, 1)
         out.append({
             "col": c,
+            "label": dim_label(c),
             "pop_pct": CENSUS[c]["pop_pct"],
             "apx_distinct": CENSUS[c]["apx_distinct"],
             "len": {"p50": stats["len_p50"], "avg": stats["len_avg"], "max": stats["len_max"]},
             "looks_like_url": (stats["url_frac"] or 0) > 0.5,
             "free_text": (stats["len_avg"] or 0) > 80,
-            # Raw values: eVar/prop contents are business semantics (form steps, plan
-            # codes, tool names) and are the whole point of profiling custom dims.
-            # Identifier-shaped columns still fall back to shape-only.
-            "top": ([] if is_sensitive(c) else
-                    [{"v": str(r[c]), "len": len(str(r[c])),
-                      "pct": round(100.0 * r["count"] / pop_rows, 2)} for r in top]),
-            "mode": "shape_only (direct identifier)" if is_sensitive(c) else "raw",
+            # Raw values for every custom dim, identifiers included (ADR-0007 §5):
+            # eVar/prop contents are business semantics (form steps, plan codes, tool
+            # names) and are the whole point of profiling custom dims.
+            "top": [{"v": str(r[c]), "len": len(str(r[c])),
+                     "pct": round(100.0 * r["count"] / pop_rows, 2)} for r in top],
+            "mode": "raw",
         })
     emit("live_custom_dims", {"basis": "sample", "n_live": len(live_all), "n_core": n_core, "dims": out})
 
@@ -1355,54 +1423,62 @@ if TS_DAILY_PDF is not None:
 
 # MAGIC %md
 # MAGIC ## S9 — Dimension candidates
-# MAGIC Cardinality + top values of candidate slicing dimensions. Allowlisted dims print raw
-# MAGIC (lookup IDs / country codes); pagename & URL values are query-stripped but keep the
-# MAGIC full path; direct identifiers are shape-only.
+# MAGIC Cardinality + top values for EVERY populated dimension (census-driven, not a fixed
+# MAGIC allow-list; eVars/props are covered in S7). All values print raw, identifiers included
+# MAGIC (ADR-0007 §5); URL/pagename values keep the full path, query strings raw by default.
 
 # COMMAND ----------
 
 def s9_dimensions():
     ensure_frames()
-    dim_candidates = [c for c in [
+    # Census-driven: every populated column gets top-values, not a fixed allow-list
+    # (ADR-0007 §5, comprehensive coverage). eVar/prop/campaign columns already carry
+    # their values in S7, so skip them here to avoid duplication; everything else that
+    # is populated is fair game. MAX_PROFILED_COLS / sample_fraction / top_n bound cost.
+    KNOWN_DIMS = [
         "pagename", "post_pagename", "page_url", "post_page_url", "referrer",
         "ref_domain", "ref_type", "geo_country", "geo_region", "geo_city",
         "browser", "os", "connection_type", "language", "hit_source",
         "exclude_hit", "duplicate_purchase", "new_visit", "post_page_event",
         "va_closer_id",
-    ] if c in set(DF_S.columns) and c in CENSUS]
+    ]
+    _s7_re = re.compile(r"post_evar\d+$|evar\d+$|post_prop\d+$|prop\d+$|^post_campaign$|^campaign$")
+    cols_present = set(DF_S.columns)
+    ordered = [c for c in KNOWN_DIMS if c in CENSUS and c in cols_present]
+    extra = sorted((c for c in CENSUS
+                    if c not in KNOWN_DIMS and c in cols_present and not _s7_re.match(c)),
+                   key=lambda c: -CENSUS[c]["pop_pct"])
+    dim_candidates = (ordered + extra)[:MAX_PROFILED_COLS]
+
+    # Numeric Adobe lookup-ID dimensions: values are integer codes; decode needs the
+    # feed's browser/os/languages/countries lookup tables (not shipped in this repo).
+    LOOKUP_ID_DIMS = {"browser", "os", "language", "connection_type",
+                      "geo_country", "geo_region", "geo_dma", "color", "javascript"}
 
     out = []
     for c in dim_candidates:
-        is_url = c in ("page_url", "post_page_url", "referrer")
+        is_url = ("url" in c) or c in ("referrer", "post_referrer")
         top = (DF_S.filter(nonblank(c)).groupBy(c).count()
                    .orderBy(F.desc("count")).limit(TOP_N * (3 if is_url else 1)).collect())
         pop_rows = max(SAMPLE_ROWS * CENSUS[c]["pop_pct"] / 100.0, 1)
-        if is_url:
-            # Full query-stripped URL. The previous domain|depth|seg1 reduction
-            # collapsed every Canadian page into one bucket, which made the URL
-            # dimensions useless for scope work. Query strings stay stripped —
-            # they are the one part of a URL that carries session tokens.
-            top_vals = [{"v": strip_query(r[c]), "pct": round(100.0 * r["count"] / pop_rows, 2)}
+        if is_url or c in ("pagename", "post_pagename"):
+            # Full URL/pagename. Query strings profile RAW by default; the
+            # strip_url_query widget strips them (they can carry session tokens, though
+            # login/auth hosts are already excluded from scope).
+            top_vals = [{"v": maybe_strip(r[c]), "pct": round(100.0 * r["count"] / pop_rows, 2)}
                         for r in top[:TOP_N]]
-            mode = "raw, query-stripped"
-        elif c in ("pagename", "post_pagename"):
-            top_vals = [{"v": strip_query(r[c]), "pct": round(100.0 * r["count"] / pop_rows, 2)}
-                        for r in top[:TOP_N]]
-            mode = "raw, query-stripped"
-        elif is_sensitive(c):
-            # Direct/quasi identifier: cardinality and null rate are the analytical
-            # facts; individual values are not. See DIRECT_IDENTIFIERS above.
-            top_vals = []
-            mode = "shape_only (direct identifier)"
+            mode = "raw, query-stripped" if STRIP_URL_QUERY else "raw"
         else:
+            # Every other populated column, identifiers included (ADR-0007 §5).
             top_vals = [{"v": str(r[c]), "pct": round(100.0 * r["count"] / pop_rows, 2)}
                         for r in top[:TOP_N]]
             mode = "raw"
-        out.append({"dim": c, "mode": mode,
+        out.append({"dim": c, "mode": mode, "label": dim_label(c),
                     "coverage_pct": CENSUS[c]["pop_pct"],
                     "apx_distinct": CENSUS[c]["apx_distinct"],
-                    "top": top_vals})
-    emit("dim_candidates", {"basis": "sample", "dims": out})
+                    "top": top_vals,
+                    "note": ("numeric lookup-ID code" if c in LOOKUP_ID_DIMS else "")})
+    emit("dim_candidates", {"basis": "sample", "n_dims": len(out), "dims": out})
 
 run_section("S9", s9_dimensions)
 
@@ -1544,7 +1620,9 @@ def s11_identity():
             pass
 
     emit("identity_evidence", {
-        "basis": "sample", "note": "shape only per ADR-0007 — no identifier values",
+        "basis": "sample",
+        "note": "identity-column cardinality/null evidence; raw identifier values are in "
+                "S7/S9 per ADR-0007 §5 (full-raw)",
         "columns": out, "flags": flags, "daily_ratios": ratios,
     })
 
@@ -1573,7 +1651,7 @@ def s12_synthesis_spec():
         col = entry["col"]
         spec = {"col": col, "dtype": entry.get("dtype"),
                 "pop_pct": entry.get("pop_pct"), "apx_distinct": entry.get("apx_distinct"),
-                "sensitive_shape_only": is_sensitive(col)}
+                "label": dim_label(col)}
         if col in live_dims:
             spec["len"] = live_dims[col].get("len")
             spec["top_values"] = live_dims[col].get("top")
@@ -1626,9 +1704,7 @@ run_section("S12", s12_synthesis_spec)
 # MAGIC ## Run manifest — integrity check for the export
 # MAGIC Byte length + sha1 of every shareable section, computed from the exact JSON that
 # MAGIC was printed. Databricks caps very large per-cell stdout; re-hash any pasted or
-# MAGIC exported block and compare here to prove nothing was truncated. The sha1 is printed
-# MAGIC dash-grouped in 8-hex chunks (a bare 40-hex digest would be redacted as a hex-ID by
-# MAGIC the privacy scrubber) — strip the dashes before comparing.
+# MAGIC exported block and compare here to prove nothing was truncated.
 
 # COMMAND ----------
 
@@ -1636,11 +1712,11 @@ def s_run_manifest():
     sections = {}
     for sid, payload in RESULTS.items():
         body = json.dumps(payload, separators=(",", ":"), default=str)
-        digest = hashlib.sha1(body.encode("utf-8")).hexdigest()
-        # dash-grouped: a bare 40-hex digest matches the _SCRUB_PATTERNS hex-id
-        # rule and emit() would print it as <redacted:hexid>; strip '-' to compare.
+        # Plain sha1 now that the emit scrubber no longer redacts hex-id runs
+        # (ADR-0007 §5 full-raw). Re-hash any pasted block and compare to prove nothing
+        # was truncated.
         sections[sid] = {"bytes": len(body),
-                         "sha1": "-".join(digest[i:i + 8] for i in range(0, 40, 8))}
+                         "sha1": hashlib.sha1(body.encode("utf-8")).hexdigest()}
     emit("run_manifest", {"sections": sections, "n_sections": len(sections),
                           "skipped": SKIPPED})
 

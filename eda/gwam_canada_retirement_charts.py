@@ -161,14 +161,17 @@ def trunc_period(ts_col):
 # analysed offline without re-querying. Aggregate-only per ADR-0007.
 CHART_DATA = {}
 
+MAX_EMIT_STR = 2000  # parity with the EDA notebook; long URLs must not be cut mid-path
+
 def _scrub(obj):
-    """Round floats (4dp), truncate long strings — parity with the EDA scrubber."""
+    """Formatting only (ADR-0007 §5 full-raw): round floats (4dp) and truncate absurdly
+    long strings so a single value can't blow the Databricks stdout cap. No redaction."""
     if isinstance(obj, dict):
         return {k: _scrub(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
         return [_scrub(v) for v in obj]
     if isinstance(obj, str):
-        return obj if len(obj) <= 160 else obj[:160] + "...<trunc>"
+        return obj if len(obj) <= MAX_EMIT_STR else obj[:MAX_EMIT_STR] + "...<trunc>"
     if isinstance(obj, float):
         return round(obj, 4) if math.isfinite(obj) else None
     return obj
