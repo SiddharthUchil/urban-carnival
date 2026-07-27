@@ -1,11 +1,14 @@
 # GMAI-Pulse Phase-1 Metric Registry
 # ------------------------------------------------------------------
-# version: 0.2.0 (2026-07-08)
+# version: 0.3.0 (2026-07-27)
 # generated_from: new_data/data_profile_summary.json (profiler v0.1.0, run 2026-07-02)
 # seed_source: CoverMe data dictionary rows where Notes == "Anomaly Detection"
 #              -> confirmed counts: 9 (data_feed_columns) + 8 (post_eVar) + 12 (post_event_list) = 29
 #
-# STATUS: EXTRACTED. v0.2.0 fills all 29 placeholders from the business-confirmed
+# STATUS: SME-CONFIRMED. v0.3.0 records the business rulings received 2026-07-27
+# (Kerrian, SME): target set confirmed complete/current; the 5 transactional funnel
+# events promoted to `active` (her stated priority) with owner assigned. See
+# meta.sme_confirmations. v0.2.0 filled all 29 placeholders from the business-confirmed
 # extraction of the dictionary workbook (row list provided 2026-07-08). Per-sheet
 # counts match the v0.1.0 seed prediction exactly (9 / 8 / 12). Closes open task #3
 # in 10-data-profile-alignment.md.
@@ -18,10 +21,34 @@
 # ------------------------------------------------------------------
 
 meta:
-  version: 0.2.0
-  updated: 2026-07-08
+  version: 0.3.0
+  updated: 2026-07-27
   default_grain: daily          # hourly reserved — enable only after >=30-day feed confirms volume
   domains: [coverme, gwam_retirement]
+  sme_confirmations:            # rulings from Kerrian (Business SME), email 2026-07-27
+    target_set: >
+      Confirmed complete and current (incl. the data_feed_columns tags). Priority = the 5
+      transactional funnel events, PAIRED with the tagged eVars as breakdown dimensions —
+      e.g. funnel events by Product Category (post_evar4). Follow-up: some events require
+      additional feed columns per the Adobe calculated-metrics documentation (not yet mapped).
+    funnel_basis: >
+      Visit-level counting approved (unique visitors unreliable due to cookies/browser
+      settings). Save Quote (232) is an OPTIONAL step. A returning visitor can start an
+      application from a saved quote, so a visit may carry App Start/Confirm with no quote
+      events — the funnel is non-monotonic across visits; step ratios are population-level
+      proxies, never within-visit sequences.
+    scope: >
+      Only coverme.com and pourmeproteger.com are currently valid domains; everything else
+      is legacy or dev. insttrip retired (last data 2024-03-11; history kept for baseline
+      context). Legacy life-insurance hits and prod-adjacent hosts are out of scope.
+    bot_exclusion: >
+      Dropping exclude_hit > 0 confirmed correct. eVar148 Bot Detector (catches bots past
+      Adobe's built-in filters) is being verified with the implementation team — until then
+      eVar116/eVar148 are corroboration signals only, not the exclusion rule.
+    pending_with_sme: >
+      (1) Identity of events 510/511/512/513 (~43.5% of hits each) and 514 — not in the data
+      map. (2) Language field of record (eVar8 vs eVar149 vs prop5) — eVar8 looks mis-tagged
+      (~96% EN vs ~50/50 domain split); interim rule = derive language from domain.
   notes: >
     One canonical Adobe hit schema serves both domains (ADR-0006); entries default to
     domain: shared unless a metric is proven domain-specific. No metric columns exist
@@ -298,48 +325,48 @@ post_event_list:     # exactly 12 entries (seed count 12)
     domain: shared
     source_sheet: post_event_list
     source_ref: "228"
-    decode_rule: event-count
+    decode_rule: event-count        # basis: visit-level per SME ruling 2026-07-27
     grain: daily
     direction: higher_is_good
-    owner: TBD
-    status: candidate
+    owner: Kerrian (Business SME)
+    status: active                  # SME priority: pair with eVar breakdowns (esp. post_evar4)
   - metric_id: pel_229_quote_complete
     name: Quote Complete (Custom Event 30)
     domain: shared
     source_sheet: post_event_list
     source_ref: "229"
-    decode_rule: event-count
+    decode_rule: event-count        # basis: visit-level per SME ruling 2026-07-27
     grain: daily
     direction: higher_is_good
-    owner: TBD
-    status: candidate
+    owner: Kerrian (Business SME)
+    status: active                  # SME priority: pair with eVar breakdowns (esp. post_evar4)
   - metric_id: pel_232_save_quote
     name: Save Quote (Custom Event 33)
     domain: shared
     source_sheet: post_event_list
     source_ref: "232"
-    decode_rule: event-count
+    decode_rule: event-count        # basis: visit-level per SME ruling 2026-07-27
     grain: daily
-    direction: higher_is_good
-    owner: TBD
-    status: candidate
+    direction: higher_is_good       # OPTIONAL step (SME 2026-07-27) — low volume is expected, not anomalous
+    owner: Kerrian (Business SME)
+    status: active                  # SME priority: pair with eVar breakdowns (esp. post_evar4)
   - metric_id: pel_240_app_confirm
     name: App Confirm (Custom Event 41)
     domain: shared
     source_sheet: post_event_list
     source_ref: "240"
-    decode_rule: event-count
+    decode_rule: event-count        # basis: visit-level; can fire in visits with NO quote events (saved-quote resume)
     grain: daily
     direction: higher_is_good
-    owner: TBD
-    status: candidate
+    owner: Kerrian (Business SME)
+    status: active                  # SME priority: pair with eVar breakdowns (esp. post_evar4)
   - metric_id: pel_269_app_start
     name: App Start (Custom Event 70)
     domain: shared
     source_sheet: post_event_list
     source_ref: "269"
-    decode_rule: event-count
+    decode_rule: event-count        # basis: visit-level; can fire in visits with NO quote events (saved-quote resume)
     grain: daily
     direction: higher_is_good
-    owner: TBD
-    status: candidate
+    owner: Kerrian (Business SME)
+    status: active                  # SME priority: pair with eVar breakdowns (esp. post_evar4)
