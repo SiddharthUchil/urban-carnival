@@ -44,6 +44,7 @@ reflect the Databricks-native landing; tracked in §5.)
 |---|---|---|---|
 | **`coverme_discovery_probe`** | 20/20 SHAREABLE | ✅ none errored | `run_manifest.skipped = {}`. Only `pdf_labels` (S0_5) deliberately skipped (`enabled:false`, no PDF wired). The older "12/12 sections" note is stale — this run emits **20**. |
 | **`coverme_url_scope_inventory`** | 7 SHAREABLE | ✅ complete, **print-only** | `s4_delta_write.written = false` because `target_catalog = "__SET_ME__"`. Scope tables were **not persisted** — the run computed the comparison and printed it. Set the catalog before a persisting re-run *if* the pipeline needs the scope tables materialized. |
+| **`coverme_eda` + `coverme_charts`** (re-run post-**E1**, `generated_at` 2026-07-27T06:03:59) | 18 SHAREABLE (17 sections + manifest) / 11 chart panels | ✅ **verified 2026-07-27** | `run_manifest.skipped = {}`. `event_decode` = **60 events, all carrying value stats** (proves the `try_element_at` path executed); `ts_events` = 23 columns × 398 days incl. **all 12 `AD_FLAGGED_EVENT_IDS`**, none all-zero; `synthesis_spec.sections_missing = []`. Charts corroborate: funnel conversion ratios agree within **0.017 absolute** (different bases — full history vs charts window). |
 
 **Both prerequisites succeeded and agree with each other** on shape, hosts, scope coverage,
 identity, and DQ. Parse "failures" seen earlier were **multi-part concatenation blocks**
@@ -112,7 +113,7 @@ regions, pagenames, language mix, 5-step funnel + timeline, top eVar4/eVar6, mon
 
 | # | Defect | Evidence | Fix | Impact if unfixed |
 |---|---|---|---|---|
-| **E1** | **S6 `event_decode` crashed** → whole section skipped; `ts_events` and `synthesis.events = {}` missing. | `run_manifest.skipped = {S6: ArrayIndexOutOfBounds}`. Root cause at [`coverme_eda.py:984`](../../eda/coverme_eda.py#L984): `try_cast(element_at(split(e,'='),2) as double)` — under Databricks **ANSI mode**, `element_at(…,2)` on a bare event id (1-element array) **throws** (the `try_cast` only guards the cast, not the index). | Change `element_at` → **`try_element_at`** at line 984, then re-run S6 + S8 `ts_events`. One-token change; S6b funnel is unaffected (it uses index `[0]`). | **No per-event value stats and no per-event daily series** — this is the exact input the *operational / tagging-health* detector needs ([03 §2](03-phase1-anomaly-detection.md)). Must fix before that class ships. |
+| **E1** ✅ **RESOLVED 2026-07-27** | **S6 `event_decode` crashed** → whole section skipped; `ts_events` and `synthesis.events = {}` missing. | `run_manifest.skipped = {S6: ArrayIndexOutOfBounds}`. Root cause at [`coverme_eda.py:990`](../../eda/coverme_eda.py#L990): `try_cast(element_at(split(e,'='),2) as double)` — under Databricks **ANSI mode**, `element_at(…,2)` on a bare event id (1-element array) **throws** (the `try_cast` only guards the cast, not the index). | **Done** — `element_at` → **`try_element_at`** at line 990 (commit `351c5f3`), plus `AD_FLAGGED_EVENT_IDS` so `TOP_EVENT_IDS` can never silently drop a flagged event. Re-run verified: S6 + S8 populated (see §1 / §7). S6b funnel was unaffected (it uses index `[0]`). | **No per-event value stats and no per-event daily series** — this is the exact input the *operational / tagging-health* detector needs ([03 §2](03-phase1-anomaly-detection.md)). Must fix before that class ships. |
 | **E2** | URL-scope inventory persisted **no tables** (`target_catalog = "__SET_ME__"`). | `s4_delta_write.written = false`. | Decide whether scope tables must be materialized; if so, set the catalog and re-run. Otherwise the printed comparison is sufficient. | Low — comparison data already captured. |
 | **E3** | EDA "broad" scope (95.97%) vs inventory `cm_broad` (99.42%) differ. | EDA = 3 brand-host LIKE minus UAT/AEM/stage/localhost; inventory `cm_broad` additionally admits ~0.7% of prod-adjacent hosts. | **Reconcile once the scope tier is chosen** (§4 item 3) and lock the single definition in `settings.py`. | Medium — scope is the foundation of every downstream metric; it must be one authoritative definition. |
 | **E4** | `event 20100` has `val_mean ≈ −6.7e10`. | Discovery `event_decode`. | Investigate as a counter/overflow/serialization artifact; exclude from value-based KPIs until understood. | Low, but would poison any mean-based event-value metric. |
@@ -126,7 +127,7 @@ our **current working assumption**, and the **artifact that would resolve it**.
 
 | # | What we need clarified | Why it blocks | Our current assumption | Resolving artifact |
 |---|---|---|---|---|
-| **1** | **Full event-ID → name dictionary** for the custom events beyond the 5 funnel events. The top-firing events (164 ≈ 71%, 151 ≈ 69%, 103, 10017, 132/153, 510-513 …) are **all unlabeled** (`labels_loaded=false`). | The **operational / tagging-health** detector monitors "an event that always fires suddenly stops" ([03 §2/§3.3](03-phase1-anomaly-detection.md)). We can't decide which high-frequency events are *critical tags* without their meaning. | Only 228/229/232/240/269 are business-meaningful (from `CoverMeDataMap.xlsx`); the rest are page/interaction instances. | The CoverMe **events PDF** / Adobe report-suite event var-map (the `pdf_labels` input that was skipped). |
+| **1** | **Full event-ID → name dictionary** for the custom events beyond the 5 funnel events. The probe saw these as **all unlabeled** (`labels_loaded=false`); the verified post-**E1** `event_decode` now resolves **48 of 60** top events mechanically to `Instance of eVarN (…)` (164 ≈ 71% → eVar65 Consent, 151 ≈ 69% → eVar52 Current Page, 103 ≈ 59% → eVar4 Product Category, 10017 → eVar118 Full URL, 132/153 → eVar33/54 URL/Domain) and 7 to real business names (`campaign_view`, Page Interactive Time, Scroll Event, Link Click, Feedback Click + the funnel). **Still genuinely unknown: 510/511/512/513 (each ≈ 43.5% of hits) and 514**, which the notebook labels literally `unknown — resolve via CoverMe event dictionary`. | The **operational / tagging-health** detector monitors "an event that always fires suddenly stops" ([03 §2/§3.3](03-phase1-anomaly-detection.md)). We can't decide which high-frequency events are *critical tags* without their meaning. | Only 228/229/232/240/269 are business-meaningful (from `CoverMeDataMap.xlsx`); the rest are page/interaction instances. | The CoverMe **events PDF** / Adobe report-suite event var-map (the `pdf_labels` input that was skipped). |
 | **2** | **Authoritative eVar/prop label map** — confirm the *inferred* semantics (evar4 product line, evar52 hierarchy, evar8 language, evar65 consent, evar116 bot, evar133 page type, evar9 province, evar131/111/40 visitor-id-like, evar132/134/135 constants). | Segment/feature engineering ([03 §7](03-phase1-anomaly-detection.md)) and the metric registry name these dimensions; guessing risks mislabeled KPIs. | The value-inferred labels above are correct. | Adobe **var-map export** for the CoverMe suite, or SME sign-off on the inferred list. |
 | **3** | **Scope-tier decision.** Pick **cm_strict (82.3%, signal purity)** vs **cm_broad (99.4%, coverage)**; and rule on the 3 unclassified prod hosts (`mlc--cms.na154` 0.35%, `mlc--cms.can52` 0.23%, `coverme-en.apps.cac.pcf` 0.10%) and the **71,130 uncovered legacy life-insurance hits (0.12%)**. Note `insttrip.manulife.com` **died 2024-03-11**. | Scope defines the denominator of **every** metric; ambiguity here propagates to all baselines and the medallion filter. | **cm_broad** (URL-only, 3 brand hosts + prod-adjacent), excluding UAT/AEM/stage. | Business confirmation of "what is in-scope CoverMe traffic," + a ruling on the legacy life-insurance tail. |
 | **4** | **Funnel completeness & basis.** Is 228→229→232→269→240 the canonical journey? Are there other conversion signals (phone/chat, PDF download, save-and-resume, agent-assisted)? Is **hit-presence** an acceptable KPI basis, or must it be **unique visitors**? Confirm Save Quote (0.25%) / App Confirm (0.48%) low rates are expected. | These become the first `active` metric-registry KPIs ([03 §5](03-phase1-anomaly-detection.md)); the wrong set means we monitor the wrong business signals. | The 5 events are the funnel; hit-presence is an acceptable v1 proxy. | Business funnel definition / product analytics owner sign-off. |
@@ -141,9 +142,11 @@ our **current working assumption**, and the **artifact that would resolve it**.
 
 ## 5. Gap to the full build (roadmap, post-SME)
 
-**A. Finish the EDA (ours, ~hours).** Apply fix **E1** (`try_element_at`) and re-run `coverme_eda`
-so S6 `event_decode` + S8 `ts_events` + `synthesis.events` populate. Then the EDA is complete and
-every SHAREABLE section is present.
+**A. Finish the EDA — ✅ done 2026-07-27.** Fix **E1** (`try_element_at`,
+[`coverme_eda.py:990`](../../eda/coverme_eda.py#L990), commit `351c5f3`) applied and both
+`coverme_eda` + `coverme_charts` re-run on Databricks. S6 `event_decode`, S8 `ts_events` and
+`synthesis.events` all populate; every SHAREABLE section is present. Verified by decoding the
+refreshed HTML exports (see §1 and §7).
 
 **B. Medallion pipeline (ours, net-new — `databricks/src` is GWAM-only today).**
 - `databricks/conf/settings.py` + `bronze_columns.py`: a **CoverMe** config — source
@@ -174,7 +177,7 @@ thresholds + debounce. All now feasible because the data-acquisition gate is cle
 | Prerequisite runs (probe + URL scope) | ✅ **Complete & consistent** |
 | Data understanding (volume, seasonality, funnel, dims, identity, DQ, geo) | ✅ **Comprehensive** |
 | Data-acquisition gate (≥30-day feed) | ✅ **Cleared** — 1,211 daily points, 3+ years |
-| EDA completeness | 🟡 **~95%** — S6 event_decode (E1) to fix + re-run |
+| EDA completeness | ✅ **100%** — E1 fixed + re-run verified; all SHAREABLE sections present |
 | Scope definition locked | 🟡 **Pending** — SME item 3 → then E3 reconcile |
 | Event & eVar/prop labels | 🔴 **Blocked on SME** — items 1, 2 |
 | Governance sign-off (PII/consent) | 🔴 **Blocked on SME** — item 9 |
@@ -182,7 +185,8 @@ thresholds + debounce. All now feasible because the data-acquisition gate is cle
 | Detector wiring for CoverMe | 🔴 **Not started** — depends on A+B |
 
 **Bottom line:** We have a **comprehensive, cross-checked understanding** of the CoverMe data and
-the prerequisites are sound. **One engineering fix** (E1) completes the EDA. The **critical path to
+the prerequisites are sound. The one engineering fix (**E1**) is **done and verified** — the EDA is
+complete. The **critical path to
 the medallion + anomaly build runs through the SME agenda in §4** — above all the **event/eVar label
 dictionaries (items 1–2)** and the **scope-tier ruling (item 3)**. Everything else is our own
 build work, and the biggest historical risk (no time-series) is gone.
@@ -191,10 +195,19 @@ build work, and the biggest historical risk (no time-series) is gone.
 
 ## 7. Verification / how to confirm this is done
 
-1. **E1 fix:** edit [`eda/coverme_eda.py:984`](../../eda/coverme_eda.py#L984) `element_at`→`try_element_at`;
+1. **E1 fix:** edit [`eda/coverme_eda.py:990`](../../eda/coverme_eda.py#L990) `element_at`→`try_element_at`;
    re-run `coverme_eda` on Databricks; confirm `run_manifest.skipped == {}` and
    `synthesis_spec.events` is non-empty with `ts_events` present.
-2. **First-run sanity (already green except S6):** `host_breakdown` shows all prod hosts non-zero;
+   ✅ **Satisfied 2026-07-27** — decoded the refreshed `coverme_eda.html` export:
+   `run_manifest.skipped == {}` (17 sections); `event_decode` = 60 events **all carrying
+   `val_mean`/`val_max`/`has_value_pct`** (the column that previously threw);
+   `ts_events` present, 23 columns × 398 daily rows (2025-06-01…2026-07-24), carrying
+   **all 12 flagged ids** (`ev103 ev104 ev105 ev110 ev115 ev151 ev10047 ev228 ev229 ev232 ev240 ev269`)
+   with **no all-zero column**; `synthesis_spec.sections_missing == []`, `sections_skipped == {}`,
+   `events.event_freq` = 60. Charts export corroborates independently: 11 panels, funnel
+   conversion ratios within **0.017 absolute** of `funnel_kpi` (bases differ — full history
+   vs charts window).
+2. **First-run sanity (green):** `host_breakdown` shows all prod hosts non-zero;
    `funnel_kpi.events_not_firing == []`; `url_scope_audit.coverage.uncovered_cm_pct ≈ 0.1%`
    ([`coverme_eda.py` "Done" cell](../../eda/coverme_eda.py#L1540)).
 3. **SME agenda:** take §4 to the business/analytics owners; capture answers as
