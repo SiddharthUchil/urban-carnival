@@ -1205,7 +1205,7 @@ def s6_event_decode():
     # instances (every occurrence) vs hit-presence (array_distinct)
     inst = (with_ev.select(F.explode("ev").alias("e"))
             .select(F.split("e", "=")[0].alias("event_id"),
-                    F.expr("try_cast(element_at(split(e, '='), 2) as double)").alias("val"))
+                    F.expr("try_cast(try_element_at(split(e, '='), 2) as double)").alias("val"))
             .groupBy("event_id")
             .agg(F.count("*").alias("instances"),
                  F.sum(F.when(F.col("val").isNotNull(), 1).otherwise(0)).alias("with_value"),

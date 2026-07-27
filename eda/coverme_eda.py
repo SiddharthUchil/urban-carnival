@@ -213,6 +213,12 @@ FUNNEL_EVENTS = [
     ("269", "App Start"), ("240", "App Confirm"),
 ]
 
+# Every post_event_list row the data map notes as "Anomaly Detection": the funnel above plus the
+# Instance-of-eVar events for the flagged eVars (4,5,6,11,16,52,148). S8 forces a daily series for
+# each one even when it falls outside the top-K frequency cut.
+AD_FLAGGED_EVENT_IDS = ["103", "104", "105", "110", "115", "151", "10047",
+                        "228", "229", "232", "240", "269"]
+
 # ------------------------------------------------------------ emit helpers ----
 RESULTS = {}   # section_id -> payload (drives S12 consolidation)
 SKIPPED = {}   # section_id -> reason
@@ -981,7 +987,7 @@ def s6_event_decode():
     with_ev = base.filter(F.size("ev") > 0)
     inst = (with_ev.select(F.explode("ev").alias("e"))
             .select(F.split("e", "=")[0].alias("event_id"),
-                    F.expr("try_cast(element_at(split(e, '='), 2) as double)").alias("val"))
+                    F.expr("try_cast(try_element_at(split(e, '='), 2) as double)").alias("val"))
             .groupBy("event_id")
             .agg(F.count("*").alias("instances"),
                  F.sum(F.when(F.col("val").isNotNull(), 1).otherwise(0)).alias("with_value"),
@@ -1001,7 +1007,8 @@ def s6_event_decode():
             "instances": r["instances"],
             "has_value_pct": round(100.0 * (r["with_value"] or 0) / r["instances"], 2) if r["instances"] else None,
             "val_mean": r["val_mean"], "val_max": r["val_max"]})
-    TOP_EVENT_IDS = [e["event_id"] for e in event_freq[:TOP_EVENTS_K]]
+    top = [e["event_id"] for e in event_freq[:TOP_EVENTS_K]]
+    TOP_EVENT_IDS = top + [e for e in AD_FLAGGED_EVENT_IDS if e not in top]
 
     emit("event_decode", {
         "basis": "sample", "source_col": ev_col, "sample_hits": per_hit["hits"],
