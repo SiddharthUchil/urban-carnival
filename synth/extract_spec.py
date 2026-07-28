@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_INPUT = REPO_ROOT / "gwam_databricks_eda_output.md"
+DEFAULT_INPUT = REPO_ROOT / "synth" / "gwam_databricks_eda_output.md"
 SPEC_DIR = REPO_ROOT / "synth" / "spec"
 
 # Blocks the generator/verifier need. synthesis_spec is the master; the ts_* blocks

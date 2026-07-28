@@ -45,69 +45,42 @@ masking layer to the ingestion phase. Three facts constrain how much of that we 
    tables). GMAI-Pulse's own reader is an Entra service principal governed by Unity Catalog and is
    unaffected — detail in [11 §4](../11-privacy-identity-governance.md).
 
-5. **Analysis-time visibility is separate from pipeline-time disposition (added 2026-07-19).**
-   §1–§4 govern what the *shipped pipeline* persists at Bronze→Silver. They were being applied a
-   second time, far more broadly, to *EDA notebook output* — where the profiler masked every value
-   not on a 24-entry allowlist to a `<masked:xxxxxxxx>` sha1 token, reduced URLs to
-   `domain|depth|seg1`, truncated every string at 160 characters, and redacted any 10+ digit run.
-   The result: eVar and prop contents, page paths, campaign codes and event labels came back
-   unreadable, and hit counts and epoch timestamps were being redacted as "long numbers".
-   That cost real analytical fidelity while protecting no person, for three reasons:
-   (a) **there is no person-level identifier in this feed** — `cust_visid`/`post_cust_visid` are
-   wholly NULL and `userid` is a single constant account value (Context §2, confirmed with the data
-   owner); (b) the masked columns were business semantics, not identifiers; and (c) EDA runs inside
-   the Unity-Catalog-governed workspace, which is the actual access boundary.
+5. **Analysis-time visibility is separate from pipeline-time disposition (added 2026-07-19;
+   revised to full-raw 2026-07-23).** §1–§4 govern what the *shipped pipeline* persists at
+   Bronze→Silver. They were being applied a second time, far more broadly, to *EDA notebook
+   output* — where the profiler masked every value not on a 24-entry allowlist to a
+   `<masked:xxxxxxxx>` sha1 token, reduced URLs to `domain|depth|seg1`, truncated every string at
+   160 characters, and redacted any 10+ digit run. eVar and prop contents, page paths, campaign
+   codes and event labels came back unreadable, and hit counts and epoch timestamps were redacted
+   as "long numbers". That cost real analytical fidelity while protecting no person, for three
+   reasons: (a) **there is no person-level identifier in the in-scope feed** —
+   `cust_visid`/`post_cust_visid` are wholly NULL and `userid` is a single constant account value
+   (Context §2, confirmed with the data owner), and authenticated/login hosts are excluded from
+   scope upstream (D8); (b) the masked columns were business semantics, not identifiers; and
+   (c) EDA runs inside the Unity-Catalog-governed workspace, which is the actual access boundary.
 
-   **Decision:** for exploratory analysis, values profile **raw by default**. The residual
-   exception is the direct/quasi-identifier set — visitor/device IDs, cookies, `ip`/`ip2`/`ipv6`,
-   `geo_zip`, `user_agent` — which remains **shape-only** (null %, cardinality, length stats).
-   That exception is justified analytically, not procedurally: EDA needs *"412k distinct, 0.2%
-   null"* from `mcvisid`, never a specific cookie value, so shape-only costs nothing here. URL
-   query strings stay stripped (session tokens live there); hosts and paths print in full. The
-   emit-time scrubber narrows to unambiguous PII only — email addresses and IPv4 literals.
-
-   **This changes nothing about what the pipeline persists.** HMAC-SHA-256 pseudonymization at
-   Bronze→Silver (§2), the disposition table in [11 §2](../11-privacy-identity-governance.md), and
-   the crypto-erasure property (§Consequences) all stand. Pseudonymized output remains personal
-   information under PIPEDA / Quebec Law 25.
-
-   **Boundary that still holds:** EDA notebooks print `SHAREABLE` blocks that are copied *out* of
-   the workspace into chats, docs and tickets. Raw business dimensions leaving that way is the
-   intended outcome. Raw device identifiers or IPs leaving that way is not, and is what the
-   shape-only carve-out prevents. If a future analysis genuinely requires raw identifier values,
-   that is a PII-classification-review question, not a notebook edit.
-
-5. **Analysis-time visibility is separate from pipeline-time disposition (added 2026-07-19).**
-   §1–§4 govern what the *shipped pipeline* persists at Bronze→Silver. They were being applied a
-   second time, far more broadly, to *EDA notebook output* — where the profiler masked every value
-   not on a 24-entry allowlist to a `<masked:xxxxxxxx>` sha1 token, reduced URLs to
-   `domain|depth|seg1`, truncated every string at 160 characters, and redacted any 10+ digit run.
-   The result: eVar and prop contents, page paths, campaign codes and event labels came back
-   unreadable, and hit counts and epoch timestamps were redacted as "long numbers".
-   That cost real analytical fidelity while protecting no person, for three reasons:
-   (a) **there is no person-level identifier in this feed** — `cust_visid`/`post_cust_visid` are
-   wholly NULL and `userid` is a single constant account value (Context §2, confirmed with the data
-   owner); (b) the masked columns were business semantics, not identifiers; and (c) EDA runs inside
-   the Unity-Catalog-governed workspace, which is the actual access boundary.
-
-   **Decision:** for exploratory analysis, values profile **raw by default**. The residual
-   exception is the direct/quasi-identifier set — visitor/device IDs, cookies, `ip`/`ip2`/`ipv6`,
-   `geo_zip`, `user_agent` — which remains **shape-only** (null %, cardinality, length stats).
-   That exception is justified analytically, not procedurally: EDA needs *"412k distinct, 0.2%
-   null"* from `mcvisid`, never a specific cookie value, so shape-only costs nothing here. URL
-   query strings stay stripped (session tokens live there); hosts and paths print in full. The
-   emit-time scrubber narrows to unambiguous PII only — email addresses and IPv4 literals.
+   **Decision (data owner, 2026-07-23):** for exploratory analysis, **every column profiles and
+   emits raw** — including the direct/quasi-identifier set (visitor/device IDs, cookies,
+   `ip`/`ip2`/`ipv6`, `geo_zip`, `user_agent`) and tracking eVars (ECID `eVar131`, Medallia UUID
+   `eVar140`). There is no shape-only carve-out and no emit-time value redaction: a comprehensive
+   view of all in-scope columns was the explicit requirement, and the identifier values the earlier
+   carve-out withheld are needed to characterise those columns fully. URL query strings profile
+   raw by default (a notebook widget re-enables stripping); the emit-time scrubber is reduced to
+   display formatting only — long-string truncation and float rounding, with no PII patterns. This
+   is the "PII-classification-review" outcome the 2026-07-19 revision deferred: the data owner has
+   made the call for this feed and scope.
 
    **This changes nothing about what the pipeline persists.** HMAC-SHA-256 pseudonymization at
    Bronze→Silver (§2), the disposition table in [11 §2](../11-privacy-identity-governance.md), and
-   the crypto-erasure property below all stand. Pseudonymized output remains personal information
-   under PIPEDA / Quebec Law 25.
+   the crypto-erasure property below all stand. Pseudonymized output — and now the raw EDA output —
+   remains personal information under PIPEDA / Quebec Law 25.
 
-   **Boundary that still holds:** EDA notebooks print `SHAREABLE` blocks that are copied *out* of
-   the workspace into chats, docs and tickets. Raw business dimensions leaving that way is the
-   intended outcome. Raw device identifiers or IPs leaving that way is not, and is what the
-   shape-only carve-out prevents. If a future analysis genuinely requires raw identifier values,
-   that is a PII-classification-review question, not a notebook edit.
+   **Compensating control (load-bearing).** EDA notebooks print `SHAREABLE` blocks that are copied
+   *out* of the workspace into chats, docs and tickets, and those blocks now carry raw identifiers
+   and PII — IP addresses, postal codes, device IDs, User-Agent strings. The notebook prints a PII
+   banner on every run, and a **mandatory human read-through before any block leaves the governed
+   workspace** is the control that replaces the automated carve-out. Sharing is irreversible, so
+   the review happens *before* export, not after.
 
 ## Consequences
 - (+) **Joinability preserved, stitching stays an option** — pseudonyms are stable join keys; nothing
@@ -121,14 +94,17 @@ masking layer to the ingestion phase. Three facts constrain how much of that we 
   UC RBAC + masking on analytical tables are still required.
 - (−) The Synapse secure-view work is owned by the CoverMe platform team (recommendation, not a
   GMAI-Pulse deliverable) — an engagement dependency like the ADR-0006 storage-permission item.
-- (+) **EDA is comprehensive again** (§5) — business dimensions profile at full fidelity, so scope
-  definition, metric-candidate discovery and anomaly-baseline work read real values rather than
-  sha1 tokens. This directly unblocks the URL-scope and event-decode questions that stalled on
-  masked output.
-- (−) **Exported EDA blocks now carry raw business data** (§5) — page paths, campaign codes and
-  eVar contents leave the workspace inside `SHAREABLE` output. Acceptable for this feed, which has
-  no person-level identifier, but it makes a human read-through the control before EDA output is
-  posted anywhere outside the engagement. The automated net is now narrow by design.
+- (+) **EDA is comprehensive over every column** (§5) — business dimensions AND the identifier set
+  profile at full fidelity, so scope definition, metric-candidate discovery and anomaly-baseline
+  work read real values rather than sha1 tokens or shape-only summaries. This unblocks the
+  URL-scope, event-decode and full-column-coverage questions that stalled on masked output.
+- (−) **Exported EDA blocks now carry raw business data AND raw identifiers/PII** (§5) — page
+  paths, campaign codes and eVar contents, plus IP addresses, postal codes, device IDs and
+  User-Agent strings, leave the workspace inside `SHAREABLE` output. Accepted by the data owner for
+  this feed and scope (no person-level identifier; login hosts excluded), but the automated
+  redaction net has been removed by design, so a **mandatory human read-through is now the only
+  gate** before EDA output is posted anywhere outside the engagement — and it must run before
+  export, because sharing is irreversible.
 
 ## Alternatives rejected
 - **Irreversible hash or drop of visitor identifiers** — destroys the only device-level join keys;

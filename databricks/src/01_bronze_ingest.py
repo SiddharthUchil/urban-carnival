@@ -16,6 +16,7 @@ from pyspark.sql import functions as F
 from conf.settings import (
     resolve, SOURCE_TABLE, PARTITION_COL, SCOPE_RSID,
     SCOPE_URL_MODE, SCOPE_URL_LIKE, SCOPE_URL_LIKE_BROAD, SCOPE_URL_LIKE_EXCLUDE,
+    SCOPE_LOGIN_HOST_EXCLUDE,
     SCOPE_SUITE_MODE, LEGACY_SCOPE_RSID, LEGACY_SCOPE_URL_LIKE,
     BRONZE_SCHEMA, SILVER_SCHEMA, GOLD_SCHEMA, OVERLAP_DAYS,
 )
@@ -85,6 +86,15 @@ if SCOPE_SUITE_MODE == "with_legacy":
     suite_scope = current_scope | legacy_scope
 else:
     suite_scope = current_scope
+
+# Individual-login hosts are out of anomaly scope in EVERY mode (business rule 2026-07-20,
+# SCOPE_LOGIN_HOST_EXCLUDE). Today's include patterns cannot match these hosts, so this is
+# row-set-identical defense-in-depth: it keeps future scope widening (broad mode, FR legacy
+# append) from silently pulling member-login traffic into bronze.
+from functools import reduce
+_lh_urlc = F.lower(F.coalesce(F.col("page_url"), F.col("post_page_url")).cast("string"))
+_login_excl = reduce(lambda acc, p: acc | _lh_urlc.like(p.lower()), SCOPE_LOGIN_HOST_EXCLUDE, F.lit(False))
+suite_scope = suite_scope & ~_login_excl
 
 scoped = (src.where(pred)
              .where(suite_scope)

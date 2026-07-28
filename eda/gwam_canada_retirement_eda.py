@@ -6,29 +6,62 @@
 # MAGIC (`gwam_prod_catalog.inv_typed_common.adobe_hit_data`, provisional) to:
 # MAGIC
 # MAGIC **Scope.** The table holds ALL GWAM Adobe data. CA Retirement is the subset with
-# MAGIC `rsid = 'manulifeglobalprod'` AND page URL containing
-# MAGIC `manulife.com/ca/en/personal/group-plans/group-retirement` (both are widgets).
-# MAGIC All profiling sections (S4–S11) and the synthesis spec describe this subset;
-# MAGIC S3 reports total-table vs subset daily volume side by side.
+# MAGIC `rsid` IN (`manugrs`, `manulifeglobalprod`) AND a URL matching the `url_scope_mode`
+# MAGIC include list — default `broad`: `%/group-retirement%`, `%/group-plans%`,
+# MAGIC `%/regimes-collectifs%`. Those patterns are language- AND domain-agnostic, so one
+# MAGIC list covers both suites (`manulifeim.com` and `manulife.com`) in EN and FR.
+# MAGIC
+# MAGIC Two exclusions apply. `url_scope_exclude` drops AEM authoring/staging hosts and
+# MAGIC non-CA `/ph/` paths. `login_host_exclude` drops the six D8 individual-login hosts
+# MAGIC (member/auth portals) and is subtracted in EVERY mode — it is an explicit host list,
+# MAGIC NOT a `%portal%` pattern, because four of the six carry no "portal" substring
+# MAGIC (`id.manulife.ca` alone is 62.6M hits) and the FR spelling is "portail".
+# MAGIC
+# MAGIC URL matching uses the D4 blank-guarded `coalesce(page_url, post_page_url)`:
+# MAGIC `post_page_url` is blank 36-46% of the time vs <=0.013% for `page_url`, and Adobe
+# MAGIC writes empty strings rather than NULLs, so blanks are mapped to NULL before the
+# MAGIC coalesce. All of the above are widgets. All profiling sections (S4–S11) and the
+# MAGIC synthesis spec describe this subset; S3 reports total-table vs subset daily volume
+# MAGIC side by side, and `window_frame.filter.rsid_breakdown` gives per-suite row counts.
 # MAGIC 1. Fill evidence gaps: volume, history depth, load cadence, schema population census.
 # MAGIC 2. Discover real metric candidates (post_event_list event IDs, live eVars/props).
 # MAGIC 3. Capture time-series shape (seasonality, volatility) for anomaly-model design.
 # MAGIC 4. Produce a machine-readable **synthesis spec** for generating synthetic data.
 # MAGIC
-# MAGIC **Data visibility (ADR-0007 §5).** Business data profiles **raw and in full** — eVars,
-# MAGIC props, events, URLs, pagenames, campaigns, referrers. Comprehensive EDA needs real
-# MAGIC values, and this feed carries no person-level identifier (`cust_visid` wholly NULL,
-# MAGIC `userid` a single constant — ADR-0007 Context §2).
+# MAGIC **Data visibility (ADR-0007 §5, full-raw revision 2026-07-23).** EVERY column profiles
+# MAGIC **raw and in full** — eVars, props, events, URLs, pagenames, campaigns, referrers, AND
+# MAGIC the direct/quasi-identifier set (visitor IDs, cookies, IPs, geo_zip, user_agent, tracking
+# MAGIC eVars). There is no shape-only carve-out: a comprehensive view of all in-scope columns
+# MAGIC was the explicit requirement, and this feed carries no person-level identifier in scope
+# MAGIC (`cust_visid` wholly NULL, `userid` a single constant — ADR-0007 Context §2).
 # MAGIC
-# MAGIC The one exception is direct device/network identifiers (visitor IDs, cookies, IPs,
-# MAGIC geo_zip, user_agent), reported shape-only (null %, cardinality, length stats) — because
-# MAGIC their raw values carry no analytical signal, not because EDA is restricted. URL query
-# MAGIC strings are stripped (session tokens live there); paths and hosts print in full.
+# MAGIC URL query strings profile raw by default (the `strip_url_query` widget strips them).
+# MAGIC ⚠ SHAREABLE blocks now carry raw identifiers/PII (IPs, postal codes, device IDs) — a
+# MAGIC human read-through is required before any block leaves the governed workspace.
 # MAGIC
-# MAGIC **How to run.** Attach to a cluster (DBR 13+ recommended), review the widgets that
-# MAGIC appear at the top after running the CONFIG cell, then Run All. Each section prints a
-# MAGIC `===== BEGIN SHAREABLE: <id> =====` block — copy those blocks back. Sections are
-# MAGIC independent: a failure prints `SKIPPED` and the run continues.
+# MAGIC **How to run.** Databricks → Workspace → Import → File → select this `.py` (it
+# MAGIC imports as a notebook — the file is in Databricks "source" format). Attach to any
+# MAGIC cluster with Unity Catalog access (DBR 13+ recommended); a small cluster is fine,
+# MAGIC since the heavy sections run on a 5% sample. Run the **S0 config cell** once so the
+# MAGIC widgets appear, then **Run All**. Expect S1/S2 in seconds, S3 as the one full-table
+# MAGIC scan (minutes), S5–S11 on the sample, S8 two exact passes over the window.
+# MAGIC
+# MAGIC **What to paste back.** Each section prints a
+# MAGIC `===== BEGIN SHAREABLE: <id> =====` block — copy those verbatim. Multi-part blocks
+# MAGIC (`part 1 of N`) reassemble by concatenation, so paste every part. Priority order if
+# MAGIC splitting across messages: (1) `synthesis_spec`; (2) `ts_daily`, `ts_events`,
+# MAGIC `ts_profiles`; (3) `event_decode`, `live_custom_dims`, `population_census`;
+# MAGIC (4) `daily_volume`, `delta_meta`; (5) `dim_candidates`, `dq_baseline`,
+# MAGIC `identity_evidence`, `uc_discovery`, `window_frame`.
+# MAGIC
+# MAGIC **If something goes wrong.** Sections are independent: a failure prints
+# MAGIC `===== SKIPPED: <id> | <reason> =====` and the run continues — paste SKIPPED lines
+# MAGIC back too. If everything downstream is empty the scope filter matched 0 rows: check
+# MAGIC `window_frame.filter.top_rsids` for the real rsid values/casing and
+# MAGIC `window_frame.filter.rsid_breakdown` for per-suite counts, then adjust the
+# MAGIC `rsid_list` / `url_scope_*` widgets and re-run from S3. Too slow on a small cluster?
+# MAGIC Lower `sample_fraction` to 0.01 and/or `window_months` to 6 and re-run from S4
+# MAGIC (sections rebuild their frames).
 
 # COMMAND ----------
 
@@ -51,13 +84,22 @@ dbutils.widgets.text("table_fqn", "gwam_prod_catalog.inv_typed_common.adobe_hit_
 dbutils.widgets.text("window_months", "13", "2. Deep-profiling window (months)")
 dbutils.widgets.text("sample_fraction", "0.05", "3. Sample fraction for per-column stats")
 dbutils.widgets.text("col_batch_size", "150", "4. Columns per aggregation batch")
-dbutils.widgets.text("top_n", "15", "5. Top-N cap for value lists")
+dbutils.widgets.text("top_n", "25", "5. Top-N cap for value lists")
 dbutils.widgets.text("hourly_days", "35", "6. Days for hourly profile")
 dbutils.widgets.text("max_csv_lines", "450", "7. Max CSV lines per shareable block")
-dbutils.widgets.text("top_events_k", "6", "8. Top-K events for daily series")
+dbutils.widgets.text("top_events_k", "12", "8. Top-K events for daily series")
 dbutils.widgets.text("cache_sample", "false", "9. Persist sample df (true/false)")
-dbutils.widgets.text("rsid_filter", "manulifeglobalprod", "10. rsid filter (empty = off)")
-dbutils.widgets.text("url_filter", "manulife.com/ca/en/personal/group-plans/group-retirement", "11. URL contains filter (empty = off)")
+dbutils.widgets.text("rsid_list", "manugrs,manulifeglobalprod", "10. rsid list (comma-sep, empty = off)")
+dbutils.widgets.dropdown("url_scope_mode", "broad", ["broad", "en_only"], "11. URL scope mode (en_only = pipeline parity)")
+dbutils.widgets.text("url_scope_list", "%/group-retirement%,%/group-plans%,%/regimes-collectifs%", "12. URL include patterns — ADD URLS HERE (SQL LIKE, comma-sep)")
+dbutils.widgets.text("url_scope_exclude", "%adobeaemcloud.com%,%/ph/%", "13. URL patterns to exclude")
+dbutils.widgets.text("login_host_exclude",
+                     "%portal.manulife.ca%,%id.manulife.ca%,%grsmembers.manulife.com%,"
+                     "%gsrs1.manulife.com%,%viproom.manulife.com%,%portail.manuvie.ca%",
+                     "14. Individual-login hosts to exclude (D8)")
+dbutils.widgets.text("max_profiled_cols", "1200", "15. Max columns emitted with full stats (raise for full coverage)")
+dbutils.widgets.dropdown("strip_url_query", "false", ["false", "true"], "16. Strip URL query strings before profiling")
+dbutils.widgets.text("event_lookup_path", "new_data/event.tsv", "17. Event-ID lookup TSV (blank = inline map only)")
 
 TABLE_FQN      = dbutils.widgets.get("table_fqn").strip()
 WINDOW_MONTHS  = int(dbutils.widgets.get("window_months"))
@@ -68,67 +110,106 @@ HOURLY_DAYS    = int(dbutils.widgets.get("hourly_days"))
 MAX_CSV_LINES  = int(dbutils.widgets.get("max_csv_lines"))
 TOP_EVENTS_K   = int(dbutils.widgets.get("top_events_k"))
 CACHE_SAMPLE   = dbutils.widgets.get("cache_sample").strip().lower() == "true"
-RSID_FILTER    = dbutils.widgets.get("rsid_filter").strip().lower()
-URL_FILTER     = dbutils.widgets.get("url_filter").strip().lower()
+MAX_PROFILED_COLS = int(dbutils.widgets.get("max_profiled_cols"))
+STRIP_URL_QUERY   = dbutils.widgets.get("strip_url_query").strip().lower() == "true"
+EVENT_LOOKUP_PATH = dbutils.widgets.get("event_lookup_path").strip()
+def _csv(widget):
+    return [p.strip().lower() for p in dbutils.widgets.get(widget).split(",") if p.strip()]
 
-# ------------------------------------------------------- privacy constants ----
-# ADR-0007 §5 (analysis-time visibility). EDA runs inside the governed Databricks
-# workspace against a feed that carries NO person-level identifier: cust_visid /
+RSID_LIST      = _csv("rsid_list")
+URL_SCOPE_MODE = dbutils.widgets.get("url_scope_mode").strip().lower()
+URL_EXCLUDE    = _csv("url_scope_exclude")
+LOGIN_EXCLUDE  = _csv("login_host_exclude")
+
+# Scope modes (doc-16 D5). The `url_scope_list` widget is AUTHORITATIVE: whatever patterns
+# are visible there are the patterns that run, so adding a URL means editing that widget and
+# nothing else. `en_only` is the single override — it pins the one pattern the bronze
+# pipeline still ingests, so an EDA run can be compared like-for-like against production.
+#
+# The default list is language- AND domain-agnostic, so three patterns cover both suites
+# (manugrs on manulifeim.com, manulifeglobalprod on manulife.com) in EN and FR, including
+# every gap the 2026-07-20 URL scope inventory found: /ca/fr retirement (801,461 rows) via
+# %/group-retirement%, /ca/fr/particuliers/regimes-collectifs/* (183,698) via
+# %/regimes-collectifs%, and /ca/en/{business,advisor,personal}/group-plans/* (285,266+)
+# via %/group-plans%.
+URL_SCOPE_EN_ONLY = ["%manulife.com/ca/en/personal/group-plans/group-retirement%"]
+URL_INCLUDE = URL_SCOPE_EN_ONLY if URL_SCOPE_MODE == "en_only" else _csv("url_scope_list")
+
+# -------------------------------------------------------- privacy stance ------
+# ADR-0007 §5 (analysis-time visibility), full-raw revision 2026-07-23. EDA runs
+# inside the governed Databricks workspace against a feed that carries NO
+# person-level identifier in the login-excluded marketing scope: cust_visid /
 # post_cust_visid are wholly NULL and userid is a single constant account value
 # (cardinality 1) — confirmed with the data owner 2026-07-04, ADR-0007 Context §2.
 #
-# Default is therefore RAW: business dimensions (eVars, props, events, URLs,
-# pagenames, campaigns, referrers, search terms) profile at full fidelity. Masking
-# them to sha1 tokens destroyed the analytical signal without protecting a person —
-# prior runs emitted whole sections of `<masked:xxxxxxxx>` that nobody could read.
+# Per the data-owner decision recorded in ADR-0007 §5, EVERY column now profiles and
+# emits RAW values — including the direct/quasi-identifier set (mcvisid, visid_*,
+# cookies, ip/ip2/ipv6, geo_zip, user_agent) and tracking eVars (ECID eVar131,
+# Medallia UUID eVar140). There is NO shape-only carve-out: a comprehensive view of
+# all in-scope columns was the explicit requirement.
 #
-# The residual exception is direct device/network identifiers, reported SHAPE ONLY
-# (null %, cardinality, length stats). The reason is analytical, not bureaucratic:
-# their raw values carry no signal. What EDA needs from `mcvisid` is "412k distinct,
-# 0.2% null" — never a specific cookie value. Shape-only costs nothing here while
-# keeping re-identifiable values out of blocks that get copied out of the workspace.
-DIRECT_IDENTIFIERS = {
-    # visitor/device identifiers -> HMAC-pseudonymized in the pipeline (ADR-0007 §2)
-    "mcvisid", "visid_high", "visid_low", "post_visid_high", "post_visid_low",
-    "cust_visid", "post_cust_visid", "cookies", "post_cookies", "persistent_cookie",
-    # network addresses
-    "ip", "ip2", "ipv6",
-    # fine geo + device fingerprint — quasi-identifiers, re-identifying in combination
-    "geo_zip", "post_zip", "zip", "user_agent",
+# This changes NOTHING about the shipped pipeline — HMAC-SHA-256 pseudonymization at
+# Bronze->Silver (ADR-0007 §2) still stands. Only what the EDA notebook PRINTS widens.
+PII_EXPORT_WARNING = (
+    "PII NOTICE (ADR-0007 §5): SHAREABLE blocks below carry RAW identifiers and PII "
+    "(IPs, postal codes, device IDs, User-Agent, tracking eVars). They may leave the "
+    "governed Databricks workspace only after a human read-through."
+)
+print("\n" + "=" * 78 + "\n" + PII_EXPORT_WARNING + "\n" + "=" * 78 + "\n")
+
+# --------------------------------------------------------- semantic labels ----
+# EDDL eVar/prop dictionary (research/claude/16-e2e-production-blueprint.md), keyed by
+# variable number; applies to both `evarN` and `post_evarN`. Labels are EDDL-derived
+# annotations only (not logic) — a few eVars carry documented semantic conflicts
+# (e.g. 107↔121 domain, 110↔185 platform); see doc-16 before trusting an edge label.
+EVAR_LABELS = {
+    101: "Page Name", 102: "Page Type", 103: "Site Type", 104: "Content Type",
+    105: "Brand|Line of Business|Segment", 106: "Country|Region|City",
+    107: "Full Page URL|Domain|Hash|Query|Path", 108: "User Agent", 109: "Language",
+    110: "Platform", 121: "Domain (Page)", 122: "Login Step",
+    126: "Download File Label", 127: "Download URL",
+    131: "Anonymous ID (ECID)", 132: "Primary Member Customer ID",
+    133: "Secondary Member Customer ID", 134: "Tertiary Member Customer ID",
+    135: "Login Method", 136: "Email (hashed)",
+    137: "Age|Gender|Spouse Age|Spouse Gender|#Dependents|Smoking",
+    138: "User Type", 139: "User Sub-Type", 140: "Medallia UUID",
+    144: "Navigation History", 145: "New vs Repeat",
+    161: "Search Results", 162: "Search Keywords", 163: "Search Type",
+    181: "Error Code", 182: "Error Description", 183: "Error Type",
+    184: "Error Category", 185: "Platform", 189: "Link Region",
+    191: "Form Name", 192: "Form Step", 193: "Link Click Name", 194: "Link Click Href",
+    199: "Google ID (GLID)", 200: "OneTrust Categories-ID",
 }
-
-def is_sensitive(col_name):
-    """True only for direct/quasi identifiers. Everything else profiles raw.
-
-    Deliberately an exact-match set, not a regex: the previous pattern net matched
-    `guid|token|mcid|aamid|zip$|social` and swept in business columns that were never
-    identifiers, which is a large part of why so much output came back masked.
-    """
-    return col_name.lower() in DIRECT_IDENTIFIERS
+PROP_LABELS = {
+    51: "Page Title", 52: "Page URL parts", 53: "Bot Detector", 54: "Language",
+    55: "Previous Page / Referrer", 56: "Navigation Position", 57: "New vs Repeat",
+}
+_VAR_RE = re.compile(r"(?:post_)?(evar|prop)(\d+)$")
+def dim_label(col):
+    """EDDL semantic label for evarN/propN columns; '' when unknown."""
+    m = _VAR_RE.match(str(col).lower())
+    if not m:
+        return ""
+    n = int(m.group(2))
+    return (EVAR_LABELS if m.group(1) == "evar" else PROP_LABELS).get(n, "")
 
 # ------------------------------------------------------------ emit helpers ----
 RESULTS = {}   # section_id -> payload (drives S12 consolidation)
 SKIPPED = {}   # section_id -> reason
 
-# Last-resort net for values that should never appear in an analytics dimension at
-# all. Deliberately minimal now: the previous version also redacted any 10+ digit run
-# and any 24+ hex run, which silently destroyed hit counts, epoch timestamps, order
-# IDs and event codes — and truncated at 160 chars, cutting long URLs mid-path.
-_SCRUB_PATTERNS = [
-    (re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"), "<redacted:email>"),
-    (re.compile(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b"), "<redacted:ipv4>"),
-]
+# Emit-time FORMATTING only (ADR-0007 §5 full-raw). Values are NOT redacted: the
+# earlier email/IPv4 scrubbers were removed with the data-owner decision to profile
+# identifiers raw. This keeps only display hygiene — truncate absurdly long strings so a
+# single value can't blow the Databricks per-cell stdout cap, and round floats.
 MAX_EMIT_STR = 2000
 
 def _scrub_str(s):
     if len(s) > MAX_EMIT_STR:
         s = s[:MAX_EMIT_STR] + "...<trunc>"
-    for pat, repl in _SCRUB_PATTERNS:
-        s = pat.sub(repl, s)
     return s
 
 def _scrub(obj):
-    """Walk a payload: truncate strings, redact email/IP/long-ID lookalikes, round floats."""
+    """Walk a payload: truncate over-long strings and round floats. No PII redaction."""
     if isinstance(obj, dict):
         return {(_scrub_str(k) if isinstance(k, str) else k): _scrub(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
@@ -167,10 +248,6 @@ def run_section(section_id, fn):
         traceback.print_exc()
 
 # ------------------------------------------------------------ data helpers ----
-def mask(v):
-    """SHA1-truncated token; matches new_data/generated_data_profile.json format."""
-    return "<masked:" + hashlib.sha1(str(v).encode("utf-8")).hexdigest()[:8] + ">"
-
 def qcol(col_name):
     """F.col with backtick quoting — the schema has dotted column names
     (mobileappperformanceappid.*) that unquoted F.col parses as struct access."""
@@ -184,16 +261,9 @@ def nonblank(col_name):
 def strip_query(u):
     return str(u).split("?")[0].split("#")[0]
 
-def url_shape(u):
-    """(domain, path_depth, first_path_segment) — never the full URL."""
-    u = strip_query(u)
-    m = re.match(r"^(?:[a-z]+:)?//([^/]+)(/.*)?$", u) or re.match(r"^([^/]+)(/.*)?$", u)
-    if not m:
-        return ("<unparsed>", 0, "")
-    domain = m.group(1).lower()
-    path = m.group(2) or ""
-    segs = [s for s in path.split("/") if s]
-    return (domain, len(segs), ("/" + segs[0]) if segs else "/")
+def maybe_strip(u):
+    """Strip URL query/fragment only when the strip_url_query widget is on; else raw."""
+    return strip_query(u) if STRIP_URL_QUERY else str(u)
 
 def batched_agg(df, agg_exprs, batch_size):
     """Run many agg expressions in batches to dodge codegen limits.
@@ -236,40 +306,96 @@ def pick_col(df, *candidates):
 RSID_COL = None   # report-suite column
 URL_COL  = None   # page-URL column
 
+URL_COLS = None   # page-URL columns present, in D4 coalesce order
+
 def _resolve_scope_cols(df):
-    global RSID_COL, URL_COL
+    global RSID_COL, URL_COL, URL_COLS
     RSID_COL = pick_col(df, "rsid", "report_suite", "reportsuite", "reportsuiteid", "post_rsid")
-    URL_COL  = pick_col(df, "post_page_url", "page_url")
+    # D4: page_url FIRST. post_page_url is blank 36.41% (manulifeglobalprod) /
+    # 45.75% (manugrs) of the time vs <=0.013% for page_url, so preferring
+    # post_page_url — as this notebook used to — silently drops ~40% of rows.
+    have = set(df.columns)
+    URL_COLS = [c for c in ("page_url", "post_page_url") if c in have]
+    URL_COL  = URL_COLS[0] if URL_COLS else None
+
+def like_any(colexpr, patterns):
+    """Null-safe OR of SQL LIKE patterns. Returns None when `patterns` is empty.
+
+    Blank/NULL input yields False, never NULL, so `~like_any(...)` stays
+    well-defined — a NULL there would silently drop the row instead of keeping it.
+    """
+    if not patterns:
+        return None
+    m = None
+    for p in patterns:
+        m = colexpr.like(p) if m is None else (m | colexpr.like(p))
+    return F.coalesce(m, F.lit(False))
+
+def url_expr(df):
+    """D4 blank-guarded coalesce(page_url, post_page_url), lowercased.
+
+    Adobe writes empty strings, not NULLs, so a plain coalesce() returns "" from
+    page_url and never falls through to post_page_url. Map blank -> NULL first,
+    then coalesce, then land on "" so the NOT LIKE exclusions stay well-defined
+    (a NULL would make ~like(...) NULL and silently drop the row).
+    """
+    if URL_COLS is None:
+        _resolve_scope_cols(df)
+    if not URL_COLS:
+        return None
+    parts = []
+    for c in URL_COLS:
+        t = F.trim(F.col(c).cast("string"))
+        parts.append(F.when(t != F.lit(""), t))
+    return F.lower(F.coalesce(*parts, F.lit("")))
 
 def scope_condition(df):
     """CA-Retirement subset selector. Returns (Column|None, meta).
 
-    rsid == RSID_FILTER (case-insensitive) AND page URL CONTAINS URL_FILTER.
-    Either widget empty -> that condition is dropped. Missing schema column ->
-    that condition is dropped and flagged in meta (so the run doesn't silently
-    profile the wrong population). NOTE: the URL 'contains' test excludes hits
-    with a blank page_url; that share is measured in S4 filter diagnostics.
+    rsid IN RSID_LIST (case-insensitive) AND the D4 coalesced URL matches any
+    URL_INCLUDE pattern AND matches none of URL_EXCLUDE AND none of the D8
+    individual-login hosts. Empty widget -> that condition is dropped. Missing
+    schema column -> dropped and flagged in meta, so the run cannot silently
+    profile the wrong population. NOTE: the include test excludes hits with a
+    blank URL; that share is measured in S4 filter diagnostics.
     """
-    if RSID_COL is None and URL_COL is None:
+    if RSID_COL is None and URL_COLS is None:
         _resolve_scope_cols(df)
     conds, active, missing = [], [], []
-    if RSID_FILTER:
+    if RSID_LIST:
         if RSID_COL:
-            conds.append(F.lower(F.trim(F.col(RSID_COL).cast("string"))) == F.lit(RSID_FILTER))
-            active.append(f"rsid[{RSID_COL}]=={RSID_FILTER}")
+            conds.append(F.lower(F.trim(F.col(RSID_COL).cast("string"))).isin(RSID_LIST))
+            active.append(f"rsid[{RSID_COL}] in {RSID_LIST}")
         else:
             missing.append("rsid (no report-suite column found)")
-    if URL_FILTER:
-        if URL_COL:
-            conds.append(F.lower(F.col(URL_COL).cast("string")).contains(URL_FILTER))
-            active.append(f"url[{URL_COL}] contains {URL_FILTER}")
-        else:
-            missing.append("url (no page_url column found)")
+    u = url_expr(df)
+    if u is None:
+        if URL_INCLUDE or URL_EXCLUDE or LOGIN_EXCLUDE:
+            missing.append("url (no page_url/post_page_url column found)")
+    else:
+        inc = like_any(u, URL_INCLUDE)
+        if inc is not None:
+            conds.append(inc)
+            active.append(f"url[coalesce{tuple(URL_COLS)}] LIKE any {URL_INCLUDE}")
+        exc = like_any(u, URL_EXCLUDE)
+        if exc is not None:
+            conds.append(~exc)
+            active.append(f"url NOT LIKE any {URL_EXCLUDE}")
+        # D8: individual-login / member-auth hosts, subtracted in EVERY mode.
+        # An explicit host list, NOT a %portal% pattern: four of the six carry no
+        # "portal" substring (id.manulife.ca alone is 62.6M hits) and the FR
+        # "portail" spelling would not match one either.
+        lex = like_any(u, LOGIN_EXCLUDE)
+        if lex is not None:
+            conds.append(~lex)
+            active.append(f"login hosts excluded [D8]: {LOGIN_EXCLUDE}")
     cond = None
     for c in conds:
         cond = c if cond is None else (cond & c)
-    meta = {"rsid_col": RSID_COL, "url_col": URL_COL,
-            "rsid_filter": RSID_FILTER or None, "url_filter": URL_FILTER or None,
+    meta = {"rsid_col": RSID_COL, "url_col": URL_COL, "url_cols_coalesced": URL_COLS,
+            "rsid_list": RSID_LIST or None, "url_scope_mode": URL_SCOPE_MODE,
+            "url_include": URL_INCLUDE or None, "url_exclude": URL_EXCLUDE or None,
+            "login_host_exclude": LOGIN_EXCLUDE or None,
             "active_conditions": active, "missing_conditions": missing,
             "scoped": cond is not None}
     return cond, meta
@@ -311,8 +437,10 @@ def ensure_frames():
     return DF, DF_W, DF_S
 
 print(f"Config OK. table={TABLE_FQN} window={WINDOW_MONTHS}mo fraction={SAMPLE_FRACTION} "
-      f"batch={COL_BATCH_SIZE} top_n={TOP_N} shape_only_cols={len(DIRECT_IDENTIFIERS)}")
-print(f"Scope filter: rsid={RSID_FILTER or '(off)'} url_contains={URL_FILTER or '(off)'}")
+      f"batch={COL_BATCH_SIZE} top_n={TOP_N} max_cols={MAX_PROFILED_COLS} emit_mode=raw-all")
+print(f"Scope filter: rsid={RSID_LIST or '(off)'} url_mode={URL_SCOPE_MODE} "
+      f"include={URL_INCLUDE or '(off)'} exclude={URL_EXCLUDE or '(off)'} "
+      f"login_hosts_excluded={len(LOGIN_EXCLUDE)}")
 
 # COMMAND ----------
 
@@ -592,11 +720,14 @@ def s4_frames():
     # ---- filter diagnostics on the UNFILTERED window (rsid-only / url-only / both) ----
     cond, scope_meta = scope_condition(DF)
     raw_window = DF.filter(F.to_date(DATE_EXPR) >= F.lit(WINDOW_START))
-    rsid_cond = (F.lower(F.trim(F.col(RSID_COL).cast("string"))) == F.lit(RSID_FILTER)
-                 if (RSID_COL and RSID_FILTER) else F.lit(False))
-    url_cond = (F.lower(F.col(URL_COL).cast("string")).contains(URL_FILTER)
-                if (URL_COL and URL_FILTER) else F.lit(False))
-    url_blank_cond = (~nonblank(URL_COL)) if URL_COL else F.lit(False)
+    rsid_cond = (F.lower(F.trim(F.col(RSID_COL).cast("string"))).isin(RSID_LIST)
+                 if (RSID_COL and RSID_LIST) else F.lit(False))
+    _u = url_expr(DF)
+    _inc = like_any(_u, URL_INCLUDE) if _u is not None else None
+    url_cond = _inc if _inc is not None else F.lit(False)
+    # blank on the D4 coalesce, not on one column: a row is only URL-blank when
+    # BOTH page_url and post_page_url are empty.
+    url_blank_cond = F.lit(False) if _u is None else (_u == F.lit(""))
     diag = raw_window.agg(
         F.count("*").alias("total"),
         F.sum(F.when(rsid_cond, 1).otherwise(0)).alias("rsid_match"),
@@ -613,12 +744,28 @@ def s4_frames():
                      for r in (raw_window.groupBy(RSID_COL).count()
                                          .orderBy(F.desc("count")).limit(10).collect())]
 
+    # Per-suite row counts INSIDE the final scope. D1 requires one run to cover both
+    # suites, so a suite missing here means it contributed nothing and every downstream
+    # section is silently single-suite — the failure mode this breakdown exists to catch.
+    rsid_breakdown = []
+    if RSID_COL:
+        rsid_breakdown = [{"rsid": (str(r[RSID_COL]) if r[RSID_COL] is not None else None),
+                           "rows": r["count"],
+                           "pct_of_scope": round(100.0 * r["count"] / max(window_rows, 1), 3)}
+                          for r in (DF_W.groupBy(RSID_COL).count()
+                                        .orderBy(F.desc("count")).collect())]
+        _seen = {(b["rsid"] or "").lower() for b in rsid_breakdown}
+        _missing = [s for s in RSID_LIST if s not in _seen]
+        if _missing:
+            print(f"!!!!! WARNING: 0 rows in scope for rsid(s): {_missing} — "
+                  f"downstream sections cover only {sorted(_seen & set(RSID_LIST))}")
+
     both = diag["both"] or 0
     warning = None
     if both == 0:
         warning = ("SCOPE FILTER MATCHED 0 ROWS in the window. Downstream sections would "
                    "profile an empty frame. Check window_frame.filter.top_rsids for the "
-                   "actual rsid value/casing and adjust the rsid_filter / url_filter widgets.")
+                   "actual rsid value/casing and adjust the rsid_list / url_scope_* widgets.")
         print("!!!!! " + warning)
 
     emit("window_frame", {
@@ -635,6 +782,7 @@ def s4_frames():
             "rsid_only_match": diag["rsid_match"],
             "url_only_match": diag["url_match"],
             "both_match": both,
+            "rsid_breakdown": rsid_breakdown,
             "url_blank_rows": diag["url_blank"],
             "url_blank_pct": round(100.0 * (diag["url_blank"] or 0) / max(diag["total"], 1), 3),
             "top_rsids": top_rsids,
@@ -670,13 +818,12 @@ def s4b_url_scope_audit():
     ensure_frames()
     _resolve_scope_cols(DF)
     raw_window = DF.filter(F.to_date(DATE_EXPR) >= F.lit(WINDOW_START))
-    rsid_cond = (F.lower(F.trim(F.col(RSID_COL).cast("string"))) == F.lit(RSID_FILTER)
-                 if (RSID_COL and RSID_FILTER) else F.lit(True))
-    url_cols = [c for c in ("post_page_url", "page_url") if pick_col(raw_window, c)]
+    rsid_cond = (F.lower(F.trim(F.col(RSID_COL).cast("string"))).isin(RSID_LIST)
+                 if (RSID_COL and RSID_LIST) else F.lit(True))
+    url_cols = [c for c in ("page_url", "post_page_url") if pick_col(raw_window, c)]   # D4 order
     if not url_cols:
-        emit("url_scope_audit", {"error": "no post_page_url / page_url column in source"})
+        emit("url_scope_audit", {"error": "no page_url / post_page_url column in source"})
         return
-    cur = (URL_FILTER or "").lower()
 
     pop = raw_window.filter(rsid_cond).select(*url_cols)
     if CACHE_SAMPLE:
@@ -687,7 +834,8 @@ def s4b_url_scope_audit():
         return F.regexp_extract(u, r"^([^?#]*)", 1)
 
     def matches(c):    # null-safe: blank/null URL -> False (never NULL), so ~matches() works
-        return F.coalesce(host_path(c).contains(cur), F.lit(False)) if cur else F.lit(True)
+        m = like_any(host_path(c), URL_INCLUDE)
+        return m if m is not None else F.lit(True)
 
     # ---- 1) column reconciliation: coverage, cardinality, today's-filter match ----
     exprs = [F.count("*").alias("rows")]
@@ -702,7 +850,7 @@ def s4b_url_scope_audit():
                   F.sum((~a & b).cast("int")).alias("only1")]
     r = pop.agg(*exprs).collect()[0]
     total = r["rows"] or 0
-    reconciliation = {"rsid_only_rows": total, "current_url_filter": URL_FILTER or None}
+    reconciliation = {"rsid_only_rows": total, "current_url_include": URL_INCLUDE or None}
     for c in url_cols:
         nb = r[c + "_nb"] or 0
         reconciliation[c] = {
@@ -725,9 +873,10 @@ def s4b_url_scope_audit():
     host = F.regexp_extract(hp, r"^([^/]+)", 1)
     # noise = Adobe AEM authoring/staging hosts + non-CA (Philippines) paths -> not GWAM-CA traffic
     noise = host.rlike(r"adobeaemcloud") | hp.rlike(r"/ph/")
+    _cur_m = like_any(hp, URL_INCLUDE)
     tag = pop.filter(hp != F.lit("")).select(
         F.regexp_extract(hp, r"^([^/]+(?:/[^/]+){0,4})", 1).alias("host_path"),
-        (hp.contains(cur) if cur else F.lit(True)).alias("cur"),
+        (_cur_m if _cur_m is not None else F.lit(True)).alias("cur"),
         # CA retirement / group-plans section tokens (bare "/retirement" dropped -> excludes PH)
         hp.rlike(r"group-retirement|group-plans|regimes-collectif|retraite").alias("ret"),
         noise.alias("noise"),
@@ -794,7 +943,7 @@ run_section("S4b", s4b_url_scope_audit)
 
 # COMMAND ----------
 
-# S4c reuses S4b's helpers and widgets (rsid_filter / url_filter). Two retirement matchers:
+# S4c reuses S4b's helpers and widgets (rsid_list / url_scope_*). Two retirement matchers:
 #   RET_STRICT  = section-level tokens (aligns with S4b 'addable'; bare "/retirement" dropped so
 #                 Philippines /ph/retirement is excluded).
 #   RET_BROAD   = the manager's literal "retirement" keyword (retirement|retraite).
@@ -810,9 +959,8 @@ def s4c_url_column_audit():
     ensure_frames()
     _resolve_scope_cols(DF)
     raw_window = DF.filter(F.to_date(DATE_EXPR) >= F.lit(WINDOW_START))
-    rsid_cond = (F.lower(F.trim(F.col(RSID_COL).cast("string"))) == F.lit(RSID_FILTER)
-                 if (RSID_COL and RSID_FILTER) else F.lit(True))
-    cur = (URL_FILTER or "").lower()
+    rsid_cond = (F.lower(F.trim(F.col(RSID_COL).cast("string"))).isin(RSID_LIST)
+                 if (RSID_COL and RSID_LIST) else F.lit(True))
 
     present = [c for c in URL_CANDIDATES if pick_col(raw_window, c)]
     if not present:
@@ -843,8 +991,8 @@ def s4c_url_column_audit():
                   F.approx_count_distinct(h).alias(c + "_dist"),
                   F.sum(h.rlike(RET_STRICT).cast("int")).alias(c + "_rs"),
                   F.sum(h.rlike(RET_BROAD).cast("int")).alias(c + "_rb")]
-        if cur:
-            exprs += [F.sum(F.coalesce(h.contains(cur), F.lit(False)).cast("int")).alias(c + "_cur")]
+        if URL_INCLUDE:
+            exprs += [F.sum(like_any(h, URL_INCLUDE).cast("int")).alias(c + "_cur")]
         if coal_ret is not None:
             exprs += [F.sum((h.rlike(RET_STRICT) & ~coal_ret).cast("int")).alias(c + "_missed")]
     rd = pop.agg(*exprs).collect()[0].asDict()
@@ -855,7 +1003,7 @@ def s4c_url_column_audit():
         per_col[c] = {
             "blank_pct": round(100.0 * (total - nb) / max(total, 1), 3),
             "approx_distinct": rd[c + "_dist"],
-            "rows_matching_current_filter": (rd.get(c + "_cur") if cur else None),
+            "rows_matching_current_filter": (rd.get(c + "_cur") if URL_INCLUDE else None),
             "rows_matching_retirement_strict": rd[c + "_rs"],
             "rows_matching_retirement_broad": rd[c + "_rb"],
             "retirement_rows_beyond_coalesce": rd.get(c + "_missed"),
@@ -897,7 +1045,7 @@ def s4c_url_column_audit():
         sweep = {"available": True,
                  "basis": "full profiling window, all rsids, retirement_strict on coalesce(page_url,post_page_url)",
                  "total_retirement_rows_window": total_ret,
-                 "current_scope_rsid": RSID_FILTER or None,
+                 "current_scope_rsids": RSID_LIST or None,
                  "top_rsids_by_retirement_hits": top_rsids}
 
     emit("url_column_audit", {
@@ -905,8 +1053,9 @@ def s4c_url_column_audit():
                  "retirement_strict = group-retirement|group-plans|regimes-collectif|retraite "
                  "(section tokens, excludes PH /retirement); retirement_broad = literal "
                  "retirement|retraite; rsid_sweep is window-wide across all suites."),
-        "rsid_scope": {"rsid_col": RSID_COL, "rsid_filter": RSID_FILTER or None,
-                       "url_filter": URL_FILTER or None, "rsid_only_rows": total},
+        "rsid_scope": {"rsid_col": RSID_COL, "rsid_list": RSID_LIST or None,
+                       "url_scope_mode": URL_SCOPE_MODE, "url_include": URL_INCLUDE or None,
+                       "rsid_only_rows": total},
         "recommended_scope_col": ("coalesce(" + ", ".join(coal_cols) + ")") if coal_cols else None,
         "columns_present": present,
         "per_url_column": per_col,
@@ -959,9 +1108,9 @@ def s5_population_census():
         "n_total_cols": len(all_cols),
         "n_populated": len(populated), "n_sparse": len(sparse), "n_dead": len(dead),
         "n_core": len(core), "core_min_pct": CORE_MIN_PCT,
-        "populated": [{"col": c, **v} for c, v in ranked[:120]],
-        "populated_names_beyond_top120": [c for c, _ in ranked[120:]],
-        "sparse_cols": sparse[:40],
+        "populated": [{"col": c, "label": dim_label(c), **v} for c, v in ranked[:MAX_PROFILED_COLS]],
+        "populated_names_beyond_cap": [c for c, _ in ranked[MAX_PROFILED_COLS:]],
+        "sparse_cols": sparse,
         "evar_live": sorted(c for c in populated if re.match(r"post_evar\d+$|evar\d+$", c)),
         "prop_live": sorted(c for c in populated if re.match(r"post_prop\d+$|prop\d+$", c)),
         "evar_core": sorted(c for c in core if re.match(r"post_evar\d+$|evar\d+$", c)),
@@ -982,8 +1131,52 @@ run_section("S5", s5_population_census)
 
 ADOBE_STD_EVENTS = {
     "1": "purchase", "2": "product_view", "10": "cart_open", "11": "checkout",
-    "12": "cart_add", "13": "cart_remove", "14": "cart_view",
+    "12": "cart_add", "13": "cart_remove", "14": "cart_view", "20": "campaign_view",
 }
+
+def _load_event_lookup(path):
+    """Best-effort load of an event-ID -> label TSV (id<TAB>label per line). Returns {}
+    if the path is blank or unreadable — the notebook then falls back to the inline map
+    plus the Instance-of-eVar formula. Works from a Databricks Repo/Git folder or local."""
+    if not path:
+        return {}
+    for cand in (path, "/Workspace/" + path.lstrip("/"), "./" + path):
+        try:
+            with open(cand, "r", encoding="utf-8") as fh:
+                out = {}
+                for line in fh:
+                    parts = line.rstrip("\n").split("\t")
+                    if len(parts) >= 2 and parts[0].strip():
+                        out[parts[0].strip()] = parts[1].strip()
+                if out:
+                    print(f"event lookup: loaded {len(out)} ids from {cand}")
+                    return out
+        except OSError:
+            continue
+    print(f"event lookup: {path} not readable — using inline map + eVar-instance formula")
+    return {}
+
+EVENT_LOOKUP = _load_event_lookup(EVENT_LOOKUP_PATH)
+
+def decode_event(eid):
+    """Resolve an Adobe post_event_list numeric ID to a label. Order: loaded TSV ->
+    inline standard events -> 'Instance of eVarN' formula (100-199 -> eVar1-100,
+    10000-10099 -> eVar101-200) -> unknown. Formula ranges verified against event.tsv."""
+    e = str(eid)
+    if e in EVENT_LOOKUP:
+        return EVENT_LOOKUP[e]
+    if e in ADOBE_STD_EVENTS:
+        return ADOBE_STD_EVENTS[e]
+    try:
+        n = int(e)
+    except (TypeError, ValueError):
+        return "unknown — resolve via event lookup / data dictionary"
+    if 100 <= n <= 199:
+        return f"Instance of eVar{n - 99}"
+    if 10000 <= n <= 10099:
+        return f"Instance of eVar{n - 9899}"
+    return "unknown — resolve via event lookup / data dictionary"
+
 TOP_EVENT_IDS = []   # filled here; used by S8
 
 def s6_event_decode():
@@ -1012,7 +1205,7 @@ def s6_event_decode():
     # instances (every occurrence) vs hit-presence (array_distinct)
     inst = (with_ev.select(F.explode("ev").alias("e"))
             .select(F.split("e", "=")[0].alias("event_id"),
-                    F.expr("try_cast(element_at(split(e, '='), 2) as double)").alias("val"))
+                    F.expr("try_cast(try_element_at(split(e, '='), 2) as double)").alias("val"))
             .groupBy("event_id")
             .agg(F.count("*").alias("instances"),
                  F.sum(F.when(F.col("val").isNotNull(), 1).otherwise(0)).alias("with_value"),
@@ -1029,7 +1222,7 @@ def s6_event_decode():
         eid = r["event_id"]
         event_freq.append({
             "event_id": eid,
-            "label": ADOBE_STD_EVENTS.get(eid, "unknown — resolve via event lookup / data dictionary"),
+            "label": decode_event(eid),
             "hits_with_pct": round(100.0 * (r["hits_with"] or 0) / hits, 3),
             "instances": r["instances"],
             "has_value_pct": round(100.0 * (r["with_value"] or 0) / r["instances"], 2) if r["instances"] else None,
@@ -1051,8 +1244,8 @@ run_section("S6", s6_event_decode)
 
 # MAGIC %md
 # MAGIC ## S7 — Live eVars / props / campaign
-# MAGIC Shape + masked top-value distributions for the live custom dimensions
-# MAGIC (feeds the 8 post_eVar registry slots and the synthetic generator).
+# MAGIC Shape + RAW top-value distributions for every live custom dimension
+# MAGIC (feeds the post_eVar registry slots and the synthetic generator; ADR-0007 §5).
 
 # COMMAND ----------
 
@@ -1060,7 +1253,7 @@ def s7_live_custom_dims():
     ensure_frames()
     live_all = [c for c in CENSUS
                 if re.match(r"post_evar\d+$|evar\d+$|post_prop\d+$|prop\d+$|^post_campaign$|^campaign$", c)]
-    live = sorted(live_all, key=lambda c: -CENSUS[c]["pop_pct"])[:25]
+    live = sorted(live_all, key=lambda c: -CENSUS[c]["pop_pct"])[:MAX_PROFILED_COLS]
     if not live:
         emit("live_custom_dims", {"error": "no live eVar/prop/campaign columns (run S5 first)"})
         return
@@ -1079,18 +1272,18 @@ def s7_live_custom_dims():
         pop_rows = max(SAMPLE_ROWS * CENSUS[c]["pop_pct"] / 100.0, 1)
         out.append({
             "col": c,
+            "label": dim_label(c),
             "pop_pct": CENSUS[c]["pop_pct"],
             "apx_distinct": CENSUS[c]["apx_distinct"],
             "len": {"p50": stats["len_p50"], "avg": stats["len_avg"], "max": stats["len_max"]},
             "looks_like_url": (stats["url_frac"] or 0) > 0.5,
             "free_text": (stats["len_avg"] or 0) > 80,
-            # Raw values: eVar/prop contents are business semantics (form steps, plan
-            # codes, tool names) and are the whole point of profiling custom dims.
-            # Identifier-shaped columns still fall back to shape-only.
-            "top": ([] if is_sensitive(c) else
-                    [{"v": str(r[c]), "len": len(str(r[c])),
-                      "pct": round(100.0 * r["count"] / pop_rows, 2)} for r in top]),
-            "mode": "shape_only (direct identifier)" if is_sensitive(c) else "raw",
+            # Raw values for every custom dim, identifiers included (ADR-0007 §5):
+            # eVar/prop contents are business semantics (form steps, plan codes, tool
+            # names) and are the whole point of profiling custom dims.
+            "top": [{"v": str(r[c]), "len": len(str(r[c])),
+                     "pct": round(100.0 * r["count"] / pop_rows, 2)} for r in top],
+            "mode": "raw",
         })
     emit("live_custom_dims", {"basis": "sample", "n_live": len(live_all), "n_core": n_core, "dims": out})
 
@@ -1230,53 +1423,62 @@ if TS_DAILY_PDF is not None:
 
 # MAGIC %md
 # MAGIC ## S9 — Dimension candidates
-# MAGIC Cardinality + top values of candidate slicing dimensions. Allowlisted dims print raw
-# MAGIC (lookup IDs / country codes); pagename & URL shapes are query-stripped; anything else masked.
+# MAGIC Cardinality + top values for EVERY populated dimension (census-driven, not a fixed
+# MAGIC allow-list; eVars/props are covered in S7). All values print raw, identifiers included
+# MAGIC (ADR-0007 §5); URL/pagename values keep the full path, query strings raw by default.
 
 # COMMAND ----------
 
 def s9_dimensions():
     ensure_frames()
-    dim_candidates = [c for c in [
+    # Census-driven: every populated column gets top-values, not a fixed allow-list
+    # (ADR-0007 §5, comprehensive coverage). eVar/prop/campaign columns already carry
+    # their values in S7, so skip them here to avoid duplication; everything else that
+    # is populated is fair game. MAX_PROFILED_COLS / sample_fraction / top_n bound cost.
+    KNOWN_DIMS = [
         "pagename", "post_pagename", "page_url", "post_page_url", "referrer",
         "ref_domain", "ref_type", "geo_country", "geo_region", "geo_city",
         "browser", "os", "connection_type", "language", "hit_source",
         "exclude_hit", "duplicate_purchase", "new_visit", "post_page_event",
         "va_closer_id",
-    ] if c in set(DF_S.columns) and c in CENSUS]
+    ]
+    _s7_re = re.compile(r"post_evar\d+$|evar\d+$|post_prop\d+$|prop\d+$|^post_campaign$|^campaign$")
+    cols_present = set(DF_S.columns)
+    ordered = [c for c in KNOWN_DIMS if c in CENSUS and c in cols_present]
+    extra = sorted((c for c in CENSUS
+                    if c not in KNOWN_DIMS and c in cols_present and not _s7_re.match(c)),
+                   key=lambda c: -CENSUS[c]["pop_pct"])
+    dim_candidates = (ordered + extra)[:MAX_PROFILED_COLS]
+
+    # Numeric Adobe lookup-ID dimensions: values are integer codes; decode needs the
+    # feed's browser/os/languages/countries lookup tables (not shipped in this repo).
+    LOOKUP_ID_DIMS = {"browser", "os", "language", "connection_type",
+                      "geo_country", "geo_region", "geo_dma", "color", "javascript"}
 
     out = []
     for c in dim_candidates:
-        is_url = c in ("page_url", "post_page_url", "referrer")
+        is_url = ("url" in c) or c in ("referrer", "post_referrer")
         top = (DF_S.filter(nonblank(c)).groupBy(c).count()
                    .orderBy(F.desc("count")).limit(TOP_N * (3 if is_url else 1)).collect())
         pop_rows = max(SAMPLE_ROWS * CENSUS[c]["pop_pct"] / 100.0, 1)
-        if is_url:
-            # Full query-stripped URL. The previous domain|depth|seg1 reduction
-            # collapsed every Canadian page into one bucket, which made the URL
-            # dimensions useless for scope work. Query strings stay stripped —
-            # they are the one part of a URL that carries session tokens.
-            top_vals = [{"v": strip_query(r[c]), "pct": round(100.0 * r["count"] / pop_rows, 2)}
+        if is_url or c in ("pagename", "post_pagename"):
+            # Full URL/pagename. Query strings profile RAW by default; the
+            # strip_url_query widget strips them (they can carry session tokens, though
+            # login/auth hosts are already excluded from scope).
+            top_vals = [{"v": maybe_strip(r[c]), "pct": round(100.0 * r["count"] / pop_rows, 2)}
                         for r in top[:TOP_N]]
-            mode = "raw, query-stripped"
-        elif c in ("pagename", "post_pagename"):
-            top_vals = [{"v": strip_query(r[c]), "pct": round(100.0 * r["count"] / pop_rows, 2)}
-                        for r in top[:TOP_N]]
-            mode = "raw, query-stripped"
-        elif is_sensitive(c):
-            # Direct/quasi identifier: cardinality and null rate are the analytical
-            # facts; individual values are not. See DIRECT_IDENTIFIERS above.
-            top_vals = []
-            mode = "shape_only (direct identifier)"
+            mode = "raw, query-stripped" if STRIP_URL_QUERY else "raw"
         else:
+            # Every other populated column, identifiers included (ADR-0007 §5).
             top_vals = [{"v": str(r[c]), "pct": round(100.0 * r["count"] / pop_rows, 2)}
                         for r in top[:TOP_N]]
             mode = "raw"
-        out.append({"dim": c, "mode": mode,
+        out.append({"dim": c, "mode": mode, "label": dim_label(c),
                     "coverage_pct": CENSUS[c]["pop_pct"],
                     "apx_distinct": CENSUS[c]["apx_distinct"],
-                    "top": top_vals})
-    emit("dim_candidates", {"basis": "sample", "dims": out})
+                    "top": top_vals,
+                    "note": ("numeric lookup-ID code" if c in LOOKUP_ID_DIMS else "")})
+    emit("dim_candidates", {"basis": "sample", "n_dims": len(out), "dims": out})
 
 run_section("S9", s9_dimensions)
 
@@ -1418,7 +1620,9 @@ def s11_identity():
             pass
 
     emit("identity_evidence", {
-        "basis": "sample", "note": "shape only per ADR-0007 — no identifier values",
+        "basis": "sample",
+        "note": "identity-column cardinality/null evidence; raw identifier values are in "
+                "S7/S9 per ADR-0007 §5 (full-raw)",
         "columns": out, "flags": flags, "daily_ratios": ratios,
     })
 
@@ -1447,7 +1651,7 @@ def s12_synthesis_spec():
         col = entry["col"]
         spec = {"col": col, "dtype": entry.get("dtype"),
                 "pop_pct": entry.get("pop_pct"), "apx_distinct": entry.get("apx_distinct"),
-                "sensitive_shape_only": is_sensitive(col)}
+                "label": dim_label(col)}
         if col in live_dims:
             spec["len"] = live_dims[col].get("len")
             spec["top_values"] = live_dims[col].get("top")
@@ -1460,7 +1664,9 @@ def s12_synthesis_spec():
         "meta": {
             "table": TABLE_FQN,
             "generated_at": datetime.datetime.now().isoformat(timespec="seconds"),
-            "scope": {"rsid": RSID_FILTER or None, "url_contains": URL_FILTER or None,
+            "scope": {"rsid_list": RSID_LIST or None, "url_scope_mode": URL_SCOPE_MODE,
+                      "url_include": URL_INCLUDE or None, "url_exclude": URL_EXCLUDE or None,
+                      "login_host_exclude": LOGIN_EXCLUDE or None,
                       "rsid_col": (scope_meta or {}).get("rsid_col"),
                       "url_col": (scope_meta or {}).get("url_col"),
                       "ca_share_pct": dv.get("ca_share_pct")},
@@ -1498,9 +1704,7 @@ run_section("S12", s12_synthesis_spec)
 # MAGIC ## Run manifest — integrity check for the export
 # MAGIC Byte length + sha1 of every shareable section, computed from the exact JSON that
 # MAGIC was printed. Databricks caps very large per-cell stdout; re-hash any pasted or
-# MAGIC exported block and compare here to prove nothing was truncated. The sha1 is printed
-# MAGIC dash-grouped in 8-hex chunks (a bare 40-hex digest would be redacted as a hex-ID by
-# MAGIC the privacy scrubber) — strip the dashes before comparing.
+# MAGIC exported block and compare here to prove nothing was truncated.
 
 # COMMAND ----------
 
@@ -1508,11 +1712,11 @@ def s_run_manifest():
     sections = {}
     for sid, payload in RESULTS.items():
         body = json.dumps(payload, separators=(",", ":"), default=str)
-        digest = hashlib.sha1(body.encode("utf-8")).hexdigest()
-        # dash-grouped: a bare 40-hex digest matches the _SCRUB_PATTERNS hex-id
-        # rule and emit() would print it as <redacted:hexid>; strip '-' to compare.
+        # Plain sha1 now that the emit scrubber no longer redacts hex-id runs
+        # (ADR-0007 §5 full-raw). Re-hash any pasted block and compare to prove nothing
+        # was truncated.
         sections[sid] = {"bytes": len(body),
-                         "sha1": "-".join(digest[i:i + 8] for i in range(0, 40, 8))}
+                         "sha1": hashlib.sha1(body.encode("utf-8")).hexdigest()}
     emit("run_manifest", {"sections": sections, "n_sections": len(sections),
                           "skipped": SKIPPED})
 
@@ -1548,5 +1752,6 @@ run_section("run_manifest", s_run_manifest)
 # MAGIC
 # MAGIC **Scope reminder:** everything except `delta_meta` and the `total_hits` column of
 # MAGIC `daily_volume` describes the CA-Retirement subset. First sanity check on any run:
-# MAGIC `window_frame.filter.both_match` must be > 0 and `top_rsids` must list the expected
-# MAGIC `manulifeglobalprod` value — if not, fix the `rsid_filter` / `url_filter` widgets.
+# MAGIC `window_frame.filter.both_match` must be > 0 and `top_rsids` must list BOTH expected
+# MAGIC suites (`manugrs`, `manulifeglobalprod`) — if not, fix the `rsid_list` /
+# MAGIC `url_scope_*` widgets. `rsid_breakdown` must also show a non-zero row count for each.

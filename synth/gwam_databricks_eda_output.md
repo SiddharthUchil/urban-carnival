@@ -2,6 +2,13 @@
 
 ## GWAM CANADA RETIREMENT DATABRICKS NOTEBOOK OUTPUT
 
+> **⚠ STALE SNAPSHOT (pre-2026-07-23).** This output predates the ADR-0007 §5 full-raw
+> revision. It was produced by the earlier notebook — single `rsid` (`manulifeglobalprod`),
+> `top_n=15`, a 24-column shape-only identifier carve-out, and `<masked:...>` tokens in S7.
+> The current `eda/gwam_canada_retirement_eda.py` profiles **all columns raw** (identifiers
+> included), is dual-`rsid`, and decodes events/eVar labels. Re-run it on Databricks to
+> refresh this file — it cannot be regenerated locally (no Spark / real table).
+
 ------------------------------------------------------------------------------------------------------------------------------------------------
 
 Config OK. table=gwam_prod_catalog.inv_typed_common.adobe_hit_data window=13mo fraction=0.05 batch=150 top_n=15 sensitive_cols=24
