@@ -48,6 +48,7 @@ FLAGGED_EVAR_COLUMNS = [
     "post_evar16",   # Transaction ID
     "post_evar52",   # Current Page
     "post_evar111",  # Experience Cloud ID
+    "post_evar116",  # Bot Traffic -- corroboration signal only (SME 2026-07-27)
     "post_evar148",  # Bot Detector (corroboration only, SME 2026-07-27)
 ]
 

@@ -1,0 +1,80 @@
+"""metric-registry.yaml <-> detect/cm_registry.py governance contract.
+
+research/claude/metric-registry.yaml is the governed source of truth (v0.3.0 records
+Kerrian's SME rulings of 2026-07-27); detect/cm_registry.py is its Python binding.
+Enforces the yaml's own validation_rules block plus the code pin, so REGISTRY_VERSION
+and the copied status/direction/owner governance fields cannot drift silently.
+"""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import pytest
+
+REPO = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO / "detect"))
+
+yaml = pytest.importorskip("yaml")
+
+from cm_registry import EVENT_METRICS, REGISTRY_VERSION, SERIES  # noqa: E402
+
+FUNNEL_METRIC_IDS = {
+    "pel_228_quote_start", "pel_229_quote_complete", "pel_232_save_quote",
+    "pel_269_app_start", "pel_240_app_confirm",
+}
+SHEET_COUNTS = {"data_feed_columns": 9, "post_eVar": 8, "post_event_list": 12}
+
+
+@pytest.fixture(scope="module")
+def registry():
+    path = REPO / "research" / "claude" / "metric-registry.yaml"
+    with open(path, encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
+@pytest.fixture(scope="module")
+def entries(registry):
+    return [e for sheet in SHEET_COUNTS for e in registry[sheet]]
+
+
+def test_version_pin(registry):
+    assert str(registry["meta"]["version"]) == REGISTRY_VERSION == "0.3.0"
+
+
+def test_per_sheet_counts(registry):
+    for sheet, want in SHEET_COUNTS.items():
+        assert len(registry[sheet]) == want, f"{sheet}: seed count {want}"
+
+
+def test_metric_ids_unique(entries):
+    ids = [e["metric_id"] for e in entries]
+    assert len(ids) == len(set(ids)) == 29
+
+
+def test_enums_valid(entries):
+    for e in entries:
+        assert e["status"] in {"active", "candidate", "deferred"}, e["metric_id"]
+        assert e["direction"] in {"higher_is_good", "higher_is_bad",
+                                  "context_dependent"}, e["metric_id"]
+        assert e["grain"] in {"daily", "hourly"}, e["metric_id"]
+
+
+def test_active_set_is_exactly_the_funnel(entries):
+    active = {e["metric_id"] for e in entries if e["status"] == "active"}
+    assert active == FUNNEL_METRIC_IDS
+
+
+def test_event_metric_ids_match_yaml(registry):
+    yaml_ids = {e["metric_id"] for e in registry["post_event_list"]}
+    code_ids = {mid for mid, _ in EVENT_METRICS.values()}
+    assert code_ids == yaml_ids
+
+
+def test_series_governance_matches_yaml(registry):
+    by_id = {e["metric_id"]: e for e in registry["post_event_list"]}
+    specs = {s.metric_id: s for s in SERIES}
+    for mid, e in by_id.items():
+        s = specs[mid]
+        assert (s.status, s.direction, s.owner) == \
+            (e["status"], e["direction"], e["owner"]), mid

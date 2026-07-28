@@ -101,6 +101,12 @@ id, no cross-device stitching possible** (consistent with GWAM / [ADR-0007](adr/
 visit_page_num)`; **constant −4/−5 h clock skew** (America/Toronto baked into `date_time`);
 **30 missing calendar days** (clustered — see §4 item 8).
 
+> [Historical record of the pre-ruling 2026-07-27 EDA run. The 3-host scope framing and the
+> 5-step drop-off funnel chart were superseded the same day by the SME rulings — go-forward
+> scope is the 2 prod domains only (insttrip baseline history, date-bounded in the pipeline)
+> and the funnel is non-monotonic at visit level. See metric-registry.yaml
+> `meta.sme_confirmations` and doc 18.]
+
 **Geo & language.** Country **CAN 84% / USA 12%** (USA largely datacenter — Ashburn/AWS visible in
 regions). Language ~50/50 by domain (coverme.com/insttrip = EN, pourmeproteger = FR).
 

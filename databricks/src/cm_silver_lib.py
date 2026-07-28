@@ -33,15 +33,26 @@ def like_any(colexpr: Column, patterns) -> Column:
     return F.coalesce(m, F.lit(False))
 
 
-def scope_expr(include, exclude, cols=URL_CANDIDATES) -> Column:
+def scope_expr(include, exclude, cols=URL_CANDIDATES, *,
+               baseline_include=None, baseline_end=None, date_col="hit_date") -> Column:
     """CoverMe URL-only scope: the coalesced URL matches any include pattern and none of
-    the exclude patterns (single-suite feed -- there is no rsid condition)."""
+    the exclude patterns (single-suite feed -- there is no rsid condition). The optional
+    baseline clause admits retired hosts only for rows dated <= baseline_end (SME ruling
+    2026-07-27: scope = 2 prod domains; insttrip retired 2024-03-11, history kept for
+    baseline context only), so a resurrected host cannot re-enter go-forward scope. The
+    exclude patterns still apply to baseline rows. date'...' literal stays ANSI-safe."""
     u = url_expr(cols)
-    return like_any(u, include) & ~like_any(u, exclude)
+    in_scope = like_any(u, include)
+    if baseline_include and baseline_end:
+        in_scope = in_scope | (like_any(u, baseline_include)
+                               & (F.col(date_col) <= F.expr(f"date'{baseline_end}'")))
+    return in_scope & ~like_any(u, exclude)
 
 
 def lang_from_host_expr(url: Column) -> Column:
-    """Domain-derived language (SME interim ruling 2026-07-27 -- eVar8 is likely
+    """TODO(SME-pending): language field of record (eVar8 vs eVar149 vs prop5, doc 18
+    Q4) -- rework this derivation and rebuild silver when Kerrian rules.
+    Domain-derived language (SME interim ruling 2026-07-27 -- eVar8 is likely
     mis-tagged and is NOT language of record). coverme.com/insttrip = en,
     pourmeproteger/manuvie = fr, anything else (incl. no URL) = unknown."""
     host = F.regexp_extract(F.regexp_replace(url, r"^[a-z]+://", ""), r"^([^/]+)", 1)

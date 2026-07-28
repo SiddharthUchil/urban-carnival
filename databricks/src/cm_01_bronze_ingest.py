@@ -3,7 +3,8 @@
 # MAGIC # GMAI-Pulse CoverMe — Task 1/3: Bronze ingest
 # MAGIC Scoped, pruned mirror of the CoverMe Adobe hit table. Scope is **URL-only** (the
 # MAGIC single-suite feed has no `rsid` column): the blank-guarded page_url-first coalesce
-# MAGIC must match a brand-domain include pattern and none of the UAT/AEM excludes. Hit
+# MAGIC must match a brand-domain include pattern and none of the UAT/AEM excludes; the
+# MAGIC retired insttrip host is admitted only for `hit_date <= 2024-03-11` (baseline). Hit
 # MAGIC eligibility (`exclude_hit` / `hit_source`) is deliberately NOT applied here — bronze
 # MAGIC keeps raw scoped rows so the excluded volume stays observable; silver filters.
 # MAGIC Idempotent `replaceWhere` partition overwrite with `OVERLAP_DAYS` (=5, late-arrival
@@ -19,6 +20,7 @@ from pyspark.sql import functions as F
 from conf.coverme_settings import (
     resolve, SOURCE_TABLE, PARTITION_COL,
     URL_SCOPE_INCLUDE, URL_SCOPE_EXCLUDE,
+    URL_SCOPE_BASELINE_INCLUDE, BASELINE_INCLUDE_END,
     BRONZE_SCHEMA, SILVER_SCHEMA, GOLD_SCHEMA, OVERLAP_DAYS,
 )
 from conf.coverme_bronze_columns import bronze_select, REQUIRED_SOURCE_COLUMNS
@@ -59,7 +61,10 @@ else:
     pred = F.col(PARTITION_COL) >= F.lit(start)   # string 'YYYY-MM-DD' compares lexically
 
 scoped = (src.where(pred)
-             .where(cml.scope_expr(URL_SCOPE_INCLUDE, URL_SCOPE_EXCLUDE))
+             .where(cml.scope_expr(URL_SCOPE_INCLUDE, URL_SCOPE_EXCLUDE,
+                                   baseline_include=URL_SCOPE_BASELINE_INCLUDE,
+                                   baseline_end=BASELINE_INCLUDE_END,
+                                   date_col=PARTITION_COL))
              .select(*cols))
 
 # COMMAND ----------

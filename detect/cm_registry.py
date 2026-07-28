@@ -50,6 +50,8 @@ NEEDED_COLS = ["hit_date", "post_event_list", "language", "post_evar4",
 # v0.3.0): the 5 quote/app funnel events + 7 Instance-of-eVar counters.
 FUNNEL_EVENT_IDS = ["228", "229", "232", "269", "240"]   # logical funnel order
 EVENT_IDS = ["103", "104", "105", "110", "115", "151", "10047"] + FUNNEL_EVENT_IDS
+# TODO(SME-pending): events 510-514 (~43.5% of hits each; doc 18 Q10) are unidentified
+# and stay excluded from EVENT_IDS until Kerrian names them.
 
 # metric_id + display name per event, verbatim from metric-registry.yaml v0.3.0.
 EVENT_METRICS = {
@@ -69,6 +71,25 @@ EVENT_METRICS = {
 }
 EVENT_NAMES = {eid: name for eid, (_, name) in EVENT_METRICS.items()}
 
+# Governance per event, verbatim from metric-registry.yaml v0.3.0 (status, direction,
+# owner). The 5 funnel events are `active` with Kerrian as owner (her stated priority);
+# the 7 instance counters stay `candidate`. direction is detector polarity -- e.g. rising
+# Bot Detector instances are a data-quality anomaly (higher_is_bad).
+EVENT_GOVERNANCE = {
+    "103": ("candidate", "context_dependent", "TBD"),
+    "104": ("candidate", "context_dependent", "TBD"),
+    "105": ("candidate", "context_dependent", "TBD"),
+    "110": ("candidate", "higher_is_good", "TBD"),
+    "115": ("candidate", "higher_is_good", "TBD"),
+    "151": ("candidate", "context_dependent", "TBD"),
+    "10047": ("candidate", "higher_is_bad", "TBD"),
+    "228": ("active", "higher_is_good", "Kerrian (Business SME)"),
+    "229": ("active", "higher_is_good", "Kerrian (Business SME)"),
+    "232": ("active", "higher_is_good", "Kerrian (Business SME)"),
+    "240": ("active", "higher_is_good", "Kerrian (Business SME)"),
+    "269": ("active", "higher_is_good", "Kerrian (Business SME)"),
+}
+
 # SME-priority breakdown dim: funnel events x Product Category (post_evar4). Fixed top-5
 # values from the verified EDA census (hd 44.9%, travel 37.1%, life 6.6%, home 4.9%,
 # affinity-travel booking 2.5%); everything else -- including blank -- lands in the
@@ -78,6 +99,8 @@ TOP_PRODUCT_CATEGORIES = [
 ]
 
 TOP_LANGUAGES = ["en", "fr", "unknown"]   # silver-derived domain language, ~50/50 EN/FR
+# TODO(SME-pending): language field of record (eVar8 vs eVar149 vs prop5, doc 18 Q4);
+# interim rule = domain-derived. Rebuild silver + these shares when Kerrian rules.
 
 
 @dataclass(frozen=True)
@@ -96,6 +119,12 @@ class CmSeriesSpec:
     dim_value: str | None = None
     numerator: str | None = None
     denominator: str | None = None
+    # Governance (metric-registry.yaml v0.3.0): status in {active, candidate, deferred},
+    # direction in {higher_is_good, higher_is_bad, context_dependent}. Event series copy
+    # the yaml verbatim; derived series follow the conventions noted in _build_series.
+    status: str = "candidate"
+    direction: str = "context_dependent"
+    owner: str = "TBD"
 
     @property
     def log_transform(self) -> bool:
@@ -105,14 +134,20 @@ class CmSeriesSpec:
 
 
 def _build_series() -> list[CmSeriesSpec]:
+    # Totals have no metric-registry.yaml entry (the data_feed_columns sheet tracks
+    # column population rates, not volume totals) -- governance defaults apply.
     series: list[CmSeriesSpec] = [
         CmSeriesSpec("hits_total", "count", "hits"),
         CmSeriesSpec("visits_total", "count", "visits"),
         CmSeriesSpec("visitors_total", "count", "visitors"),
     ]
     for eid in EVENT_IDS:
-        series.append(CmSeriesSpec(EVENT_METRICS[eid][0], "count", "event", event_id=eid))
-    # Funnel ratios -- names mirror the EDA S6b conversion keys.
+        st, dr, ow = EVENT_GOVERNANCE[eid]
+        series.append(CmSeriesSpec(EVENT_METRICS[eid][0], "count", "event", event_id=eid,
+                                   status=st, direction=dr, owner=ow))
+    # Funnel ratios -- names mirror the EDA S6b conversion keys. Governance: ratios of
+    # two active funnel events inherit active/Kerrian (proposed convention -- the yaml
+    # registers only the raw events, not the derived ratios; flagged for SME review).
     for name, num, den in [
         ("funnel_quote_complete_over_quote_start", "229", "228"),
         ("funnel_save_quote_over_quote_start", "232", "228"),
@@ -122,18 +157,25 @@ def _build_series() -> list[CmSeriesSpec]:
     ]:
         series.append(CmSeriesSpec(name, "ratio", "event",
                                    numerator=EVENT_METRICS[num][0],
-                                   denominator=EVENT_METRICS[den][0]))
+                                   denominator=EVENT_METRICS[den][0],
+                                   status="active", direction="higher_is_good",
+                                   owner="Kerrian (Business SME)"))
     for value in TOP_LANGUAGES:
         series.append(CmSeriesSpec(f"language_share_{slug(value)}", "share", "language",
                                    dim="language", dim_value=value))
     # Funnel x Product Category cube (visit-distinct, like the flat event counts).
+    # Governance inherited from the parent funnel event -- the cube operationalizes
+    # Kerrian's "pair funnel events with eVar breakdowns" priority.
     for eid in FUNNEL_EVENT_IDS:
         base = EVENT_METRICS[eid][0]
+        st, dr, ow = EVENT_GOVERNANCE[eid]
         for value in TOP_PRODUCT_CATEGORIES:
             series.append(CmSeriesSpec(f"{base}__evar4_{slug(value)}", "count", "event_dim",
-                                       event_id=eid, dim="post_evar4", dim_value=value))
+                                       event_id=eid, dim="post_evar4", dim_value=value,
+                                       status=st, direction=dr, owner=ow))
         series.append(CmSeriesSpec(f"{base}__evar4_other", "count", "event_dim",
-                                   event_id=eid, dim="post_evar4", dim_value=None))
+                                   event_id=eid, dim="post_evar4", dim_value=None,
+                                   status=st, direction=dr, owner=ow))
     return series
 
 

@@ -2,6 +2,7 @@ numpy==2.1.3
 pandas==2.2.3
 pyarrow==18.1.0
 pytest==8.3.4
+pyyaml==6.0.2   # tests/test_registry_yaml.py -- metric-registry.yaml contract
 
 # Phase 1 anomaly detection (detect/)
 scipy==1.14.1

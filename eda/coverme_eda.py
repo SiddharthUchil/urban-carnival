@@ -15,20 +15,25 @@
 # MAGIC
 # MAGIC **Scope is URL-only (single-suite).** This table is a single Adobe report suite — Adobe
 # MAGIC pins the suite in feed config, so there is NO `rsid` column on the row. CoverMe is scoped
-# MAGIC by URL alone. Default `url_scope_mode=broad` uses the `url_scope_list` widget verbatim,
-# MAGIC seeded to the three production hosts that carry ~99.9% of real CoverMe traffic:
-# MAGIC `%coverme.com%` (EN), `%pourmeproteger.com%` (FR), `%insttrip.manulife.com%` (EN travel,
-# MAGIC dead after 2024-03-11). `url_scope_exclude` drops UAT / AEM-authoring / staging noise.
+# MAGIC by URL alone. Per the SME ruling 2026-07-27 the only valid production domains are
+# MAGIC `%coverme.com%` (EN) and `%pourmeproteger.com%` (FR) — everything else is legacy or dev.
+# MAGIC Default `url_scope_mode=broad` uses the `url_scope_list` widget verbatim (seeded to the
+# MAGIC two prod domains); `pipeline_parity` pins the conf/coverme_settings.py include list. The
+# MAGIC retired `%insttrip.manulife.com%` host (dead after 2024-03-11) joins the scope only when
+# MAGIC `include_retired_baseline` is true. `url_scope_exclude` drops UAT / AEM / staging noise.
 # MAGIC
 # MAGIC **URL coalesce is INVERTED vs GWAM — `page_url` FIRST.** On this table `page_url` is
 # MAGIC 0.0005% blank while `post_page_url` is 58.9% blank (the exact opposite of GWAM). The D4
 # MAGIC blank-guarded coalesce order is `page_url, visit_start_page_url, first_hit_page_url,
 # MAGIC post_page_url`. Adobe writes empty strings, not NULLs, so blanks map to NULL first.
 # MAGIC
-# MAGIC **Language is split by DOMAIN, not path** (~50/50): coverme.com/insttrip = EN,
-# MAGIC pourmeproteger = FR. The funnel of interest is the quote→application conversion path
-# MAGIC (Quote Start → Quote Complete → Save Quote → App Start → App Confirm), profiled by name
-# MAGIC in **S6b**.
+# MAGIC **Language is split by DOMAIN, not path** (~50/50): coverme.com = EN, pourmeproteger = FR
+# MAGIC (SME interim ruling 2026-07-27 — eVar8/eVar149/prop5 are NOT language of record until the
+# MAGIC SME names the field). The funnel of interest is the quote→application conversion path
+# MAGIC (Quote Start → Quote Complete → Save Quote → App Start → App Confirm), profiled in **S6b**
+# MAGIC — **visit-level and NON-monotonic** (saved-quote resume; Save Quote is optional), so step
+# MAGIC ratios are population proxies that may exceed 1.0, never within-visit sequences. Hit
+# MAGIC eligibility drops `exclude_hit > 0` bots when the `exclude_bots` widget is true (default).
 # MAGIC
 # MAGIC **Data visibility (ADR-0007 §5, full-raw).** EVERY column profiles raw and in full —
 # MAGIC eVars, props, events, URLs, pagenames, campaigns, referrers, AND the direct/quasi-identifier
@@ -69,8 +74,8 @@ dbutils.widgets.text("hourly_days", "35", "6. Days for hourly profile")
 dbutils.widgets.text("max_csv_lines", "450", "7. Max CSV lines per shareable block")
 dbutils.widgets.text("top_events_k", "12", "8. Top-K events for daily series")
 dbutils.widgets.text("cache_sample", "false", "9. Persist sample df (true/false)")
-dbutils.widgets.dropdown("url_scope_mode", "broad", ["broad", "tight"], "10. URL scope mode (tight = coverme.com only)")
-dbutils.widgets.text("url_scope_list", "%coverme.com%,%pourmeproteger.com%,%insttrip.manulife.com%",
+dbutils.widgets.dropdown("url_scope_mode", "broad", ["broad", "pipeline_parity"], "10. URL scope mode (pipeline_parity = conf/coverme_settings scope)")
+dbutils.widgets.text("url_scope_list", "%coverme.com%,%pourmeproteger.com%",
                      "11. URL include patterns — ADD URLS HERE (SQL LIKE, comma-sep)")
 dbutils.widgets.text("url_scope_exclude",
                      "%adobeaemcloud.com%,%author-aem-prod.manulife.ca%,%uat.coverme.com%,"
@@ -78,6 +83,10 @@ dbutils.widgets.text("url_scope_exclude",
                      "12. URL patterns to exclude (UAT/AEM/staging noise)")
 dbutils.widgets.text("max_profiled_cols", "1200", "13. Max columns emitted with full stats")
 dbutils.widgets.dropdown("strip_url_query", "false", ["false", "true"], "14. Strip URL query strings before profiling")
+dbutils.widgets.dropdown("include_retired_baseline", "false", ["false", "true"],
+                         "15. Include insttrip.manulife.com (retired 2024-03-11; baseline only)")
+dbutils.widgets.dropdown("exclude_bots", "true", ["true", "false"],
+                         "16. Drop exclude_hit>0 (SME eligibility rule 2026-07-27)")
 
 TABLE_FQN       = dbutils.widgets.get("table_fqn").strip()
 WINDOW_MONTHS   = int(dbutils.widgets.get("window_months"))
@@ -96,18 +105,24 @@ def _csv(widget):
 
 URL_SCOPE_MODE = dbutils.widgets.get("url_scope_mode").strip().lower()
 URL_EXCLUDE    = _csv("url_scope_exclude")
+INCLUDE_RETIRED_BASELINE = dbutils.widgets.get("include_retired_baseline").strip().lower() == "true"
+EXCLUDE_BOTS   = dbutils.widgets.get("exclude_bots").strip().lower() == "true"
 
-# Scope modes. The `url_scope_list` widget is AUTHORITATIVE in `broad`: whatever patterns are
-# visible there are the patterns that run, so adding a URL means editing that widget and nothing
-# else. `tight` is the single override — coverme.com only (English-dominant signal isolation).
-# The default broad list is the "medium" tier from the URL-scope inventory: the three production
-# hosts that carry ~99.9% of real CoverMe traffic. insttrip.manulife.com went dead 2024-03-11 —
-# kept for historical completeness; drop it here for a cleaner live series at detector time.
-URL_SCOPE_TIGHT = ["%coverme.com%"]
-URL_INCLUDE = URL_SCOPE_TIGHT if URL_SCOPE_MODE == "tight" else _csv("url_scope_list")
+# Scope modes (SME ruling 2026-07-27: coverme.com + pourmeproteger.com are the ONLY valid
+# production domains — the scope-tier debate is closed). The `url_scope_list` widget is
+# AUTHORITATIVE in `broad`: whatever patterns are visible there are the patterns that run.
+# `pipeline_parity` pins the exact go-forward include list from conf/coverme_settings.py so a
+# run compares like-for-like against production. The retired insttrip.manulife.com host (dead
+# 2024-03-11) is appended in either mode only when `include_retired_baseline` is true — the
+# pipeline additionally date-bounds it to hit_date <= 2024-03-11; this notebook's toggle is
+# pattern-level only (exploratory tool).
+URL_SCOPE_PARITY = ["%coverme.com%", "%pourmeproteger.com%"]
+URL_INCLUDE = list(URL_SCOPE_PARITY) if URL_SCOPE_MODE == "pipeline_parity" else _csv("url_scope_list")
+if INCLUDE_RETIRED_BASELINE:
+    URL_INCLUDE = URL_INCLUDE + ["%insttrip.manulife.com%"]
 
-# CoverMe product-surface regex (parity with the probe notebooks' S4c). Used only for the S4b/S4c
-# scope-coverage audit, never as a hard filter.
+# CoverMe product-surface regex (parity with the probe notebooks' S4c). Used only by the S4b/S4c
+# legacy/dev host census — hosts ruled OUT of scope (SME 2026-07-27) — never as a hard filter.
 CM_STRICT = (r"health-insurance|assurance-sante|travel-insurance|assurance-voyage"
              r"|life-insurance|assurance-vie|my-next-chapter|vitality|/covme/health-insurance")
 CM_BROAD  = r"insurance|assurance|coverme|covme|manulife|manuvie|pourmeproteger"
@@ -178,6 +193,7 @@ def dim_label(col):
 
 # post_event_list labels — Enabled non-"Instance of eVar" events from the data map. The
 # Instance-of-eVar events (ids 100-199, 10000-10099) are resolved by the decode_event() formula.
+# Ids 510-514 are deliberately absent: unidentified, pending SME naming (PENDING_EVENT_IDS).
 EVENT_LABELS = {
     "203": "Exits", "204": "Downloads", "207": "Scroll Event", "211": "Custom Event 12",
     "217": "Custom Event 18", "218": "Internal Search Results",
@@ -206,8 +222,9 @@ ADOBE_STD_EVENTS = {
 }
 
 # The quote -> application conversion funnel (business-flagged for Anomaly Detection), in
-# LOGICAL step order. Profiled by name in S6b; a low daily count here is a KPI worth watching,
-# not a reason to drop it.
+# LOGICAL step order — presentational only: the funnel is NON-monotonic across visits
+# (saved-quote resume) and Save Quote is optional (SME 2026-07-27). Profiled by name in S6b;
+# a low daily count here is a KPI worth watching, not a reason to drop it.
 FUNNEL_EVENTS = [
     ("228", "Quote Start"), ("229", "Quote Complete"), ("232", "Save Quote"),
     ("269", "App Start"), ("240", "App Confirm"),
@@ -218,6 +235,11 @@ FUNNEL_EVENTS = [
 # each one even when it falls outside the top-K frequency cut.
 AD_FLAGGED_EVENT_IDS = ["103", "104", "105", "110", "115", "151", "10047",
                         "228", "229", "232", "240", "269"]
+
+# Unidentified high-frequency events pending SME naming (doc 18 Q10; registry
+# meta.sme_confirmations.pending_with_sme): 510-513 fire on ~43.5% of hits each, 514 on
+# ~5.3%. decode_event() marks them PENDING so they can never pass as vetted KPIs.
+PENDING_EVENT_IDS = ["510", "511", "512", "513", "514"]
 
 # ------------------------------------------------------------ emit helpers ----
 RESULTS = {}   # section_id -> payload (drives S12 consolidation)
@@ -371,9 +393,21 @@ def url_expr(df):
              for c in URL_COLS]
     return F.lower(F.coalesce(*parts, F.lit("")))
 
+def lang_from_host(host):
+    """Domain-derived language (SME interim ruling 2026-07-27 — eVar8/eVar149/prop5 are NOT
+    language of record until the SME names the field). Mirrors
+    databricks/src/cm_silver_lib.lang_from_host_expr verbatim: the legacy manuvie hosts only
+    appear when scope widens beyond the ruled 2-domain include, and insttrip maps 'en' for
+    the retired-baseline toggle."""
+    return (F.when(host.rlike(r"pourmeproteger|manuvie|assurance-manuvie"), "fr")
+             .when(host.rlike(r"coverme\.com|insttrip\.manulife\.com"), "en")
+             .otherwise("unknown"))
+
 def scope_condition(df):
-    """CoverMe subset selector — URL-only. Returns (Column|None, meta). The coalesced URL matches
-    any URL_INCLUDE pattern AND matches none of URL_EXCLUDE. Empty include -> no URL filter."""
+    """CoverMe subset selector — URL scope + hit eligibility. Returns (Column|None, meta).
+    The coalesced URL matches any URL_INCLUDE pattern AND matches none of URL_EXCLUDE; when
+    EXCLUDE_BOTS (default) rows with exclude_hit > 0 are dropped (authoritative bot rule, SME
+    2026-07-27 — mirrors cm_silver_lib.eligible_expr). Empty include -> no URL filter."""
     if URL_COLS is None:
         _resolve_scope_cols(df)
     conds, active, missing = [], [], []
@@ -390,12 +424,20 @@ def scope_condition(df):
         if exc is not None:
             conds.append(~exc)
             active.append(f"url NOT LIKE any {URL_EXCLUDE}")
+    if EXCLUDE_BOTS:
+        if pick_col(df, "exclude_hit"):
+            conds.append(F.expr("coalesce(try_cast(exclude_hit as int), 0) = 0"))
+            active.append("eligibility: coalesce(try_cast(exclude_hit as int), 0) = 0")
+        else:
+            missing.append("exclude_hit (bot-eligibility column absent)")
     cond = None
     for c in conds:
         cond = c if cond is None else (cond & c)
     meta = {"single_suite": True, "rsid_col": None, "url_col": URL_COL,
             "url_cols_coalesced": URL_COLS, "url_scope_mode": URL_SCOPE_MODE,
             "url_include": URL_INCLUDE or None, "url_exclude": URL_EXCLUDE or None,
+            "exclude_bots": EXCLUDE_BOTS,
+            "include_retired_baseline": INCLUDE_RETIRED_BASELINE,
             "partition_col": PARTITION_COL,
             "active_conditions": active, "missing_conditions": missing,
             "scoped": cond is not None}
@@ -687,9 +729,16 @@ def s4_frames():
     _inc = like_any(_u, URL_INCLUDE) if _u is not None else None
     url_cond = _inc if _inc is not None else F.lit(True)
     url_blank_cond = F.lit(False) if _u is None else (_u == F.lit(""))
+    # URL-scope-only vs scope+eligibility visibility: how many in-scope rows the bot rule drops.
+    _exc = like_any(_u, URL_EXCLUDE) if _u is not None else None
+    url_scope_cond = url_cond & (~_exc if _exc is not None else F.lit(True))
+    not_eligible = (F.expr("coalesce(try_cast(exclude_hit as int), 0) != 0")
+                    if EXCLUDE_BOTS and pick_col(DF, "exclude_hit") else F.lit(False))
     diag = raw_window.agg(
         F.count("*").alias("total"),
         F.sum(F.when(url_cond, 1).otherwise(0)).alias("url_match"),
+        F.sum(F.when(url_scope_cond, 1).otherwise(0)).alias("url_scope_only"),
+        F.sum(F.when(url_scope_cond & not_eligible, 1).otherwise(0)).alias("bot_excluded_in_scope"),
         F.sum(F.when(url_blank_cond, 1).otherwise(0)).alias("url_blank"),
     ).collect()[0]
 
@@ -715,6 +764,10 @@ def s4_frames():
         "filter": {
             **scope_meta,
             "window_total_rows": diag["total"], "url_match": diag["url_match"],
+            "url_scope_only_rows": diag["url_scope_only"],
+            "bot_excluded_in_scope_rows": diag["bot_excluded_in_scope"],
+            "bot_excluded_in_scope_pct": round(
+                100.0 * (diag["bot_excluded_in_scope"] or 0) / max(diag["url_scope_only"] or 0, 1), 3),
             "host_breakdown": host_breakdown,
             "url_blank_rows": diag["url_blank"],
             "url_blank_pct": round(100.0 * (diag["url_blank"] or 0) / max(diag["total"], 1), 3),
@@ -727,10 +780,11 @@ run_section("S4", s4_frames)
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## S4b — URL scope audit (column choice + coverage)
+# MAGIC ## S4b — URL scope audit (column choice + legacy/dev census)
 # MAGIC Ports `coverme_url_scope_inventory` S4a/S5/S7 onto the profiling window: per-URL-column
-# MAGIC blank % (confirms `page_url` first), the recommended coalesce, top hosts, and — the number
-# MAGIC that matters — CoverMe-looking traffic (`CM_STRICT`) that falls OUTSIDE the current scope.
+# MAGIC blank % (confirms `page_url` first), the recommended coalesce, top hosts, and a
+# MAGIC **legacy/dev host census** — CoverMe-looking traffic (`CM_STRICT`) outside the ruled
+# MAGIC 2-domain scope. Out of scope **by definition** (SME 2026-07-27): a census, not a defect.
 
 # COMMAND ----------
 
@@ -786,7 +840,9 @@ def s4b_url_scope_audit():
     emit("url_scope_audit", {
         "note": ("window population; breakdown on coalesce(page_url, visit_start_page_url, "
                  "first_hit_page_url, post_page_url); host/path only (no raw query). uncovered = "
-                 "CM_STRICT and not noise and not in current scope."),
+                 "CM_STRICT and not noise and not in current scope — a LEGACY/DEV CENSUS: these "
+                 "hosts were ruled out of scope (SME 2026-07-27); do NOT widen url_scope_list "
+                 "without a new SME ruling."),
         "window_rows": total,
         "per_url_column": per_col,
         "recommended_coalesce_order": recommended,
@@ -809,9 +865,10 @@ run_section("S4b", s4b_url_scope_audit)
 
 # MAGIC %md
 # MAGIC ## S4c — URL-column & pagename category audit
-# MAGIC Per-candidate-column CoverMe-category match (`CM_STRICT` / `CM_BROAD`), plus a `pagename`
-# MAGIC sweep and a language-by-domain split. Sizes how much CoverMe traffic each column would add
-# MAGIC BEYOND the recommended coalesce.
+# MAGIC Per-candidate-column CoverMe-category match (`CM_STRICT` / `CM_BROAD`) — a **legacy/dev
+# MAGIC census** (those hosts are ruled OUT of scope, SME 2026-07-27) — plus a `pagename` sweep,
+# MAGIC the language-by-domain split (SME interim ruling), and the eVar8-vs-domain disagreement
+# MAGIC rate (evidence for the pending language ruling, doc 18 Q4).
 
 # COMMAND ----------
 
@@ -860,24 +917,43 @@ def s4c_url_column_audit():
                     "approx_distinct": pr["dist"], "cm_broad_rows": pr["cb"],
                     "top_pagenames": top_pn}
 
-    # language by domain (CoverMe splits language by host, not path)
+    # language by domain (SME interim ruling 2026-07-27; helper mirrors cm_silver_lib)
     host = F.regexp_extract(hp(coal), r"^([^/]+)", 1)
-    lang = (F.when(host.rlike(r"pourmeproteger|manuvie|assurance-manuvie"), "fr")
-             .when(host.rlike(r"coverme\.com|insttrip\.manulife\.com"), "en")
-             .otherwise("unknown"))
+    lang = lang_from_host(host)
     lang_rows = [{"lang": x["lang"], "hits": x["n"]}
                  for x in (raw_window.select(lang.alias("lang")).groupBy("lang")
                            .agg(F.count("*").alias("n")).orderBy(F.desc("n")).collect())]
 
+    # eVar8-vs-domain disagreement (evidence for the pending language ruling, doc 18 Q4:
+    # eVar8 reports ~96% EN while the domain split is ~50/50 — likely mis-tagged).
+    evar8_col = pick_col(raw_window, "post_evar8", "evar8")
+    evar8_vs_domain = None
+    if evar8_col:
+        e8 = F.lower(F.trim(qcol(evar8_col).cast("string")))
+        e8_lang = F.when(e8.rlike(r"^fr"), "fr").when(e8.rlike(r"^en"), "en")
+        cmp_row = (raw_window
+                   .select(lang.alias("dom"), e8_lang.alias("e8"))
+                   .filter(F.col("e8").isNotNull() & (F.col("dom") != "unknown"))
+                   .agg(F.count("*").alias("n"),
+                        F.sum(F.when(F.col("dom") != F.col("e8"), 1).otherwise(0)).alias("dis"))
+                   .collect()[0])
+        evar8_vs_domain = {
+            "comparable_rows": cmp_row["n"], "disagree_rows": cmp_row["dis"],
+            "disagree_pct": round(100.0 * (cmp_row["dis"] or 0) / max(cmp_row["n"], 1), 3),
+            "note": ("rows where eVar8-derived en/fr differs from domain-derived language — "
+                     "NEITHER is language of record until the SME rules (doc 18 Q4)")}
+
     emit("url_column_audit", {
-        "note": ("window population; per-column CM_STRICT/CM_BROAD; language split by DOMAIN "
-                 "(coverme.com/insttrip=en, pourmeproteger/manuvie=fr)."),
+        "note": ("window population; per-column CM_STRICT/CM_BROAD is a legacy/dev census "
+                 "(hosts ruled out of scope, SME 2026-07-27); language split by DOMAIN per "
+                 "the SME interim ruling (coverme.com/insttrip=en, pourmeproteger=fr)."),
         "window_rows": total,
         "columns_present": present,
         "recommended_scope_col": "coalesce(" + ", ".join(present) + ")",
         "per_url_column": per_col,
         "pagename": pagename,
         "language_by_domain": lang_rows,
+        "evar8_vs_domain": evar8_vs_domain,
     })
     display(spark.createDataFrame([{"url_column": c, **per_col[c]} for c in present]))
 
@@ -950,6 +1026,8 @@ def decode_event(eid):
         return EVENT_LABELS[e]
     if e in ADOBE_STD_EVENTS:
         return ADOBE_STD_EVENTS[e]
+    if e in PENDING_EVENT_IDS:
+        return "PENDING SME (doc 18 Q10) — unidentified high-frequency event"
     try:
         n = int(e)
     except (TypeError, ValueError):
@@ -1025,8 +1103,11 @@ run_section("S6", s6_event_decode)
 # MAGIC Exact, full-scoped-history daily counts for the business-flagged conversion funnel
 # MAGIC (Quote Start → Quote Complete → Save Quote → App Start → App Confirm). These fire below the
 # MAGIC discovery-probe's top-60 sample cutoff, so this section confirms — on real data — that each
-# MAGIC event is present and usable as an anomaly KPI, with per-event totals, active-day counts,
-# MAGIC first/last-seen, step conversion rates, and a daily series for the timeline.
+# MAGIC event is present and usable as an anomaly KPI, with per-event totals (hit-presence AND
+# MAGIC visit-distinct, the SME-ruled gold basis), active-day counts, first/last-seen, population
+# MAGIC ratios, a language cut, and a daily series for the timeline. **The funnel is NON-monotonic
+# MAGIC across visits** (saved-quote resume; Save Quote is optional — SME 2026-07-27): ratios are
+# MAGIC population proxies that may exceed 1.0, never within-visit sequences.
 
 # COMMAND ----------
 
@@ -1062,6 +1143,34 @@ def s6b_funnel_kpi():
         pe["first"] = d if pe["first"] is None or d < pe["first"] else pe["first"]
         pe["last"] = d if pe["last"] is None or d > pe["last"] else pe["last"]
 
+    # Visit-distinct funnel counts — the SME-ruled gold basis (visits, 2026-07-27). Plain
+    # concat_ws visit key here (gold uses null-safe keys; sub-0.1% delta expected) — good
+    # enough for EDA-vs-gold reconciliation.
+    vis_hi6 = pick_col(DF_CM, "post_visid_high", "visid_high")
+    vis_lo6 = pick_col(DF_CM, "post_visid_low", "visid_low")
+    vnum6 = pick_col(DF_CM, "visit_num")
+    vstart6 = pick_col(DF_CM, "visit_start_time_gmt")
+    visit_totals = {}
+    if vis_hi6 and vis_lo6 and vnum6:
+        vkey = F.concat_ws(":", *[qcol(c) for c in (vis_hi6, vis_lo6, vnum6, vstart6) if c])
+        visit_totals = {r["eid"]: r["n"] for r in
+                        (DF_CM.filter(nonblank(ev_col))
+                              .select(vkey.alias("vk"), F.explode(ids).alias("eid"))
+                              .filter(F.col("eid").isin(funnel_ids))
+                              .groupBy("eid").agg(F.countDistinct("vk").alias("n"))
+                              .collect())}
+
+    # Funnel by domain-derived language (SME interim ruling) — hit-presence counts.
+    u6 = url_expr(DF_CM)
+    lang_cut = {}
+    if u6 is not None:
+        host6 = F.regexp_extract(F.regexp_replace(u6, r"^[a-z]+://", ""), r"^([^/?#]+)", 1)
+        for r in (DF_CM.filter(nonblank(ev_col))
+                       .select(lang_from_host(host6).alias("lang"), F.explode(ids).alias("eid"))
+                       .filter(F.col("eid").isin(funnel_ids))
+                       .groupBy("lang", "eid").count().collect()):
+            lang_cut.setdefault(r["lang"], {})[r["eid"]] = r["count"]
+
     scoped_hits = DF_CM.count()
     events = []
     for eid, name in FUNNEL_EVENTS:
@@ -1069,6 +1178,7 @@ def s6b_funnel_kpi():
         events.append({
             "event_id": eid, "name": name,
             "total_hits_with_event": pe["hits"],
+            "visits_with_event": visit_totals.get(eid),
             "pct_of_scoped_hits": round(100.0 * pe["hits"] / max(scoped_hits, 1), 4),
             "active_days": len(pe["days"]),
             "first_seen": str(pe["first"]) if pe["first"] else None,
@@ -1079,13 +1189,27 @@ def s6b_funnel_kpi():
     def _tot(eid):
         return per_event[eid]["hits"]
     qs = max(_tot("228"), 1)
-    conversion = {
+    # Population ratios (NOT within-visit conversion): the funnel is non-monotonic across
+    # visits (saved-quote resume), so any of these may legitimately exceed 1.0.
+    population_ratios = {
         "quote_complete_over_quote_start": round(_tot("229") / qs, 4),
         "save_quote_over_quote_start": round(_tot("232") / qs, 4),
         "app_start_over_quote_start": round(_tot("269") / qs, 4),
         "app_confirm_over_app_start": round(_tot("240") / max(_tot("269"), 1), 4),
         "app_confirm_over_quote_start": round(_tot("240") / qs, 4),
     }
+    visit_ratios = None
+    if visit_totals:
+        def _vtot(eid):
+            return visit_totals.get(eid, 0)
+        vqs = max(_vtot("228"), 1)
+        visit_ratios = {
+            "quote_complete_over_quote_start": round(_vtot("229") / vqs, 4),
+            "save_quote_over_quote_start": round(_vtot("232") / vqs, 4),
+            "app_start_over_quote_start": round(_vtot("269") / vqs, 4),
+            "app_confirm_over_app_start": round(_vtot("240") / max(_vtot("269"), 1), 4),
+            "app_confirm_over_quote_start": round(_vtot("240") / vqs, 4),
+        }
     missing = [e["name"] for e in events if not e["fires"]]
 
     # daily series (last MAX_CSV_LINES days) for the timeline
@@ -1096,13 +1220,20 @@ def s6b_funnel_kpi():
     emit("funnel_kpi", {
         "basis": "exact_full_scoped_history",
         "funnel_order": [name for _, name in FUNNEL_EVENTS],
+        "funnel_order_note": ("presentational order only — the funnel is non-monotonic across "
+                              "visits (saved-quote resume, SME 2026-07-27)"),
         "scoped_hits": scoped_hits,
         "events": events,
-        "conversion_rates_hit_presence": conversion,
+        "population_ratios_hit_presence": population_ratios,
+        "population_ratios_visit_distinct": visit_ratios,
+        "funnel_by_language_hit_presence": lang_cut or None,
         "events_not_firing": missing,
-        "note": ("hit-presence counts (a hit carrying the event), not unique visitors — a proxy "
-                 "for funnel volume. Any name in events_not_firing needs a business conversation "
-                 "before it can be an anomaly KPI."),
+        "note": ("hit-presence counts (a hit carrying the event) plus visit-distinct counts — "
+                 "the SME-ruled gold basis (visits, 2026-07-27). Ratios are population-level "
+                 "proxies and may exceed 1.0: the funnel is non-monotonic across visits "
+                 "(saved-quote resume); never within-visit sequences. Save Quote is OPTIONAL, "
+                 "so its absence from events_not_firing is informational; any other missing "
+                 "stage needs a business conversation before it can be an anomaly KPI."),
         "csv_header": "date," + ",".join(f"{label_by_id[e]}({e})" for e in funnel_ids),
         "csv": csv,
     })
@@ -1139,8 +1270,16 @@ def s7_live_custom_dims():
         top = (DF_S.filter(nonblank(c)).groupBy(qcol(c).alias("v")).count()
                    .orderBy(F.desc("count")).limit(TOP_N).collect())
         pop_rows = max(SAMPLE_ROWS * CENSUS[c]["pop_pct"] / 100.0, 1)
+        # The three candidate language fields are all pending the SME's field-of-record
+        # ruling (doc 18 Q4) — flag them so their values can't be read as authoritative.
+        caveat = None
+        _m = _VAR_RE.match(str(c).lower())
+        if _m and ((_m.group(1) == "evar" and int(_m.group(2)) in (8, 149))
+                   or (_m.group(1) == "prop" and int(_m.group(2)) == 5)):
+            caveat = ("NOT language of record (pending SME ruling, doc 18 Q4) — interim "
+                      "language is domain-derived (S4c/S8)")
         out.append({
-            "col": c, "label": dim_label(c),
+            "col": c, "label": dim_label(c), "caveat": caveat,
             "pop_pct": CENSUS[c]["pop_pct"], "apx_distinct": CENSUS[c]["apx_distinct"],
             "len": {"p50": stats["len_p50"], "avg": stats["len_avg"], "max": stats["len_max"]},
             "looks_like_url": (stats["url_frac"] or 0) > 0.5,
@@ -1178,9 +1317,17 @@ def s8_time_series():
     if excl:
         aggs.append(F.sum(F.when(F.coalesce(F.expr(f"try_cast(`{excl}` as int)"), F.lit(0)) == 0, 1)
                           .otherwise(0)).alias("clean_hits"))
+    # Daily language split (SME interim ruling: domain-derived; registry ids
+    # language_share_{en,fr,unknown} = lang_*/hits).
+    u8 = url_expr(DF_W)
+    if u8 is not None:
+        lang8 = lang_from_host(
+            F.regexp_extract(F.regexp_replace(u8, r"^[a-z]+://", ""), r"^([^/?#]+)", 1))
+        for lv in ("en", "fr", "unknown"):
+            aggs.append(F.sum(F.when(lang8 == lv, 1).otherwise(0)).alias(f"lang_{lv}"))
 
     daily = (DF_W.groupBy(day_expr(DF_W).alias("d")).agg(*aggs).orderBy("d").collect())
-    cols = ["hits", "visits", "visitors", "clean_hits"]
+    cols = ["hits", "visits", "visitors", "clean_hits", "lang_en", "lang_fr", "lang_unknown"]
     series = {c: [] for c in cols}
     dates = []
     for r in daily:
@@ -1249,10 +1396,18 @@ def s8_time_series():
     emit("ts_daily", {
         "basis": "exact_window", "csv_header": "date," + ",".join(cols),
         "csv": csv_daily[-MAX_CSV_LINES:],
+        "language_note": ("lang_* = daily hits by domain-derived language (SME interim ruling "
+                          "2026-07-27); registry language_share_{en,fr,unknown} = lang_*/hits"),
+        "clean_hits_note": ("equals hits when exclude_bots=true (frames are pre-filtered by "
+                            "the eligibility rule); informative only when the widget is false"),
         "visits_visitors_note": "approx_count_distinct (~5% rsd)" if vis_hi else "visid columns missing"})
     if csv_events:
         emit("ts_events", {
             "basis": "exact_window (hits containing event, not instances)",
+            "pending_event_ids": [e for e in ev_cols if e in PENDING_EVENT_IDS],
+            "pending_note": ("evNNN series for ids in pending_event_ids are UNIDENTIFIED "
+                             "(pending SME naming, doc 18 Q10) — high-frequency but NOT "
+                             "vetted KPIs"),
             "csv_header": "date," + ",".join("ev" + e for e in ev_cols),
             "csv": csv_events[-MAX_CSV_LINES:]})
     emit("ts_profiles", {
@@ -1308,9 +1463,13 @@ def s9_dimensions():
             top_vals = [{"v": str(r["v"]), "pct": round(100.0 * r["count"] / pop_rows, 2)}
                         for r in top[:TOP_N]]
             mode = "raw"
+        note = "numeric lookup-ID code" if c in LOOKUP_ID_DIMS else ""
+        if c == "language":
+            note = ("numeric lookup-ID code — NOT language of record (pending SME ruling, "
+                    "doc 18 Q4); interim language is domain-derived (S4c/S8)")
         out.append({"dim": c, "mode": mode, "label": dim_label(c),
                     "coverage_pct": CENSUS[c]["pop_pct"], "apx_distinct": CENSUS[c]["apx_distinct"],
-                    "top": top_vals, "note": ("numeric lookup-ID code" if c in LOOKUP_ID_DIMS else "")})
+                    "top": top_vals, "note": note})
     emit("dim_candidates", {"basis": "sample", "n_dims": len(out), "dims": out})
 
 run_section("S9", s9_dimensions)
@@ -1332,11 +1491,22 @@ def s10_dq_baseline():
     key_nulls = {c: round(100.0 - CENSUS.get(c, {}).get("pop_pct", 0.0), 3) if c in CENSUS
                  else 100.0 for c in key_cols}
 
+    # Authoritative eligibility-rule evidence (SME 2026-07-27): the exclude_hit x hit_source
+    # distribution must be measured BEFORE the bot filter, so rebuild a bot-inclusive sample
+    # of the URL-scoped window here (DF_S is already eligibility-filtered when exclude_bots).
     dist = []
-    if pick_col(DF_S, "exclude_hit") and pick_col(DF_S, "hit_source"):
+    if pick_col(DF, "exclude_hit") and pick_col(DF, "hit_source"):
+        u10 = url_expr(DF)
+        inc10 = like_any(u10, URL_INCLUDE) if u10 is not None else None
+        exc10 = like_any(u10, URL_EXCLUDE) if u10 is not None else None
+        pre = DF.filter(window_pred(DF, WINDOW_START))
+        if inc10 is not None:
+            pre = pre.filter(inc10 & (~exc10 if exc10 is not None else F.lit(True)))
+        pre_s = pre.sample(withReplacement=False, fraction=SAMPLE_FRACTION, seed=42)
+        pre_n = pre_s.count()
         dist = [{"exclude_hit": str(r["exclude_hit"]), "hit_source": str(r["hit_source"]),
-                 "pct": round(100.0 * r["count"] / max(SAMPLE_ROWS, 1), 3)}
-                for r in (DF_S.groupBy("exclude_hit", "hit_source").count()
+                 "pct": round(100.0 * r["count"] / max(pre_n, 1), 3)}
+                for r in (pre_s.groupBy("exclude_hit", "hit_source").count()
                               .orderBy(F.desc("count")).limit(20).collect())]
 
     skew = None
@@ -1382,6 +1552,10 @@ def s10_dq_baseline():
     emit("dq_baseline", {
         "basis": "sample (dup check exact on one day)",
         "key_col_null_blank_pct": key_nulls, "exclude_hit_x_hit_source_pct": dist,
+        "exclude_hit_note": ("measured pre-eligibility on the URL-scoped window sample. "
+                             "Dropping exclude_hit > 0 IS the authoritative bot-exclusion "
+                             "rule (SME 2026-07-27); eVar116/eVar148 are corroboration "
+                             "signals only, not the rule."),
         "clock_skew": skew, "duplicates": dup, "late_arrival": late})
 
 run_section("S10", s10_dq_baseline)
@@ -1484,6 +1658,8 @@ def s12_synthesis_spec():
             "generated_at": datetime.datetime.now().isoformat(timespec="seconds"),
             "scope": {"url_scope_mode": URL_SCOPE_MODE, "url_include": URL_INCLUDE or None,
                       "url_exclude": URL_EXCLUDE or None,
+                      "exclude_bots": EXCLUDE_BOTS,
+                      "include_retired_baseline": INCLUDE_RETIRED_BASELINE,
                       "url_cols_coalesced": (scope_meta or {}).get("url_cols_coalesced"),
                       "cm_share_pct": dv.get("cm_share_pct")},
             "window": {"start": str(WINDOW_START), "end": str(WINDOW_END), "months": WINDOW_MONTHS},
@@ -1543,10 +1719,12 @@ run_section("run_manifest", s_run_manifest)
 # MAGIC sha1 of every section; re-hash an exported block and compare.
 # MAGIC
 # MAGIC **First sanity checks on any run:**
-# MAGIC - `window_frame.filter.host_breakdown` must show `coverme.com`, `pourmeproteger.com`, and
-# MAGIC   (until 2024-03) `insttrip.manulife.com` with non-zero rows — a single-host result means the
-# MAGIC   scope silently collapsed to one brand/language.
-# MAGIC - `funnel_kpi.events_not_firing` must be empty (or the named events need a business
-# MAGIC   conversation before they become anomaly KPIs).
-# MAGIC - `url_scope_audit.coverage.uncovered_cm_pct` should be small (~0.1%); a large value means
-# MAGIC   real CoverMe traffic is escaping the scope — widen `url_scope_list`.
+# MAGIC - `window_frame.filter.host_breakdown` must show `coverme.com` AND `pourmeproteger.com`
+# MAGIC   with non-zero rows (plus `insttrip.manulife.com` only when `include_retired_baseline`
+# MAGIC   is true) — a single-host result means the scope silently collapsed to one brand/language.
+# MAGIC - `funnel_kpi.events_not_firing` should normally be empty. **Save Quote is an optional
+# MAGIC   step (SME 2026-07-27)** — its absence is informational; any other missing stage needs a
+# MAGIC   business conversation before it becomes an anomaly KPI.
+# MAGIC - `url_scope_audit.coverage.uncovered_cm_pct` reports CoverMe-LOOKING traffic outside the
+# MAGIC   ruled 2-domain scope — legacy/dev **by definition** (SME 2026-07-27). It is a census,
+# MAGIC   not a scope defect; do NOT widen `url_scope_list` without a new SME ruling.

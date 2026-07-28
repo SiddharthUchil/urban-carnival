@@ -8,17 +8,25 @@
 # MAGIC
 # MAGIC ### Scope — URL-only (single-suite)
 # MAGIC This table is a single Adobe report suite (no `rsid` column), so CoverMe is scoped by URL
-# MAGIC alone. Default `url_scope_mode=broad` uses the `url_scope_list` widget verbatim, seeded to the
-# MAGIC three production hosts (`%coverme.com%` EN, `%pourmeproteger.com%` FR, `%insttrip.manulife.com%`
-# MAGIC EN travel) that carry ~99.9% of real CoverMe traffic. `url_scope_exclude` drops UAT / AEM /
-# MAGIC staging noise. URL matching uses the D4 blank-guarded coalesce with **`page_url` FIRST**
-# MAGIC (0.0005% blank vs 58.9% for post_page_url — inverted vs GWAM). Same contract as the EDA notebook.
+# MAGIC alone. Per the SME ruling 2026-07-27 the only valid production domains are `%coverme.com%`
+# MAGIC (EN) and `%pourmeproteger.com%` (FR) — everything else is legacy or dev. Default
+# MAGIC `url_scope_mode=broad` uses the `url_scope_list` widget verbatim (seeded to the two prod
+# MAGIC domains); `pipeline_parity` pins the conf/coverme_settings.py include list; the retired
+# MAGIC `%insttrip.manulife.com%` host (dead after 2024-03-11) joins only when
+# MAGIC `include_retired_baseline` is true. Rows with `exclude_hit > 0` are dropped when
+# MAGIC `exclude_bots` is true (default — the SME eligibility rule). `url_scope_exclude` drops
+# MAGIC UAT / AEM / staging noise. URL matching uses the D4 blank-guarded coalesce with
+# MAGIC **`page_url` FIRST** (0.0005% blank vs 58.9% for post_page_url — inverted vs GWAM). Same
+# MAGIC contract as the EDA notebook.
 # MAGIC
 # MAGIC ### What's CoverMe-specific
 # MAGIC - **Language mix (~50/50 EN/FR) is a first-class panel**, split by DOMAIN (coverme.com=EN,
-# MAGIC   pourmeproteger.com=FR) rather than by a numeric language code.
-# MAGIC - **A quote→application funnel panel** (Quote Start → Quote Complete → Save Quote → App Start
-# MAGIC   → App Confirm) — the business-flagged anomaly KPIs.
+# MAGIC   pourmeproteger.com=FR) rather than by a numeric language code (SME interim ruling
+# MAGIC   2026-07-27 — eVar8 is NOT language of record).
+# MAGIC - **A quote→application stage panel** (Quote Start → Quote Complete → Save Quote → App Start
+# MAGIC   → App Confirm) — the business-flagged anomaly KPIs, drawn as population bars because the
+# MAGIC   funnel is **non-monotonic across visits** (saved-quote resume; Save Quote optional — SME
+# MAGIC   2026-07-27).
 # MAGIC - **Product & sponsor mix** from eVar4 / eVar6.
 # MAGIC
 # MAGIC ### Privacy (ADR-0007)
@@ -48,13 +56,17 @@ import plotly.io as pio
 
 # ---------------------------------------------------------------- widgets ----
 dbutils.widgets.text("table_fqn", "csdo_prod_catalog.adobe_coverme_bronze.hit_data", "1. Table (catalog.schema.table)")
-dbutils.widgets.dropdown("url_scope_mode", "broad", ["broad", "tight"], "2. URL scope mode (tight = coverme.com only)")
-dbutils.widgets.text("url_scope_list", "%coverme.com%,%pourmeproteger.com%,%insttrip.manulife.com%",
+dbutils.widgets.dropdown("url_scope_mode", "broad", ["broad", "pipeline_parity"], "2. URL scope mode (pipeline_parity = conf/coverme_settings scope)")
+dbutils.widgets.text("url_scope_list", "%coverme.com%,%pourmeproteger.com%",
                      "2b. URL include patterns — ADD URLS HERE (SQL LIKE, comma-sep)")
 dbutils.widgets.text("url_scope_exclude",
                      "%adobeaemcloud.com%,%author-aem-prod.manulife.ca%,%uat.coverme.com%,"
                      "%uat.pourmeproteger.com%,%.uat.%,%www-aem-stage%,%localhost:5000%",
                      "2c. URL patterns to exclude (UAT/AEM/staging noise)")
+dbutils.widgets.dropdown("include_retired_baseline", "false", ["false", "true"],
+                         "2d. Include insttrip.manulife.com (retired 2024-03-11; baseline only)")
+dbutils.widgets.dropdown("exclude_bots", "true", ["true", "false"],
+                         "2e. Drop exclude_hit>0 (SME eligibility rule 2026-07-27)")
 dbutils.widgets.text("start_date", "2025-07-01", "3. Start date (YYYY-MM-DD)")
 dbutils.widgets.text("end_date", "2026-07-21", "4. End date (YYYY-MM-DD)")
 dbutils.widgets.dropdown("geo_country", "ALL",
@@ -74,11 +86,17 @@ def _csv(widget):
 
 URL_SCOPE_MODE = dbutils.widgets.get("url_scope_mode").strip().lower()
 URL_EXCLUDE    = _csv("url_scope_exclude")
+INCLUDE_RETIRED_BASELINE = dbutils.widgets.get("include_retired_baseline").strip().lower() == "true"
+EXCLUDE_BOTS   = dbutils.widgets.get("exclude_bots").strip().lower() == "true"
 
-# Same scope contract as the EDA notebook. The `url_scope_list` widget is AUTHORITATIVE in `broad`;
-# `tight` pins coverme.com only.
-URL_SCOPE_TIGHT = ["%coverme.com%"]
-URL_INCLUDE = URL_SCOPE_TIGHT if URL_SCOPE_MODE == "tight" else _csv("url_scope_list")
+# Same scope contract as the EDA notebook (SME ruling 2026-07-27: coverme.com +
+# pourmeproteger.com are the ONLY valid production domains; insttrip is retired,
+# baseline-history only). `url_scope_list` is AUTHORITATIVE in `broad`; `pipeline_parity`
+# pins the conf/coverme_settings.py include list.
+URL_SCOPE_PARITY = ["%coverme.com%", "%pourmeproteger.com%"]
+URL_INCLUDE = list(URL_SCOPE_PARITY) if URL_SCOPE_MODE == "pipeline_parity" else _csv("url_scope_list")
+if INCLUDE_RETIRED_BASELINE:
+    URL_INCLUDE = URL_INCLUDE + ["%insttrip.manulife.com%"]
 START_DATE  = dbutils.widgets.get("start_date").strip()
 END_DATE    = dbutils.widgets.get("end_date").strip()
 GEO_COUNTRY = dbutils.widgets.get("geo_country").strip().lower()
@@ -175,7 +193,10 @@ def share(chart_id, payload):
             print(body[i * 40000:(i + 1) * 40000])
     print(f"===== END SHAREABLE: {sid} =====")
 
-# host -> language, CoverMe splits language by DOMAIN not path
+# host -> language, CoverMe splits language by DOMAIN not path (SME interim ruling
+# 2026-07-27; eVar8/eVar149/prop5 are NOT language of record). Mirrors
+# cm_silver_lib.lang_from_host_expr; under the ruled 2-domain scope 'Other' should be ~0 —
+# a non-trivial share is a QA flag (panel 5 renders a loud callout).
 def lang_from_host(host_col):
     return (F.when(host_col.rlike(r"pourmeproteger|manuvie|assurance-manuvie"), "French")
              .when(host_col.rlike(r"coverme\.com|insttrip\.manulife\.com"), "English")
@@ -183,7 +204,7 @@ def lang_from_host(host_col):
 
 print(f"table={TABLE_FQN}  tz={TIMEZONE}  granularity={GRANULARITY}")
 print(f"scope (URL-only): url_mode={URL_SCOPE_MODE}  include={URL_INCLUDE or '(off)'}  "
-      f"exclude={len(URL_EXCLUDE)} patterns")
+      f"exclude={len(URL_EXCLUDE)} patterns  exclude_bots={EXCLUDE_BOTS}")
 print(f"       country={GEO_COUNTRY}  regions={GEO_REGIONS or 'all'}  dates={START_DATE}..{END_DATE}")
 
 # COMMAND ----------
@@ -226,6 +247,11 @@ if _url_cols:
         _scope = ~_exc if _scope is None else (_scope & ~_exc)
 base_df = _raw.filter(_scope) if _scope is not None else _raw
 
+# Hit eligibility (SME 2026-07-27): drop exclude_hit > 0 bots — the authoritative rule,
+# mirroring cm_silver_lib.eligible_expr (eVar116/eVar148 are corroboration only).
+if EXCLUDE_BOTS and "exclude_hit" in _cols:
+    base_df = base_df.filter(F.expr("coalesce(try_cast(exclude_hit as int), 0) = 0"))
+
 # date range on the reviewer-local calendar date; prefer the hit_date partition column for pruning
 if "hit_date" in _cols:
     base_df = base_df.filter((F.col("hit_date") >= F.lit(START_DATE).cast("date")) &
@@ -254,6 +280,8 @@ _host_breakdown = [{"host": r["host"], "rows": r["count"]}
 share("scope", {"table": TABLE_FQN, "single_suite": True,
                 "url_scope_mode": URL_SCOPE_MODE, "url_include": URL_INCLUDE or None,
                 "url_exclude": URL_EXCLUDE or None, "url_cols_coalesced": _url_cols or None,
+                "exclude_bots": EXCLUDE_BOTS,
+                "include_retired_baseline": INCLUDE_RETIRED_BASELINE,
                 "start_date": START_DATE, "end_date": END_DATE, "geo_country": GEO_COUNTRY,
                 "geo_regions": GEO_REGIONS or None, "timezone": TIMEZONE,
                 "granularity": GRANULARITY, "top_n": TOP_N,
@@ -392,9 +420,14 @@ if _u is not None:
     _lm = (base_df.groupBy(trunc_period(local_ts()).alias("period"),
                            lang_from_host(_host_c).alias("lang"))
                   .count().orderBy("period").toPandas())
-    share("language_mix", {"granularity": GRANULARITY, "basis": "domain",
-                           "rows": _records(_lm, date_cols=["period"])})
     _piv = _lm.pivot_table(index="period", columns="lang", values="count", fill_value=0)
+    _tot_hits = float(_piv.values.sum()) or 1.0
+    _other_pct = (100.0 * float(_piv["Other"].sum()) / _tot_hits) if "Other" in _piv.columns else 0.0
+    share("language_mix", {"granularity": GRANULARITY, "basis": "domain",
+                           "other_pct": round(_other_pct, 3),
+                           "other_note": ("'Other' should be ~0 under the ruled 2-domain scope "
+                                          "(SME 2026-07-27); a non-trivial share is a QA flag"),
+                           "rows": _records(_lm, date_cols=["period"])})
     _order = [c for c in ["English", "French", "Other"] if c in _piv.columns]
     _colors = {"English": CATEGORICAL[0], "French": CATEGORICAL[1], "Other": "#898781"}
     fig = go.Figure()
@@ -404,6 +437,12 @@ if _u is not None:
                                  fillcolor=_colors[name],
                                  hovertemplate=f"%{{x|%Y-%m-%d}}<br>{name}: %{{y:,}}<extra></extra>"))
     fig.update_layout(title=f"Language mix by domain ({GRANULARITY})", yaxis_title="hits", xaxis_title=None)
+    if _other_pct > 0.5:
+        fig.add_annotation(text=(f"⚠ 'Other' = {_other_pct:.2f}% — should be ~0 under the "
+                                 "2-domain scope (SME 2026-07-27); investigate before trusting "
+                                 "this split"),
+                           xref="paper", yref="paper", x=0, y=1.10, showarrow=False,
+                           font=dict(color="#e66767", size=12), align="left")
     render(fig)
 else:
     print("no URL column — skipping language mix.")
@@ -411,10 +450,14 @@ else:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 6 · Quote → application funnel + KPI timeline
-# MAGIC **Form:** a funnel bar (conversion) plus a multi-series line (change over time). Daily count of
-# MAGIC hits **carrying** each funnel event (Quote Start → Quote Complete → Save Quote → App Start →
-# MAGIC App Confirm). These are the business-flagged anomaly KPIs; a break in any step is what the
+# MAGIC ## 6 · Quote → application stages + KPI timeline
+# MAGIC **Form:** horizontal population bars (magnitude per stage — deliberately NOT a funnel taper)
+# MAGIC plus a multi-series line (change over time). Daily count of hits **carrying** each funnel
+# MAGIC event (Quote Start → Quote Complete → Save Quote → App Start → App Confirm). The funnel is
+# MAGIC **non-monotonic across visits** (SME 2026-07-27): a saved-quote resume visit can carry App
+# MAGIC Start/Confirm with no quote events and Save Quote is optional, so a later stage may exceed
+# MAGIC an earlier one — step ratios are population proxies (they can pass 1.0), never within-visit
+# MAGIC sequences. These are the business-flagged anomaly KPIs; a break in any stage is what the
 # MAGIC detector must catch. App-level steps fire at low volume — that is expected, not an anomaly.
 
 # COMMAND ----------
@@ -431,19 +474,48 @@ if _ev_col:
                    .filter(F.col("eid").isin(_funnel_ids)))
     _ev = _exp.groupBy("period", "eid").count().orderBy("period").toPandas()
     _tot = {r["eid"]: r["n"] for r in _exp.groupBy("eid").agg(F.count("*").alias("n")).collect()}
-    _funnel_rows = [{"step": name, "event_id": eid, "hits": int(_tot.get(eid, 0))}
+    _funnel_rows = [{"step": name, "event_id": eid, "hits": int(_tot.get(eid, 0)),
+                     "optional_step": eid == "232"}
                     for eid, name in FUNNEL_EVENTS]
+
+    def _ratio(n, d):
+        return round(n / d, 4) if d else None
+    _qs, _as = _tot.get("228", 0), _tot.get("269", 0)
+    # Population ratios (NOT within-visit conversion) — may legitimately exceed 1.0.
+    _ratios = {
+        "quote_complete_over_quote_start": _ratio(_tot.get("229", 0), _qs),
+        "save_quote_over_quote_start": _ratio(_tot.get("232", 0), _qs),
+        "app_start_over_quote_start": _ratio(_as, _qs),
+        "app_confirm_over_app_start": _ratio(_tot.get("240", 0), _as),
+        "app_confirm_over_quote_start": _ratio(_tot.get("240", 0), _qs),
+    }
     share("funnel", {"steps": _funnel_rows,
+                     "population_ratios_hit_presence": _ratios,
+                     "note": ("population volumes + ratios, NOT a within-visit sequence — the "
+                              "funnel is non-monotonic across visits (saved-quote resume; Save "
+                              "Quote optional; SME 2026-07-27), so ratios may exceed 1.0"),
                      "timeline": _records(_ev, date_cols=["period"]), "event_names": _label_by_id})
 
-    # funnel bar (conversion shape)
-    figf = go.Figure(go.Funnel(
-        y=[name for _, name in FUNNEL_EVENTS], x=[r["hits"] for r in _funnel_rows],
-        marker=dict(color=CATEGORICAL[:len(FUNNEL_EVENTS)]),
-        textinfo="value+percent initial",
+    # stage population bars — deliberately NOT go.Funnel: a funnel taper implies monotonic
+    # drop-off, which the SME ruling invalidates (a resume-heavy day renders as a widening
+    # taper that reads as a bug). Logical order top-to-bottom, independent magnitudes.
+    _names = [name for _, name in FUNNEL_EVENTS]
+    _vals = [int(_tot.get(eid, 0)) for eid, _ in FUNNEL_EVENTS]
+    figf = go.Figure(go.Bar(
+        y=_names[::-1], x=_vals[::-1], orientation="h",
+        marker=dict(color=list(CATEGORICAL[:len(FUNNEL_EVENTS)])[::-1]),
+        text=[f"{v:,}" for v in _vals[::-1]], textposition="outside",
         hovertemplate="%{y}<br>hits: %{x:,}<extra></extra>"))
-    figf.update_layout(title="Quote → application funnel (hits carrying each event)")
-    render(figf, height=380)
+    _rt = "  ·  ".join(f"{k.replace('_over_', '/').replace('_', ' ')}: {v}"
+                       for k, v in _ratios.items() if v is not None)
+    figf.update_layout(
+        title="Quote → application stages (population volumes — non-monotonic, not a funnel taper)",
+        xaxis_title="hits carrying each event", yaxis_title=None, margin=dict(l=150, b=90))
+    figf.add_annotation(text=("population ratios (may exceed 1.0 — saved-quote resume; Save "
+                              "Quote is optional):<br>" + _rt),
+                        xref="paper", yref="paper", x=0, y=-0.28, showarrow=False,
+                        font=dict(color=INK2, size=11), align="left")
+    render(figf, height=420)
 
     # KPI firing timeline
     figt = go.Figure()
@@ -523,10 +595,14 @@ share("manifest", {"charts": _manifest, "n_charts": len(_manifest)})
 
 # MAGIC %md
 # MAGIC ---
-# MAGIC **Notes.** Charts are aggregate-only (ADR-0007). Scope is URL-only (single-suite, no rsid),
-# MAGIC with the D4 blank-guarded `page_url`-first coalesce. Language is split by domain
-# MAGIC (coverme.com=EN, pourmeproteger.com=FR). Palette is the CVD-validated dataviz dark set;
-# MAGIC multi-series panels carry a legend + hover + direct labels so identity is never colour-alone.
+# MAGIC **Notes.** Charts are aggregate-only (ADR-0007). Scope is URL-only (single-suite, no rsid):
+# MAGIC the two SME-ruled production domains (2026-07-27; optional retired-insttrip baseline via
+# MAGIC widget), minus UAT/AEM noise, with `exclude_hit > 0` bots dropped by default (the SME
+# MAGIC eligibility rule), on the D4 blank-guarded `page_url`-first coalesce. Language is split by
+# MAGIC domain (coverme.com=EN, pourmeproteger.com=FR — SME interim ruling; eVar8 is NOT language
+# MAGIC of record). The stage panel is population bars, not a funnel taper — the funnel is
+# MAGIC non-monotonic across visits. Palette is the CVD-validated dataviz dark set; multi-series
+# MAGIC panels carry a legend + hover + direct labels so identity is never colour-alone.
 
 # COMMAND ----------
 

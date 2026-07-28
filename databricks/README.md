@@ -105,8 +105,9 @@ America/Toronto cron, created **PAUSED**. Design spec:
 
 Key differences vs GWAM (all EDA/SME-confirmed 2026-07-27):
 - **URL-only scope** (single-suite feed, no `rsid` column): coverme.com + pourmeproteger.com,
-  plus retired insttrip.manulife.com for baseline history only (dead since 2024-03-11), minus
-  UAT/AEM noise. Matched on the blank-guarded **page_url-first** 4-way coalesce.
+  plus retired insttrip.manulife.com **date-bounded to `hit_date <= 2024-03-11`** (baseline
+  history only — a resurrected host cannot re-enter go-forward scope), minus UAT/AEM noise.
+  Matched on the blank-guarded **page_url-first** 4-way coalesce.
 - **Hit eligibility at silver** (Analysis-Workspace parity per Adobe datafeeds-calculate):
   `exclude_hit = 0` and `hit_source not in (5,7,8,9)`; this feed has no `customer_perspective`
   column. Bronze keeps raw scoped rows. Baseline eligible share ≈ 94.33%.
@@ -153,3 +154,13 @@ On Windows set `PYSPARK_PYTHON`/`PYSPARK_DRIVER_PYTHON` to your venv python and
   (bronze→gold shipped; thresholds wait for real baselines), MLflow registry,
   dev/prod split, Asset Bundles. The pseudonymization is a keyed SHA-256 (not RFC-2104 HMAC);
   swap `silver_lib.pseudonymize_expr` for a `hashlib.hmac` UDF if governance mandates strict HMAC.
+
+### Deferred (tracked)
+- **Missing-day imputation policy** — `gold_lib` zero-fills the ~30 missing CoverMe source
+  days on the gap-free calendar, while doc 17 §4 item 8's working assumption is "feed gaps →
+  impute/interpolate". Decision deferred until the SME rules on outage-vs-gap; zero-fill is
+  the current, documented behavior and the detect task must mask those dates before training.
+- **7 SME-confirmed feed columns not mirrored to bronze** (`campaign`, `geo_city`,
+  `geo_country`, `geo_region`, `os`, `referrer`, `user_agent`; metric-registry
+  `data_feed_columns`, Kerrian's calculated-metrics follow-up). Promoting any of them
+  requires widening bronze and a source re-backfill — batch with the follow-up mapping.

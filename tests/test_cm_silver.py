@@ -1,7 +1,9 @@
 """CoverMe silver expressions: URL coalesce, scope, domain language, hit eligibility.
 
-Mirrors the verified EDA semantics (eda/coverme_eda.py S4/S4c) and the Workspace-parity
-eligibility rule (Adobe datafeeds-calculate; customer_perspective absent from this feed).
+Mirrors the SME-ruled semantics of 2026-07-27 (metric-registry.yaml
+meta.sme_confirmations): 2-domain scope with the retired insttrip host date-bounded to
+baseline history, domain-derived interim language, and the Workspace-parity eligibility
+rule (Adobe datafeeds-calculate; customer_perspective absent from this feed).
 Same parquet staging pattern as the other Spark tests.
 """
 from __future__ import annotations
@@ -23,6 +25,7 @@ import pyarrow.parquet as pq  # noqa: E402
 import cm_silver_lib as cml  # noqa: E402
 from conf.coverme_settings import (  # noqa: E402
     URL_SCOPE_INCLUDE, URL_SCOPE_EXCLUDE, ELIGIBLE_HIT_SOURCE_EXCLUDE,
+    URL_SCOPE_BASELINE_INCLUDE, BASELINE_INCLUDE_END,
 )
 
 
@@ -77,7 +80,10 @@ def test_scope_expr_include_minus_exclude(spark, tmp_path):
         "page_url": [
             "https://www.coverme.com/covme/health-insurance",   # in scope
             "https://www.pourmeproteger.com/sante",             # in scope (FR)
-            "https://insttrip.manulife.com/trip",               # in scope (baseline host)
+            "https://insttrip.manulife.com/trip",               # retired host: NOT in
+                                                                # go-forward scope (SME
+                                                                # 2026-07-27; baseline
+                                                                # clause tested below)
             "https://uat.coverme.com/covme/test",               # exclude beats include
             "https://www.manulife.ca/retirement",               # not included
             None,                                               # NULL url -> out, not NULL
@@ -88,7 +94,30 @@ def test_scope_expr_include_minus_exclude(spark, tmp_path):
     })
     got = [r["s"] for r in df.withColumn(
         "s", cml.scope_expr(URL_SCOPE_INCLUDE, URL_SCOPE_EXCLUDE)).collect()]
-    assert got == [True, True, True, False, False, False]
+    assert got == [True, True, False, False, False, False]
+
+
+def test_scope_expr_baseline_date_bounded(spark, tmp_path):
+    """SME 2026-07-27: scope = the 2 prod domains; the retired insttrip host is admitted
+    only for hit_date <= 2024-03-11 (baseline history), and the UAT/AEM excludes still
+    apply inside the baseline window."""
+    df = _stage(spark, tmp_path, {
+        "page_url": [
+            "https://insttrip.manulife.com/trip",      # last live day -> kept (baseline)
+            "https://insttrip.manulife.com/trip",      # after retirement -> out
+            "https://insttrip.manulife.com/a.uat.b",   # in window, exclude pattern -> out
+            "https://www.coverme.com/covme/health",    # prod domain: no date bound
+        ],
+        "hit_date": ["2024-03-11", "2024-03-12", "2024-01-01", "2026-07-01"],
+        "visit_start_page_url": [None] * 4,
+        "first_hit_page_url": [None] * 4,
+        "post_page_url": [None] * 4,
+    })
+    got = [r["s"] for r in df.withColumn(
+        "s", cml.scope_expr(URL_SCOPE_INCLUDE, URL_SCOPE_EXCLUDE,
+                            baseline_include=URL_SCOPE_BASELINE_INCLUDE,
+                            baseline_end=BASELINE_INCLUDE_END)).collect()]
+    assert got == [True, False, False, True]
 
 
 def test_lang_from_host_domain_derived(spark, tmp_path):

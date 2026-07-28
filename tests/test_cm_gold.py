@@ -172,6 +172,31 @@ def test_null_safe_keys_no_collision_no_phantom_visitor(spark, tmp_path):
     assert row["visits_total"] == 3
 
 
+def test_non_monotonic_ratio_exceeds_one_unclamped(spark, tmp_path):
+    """Saved-quote resume (SME 2026-07-27, meta.sme_confirmations.funnel_basis): a later
+    funnel stage can exceed an earlier one on a given day, so population ratios
+    legitimately pass 1.0. Pins the 0-safe ratio in gold_lib against a future clamp."""
+    rows = [
+        _hit(D1, "228", "hd", "en", "h1", "l1", "1", "t1"),      # 1 quote-start visit
+        _hit(D1, "269", None, "en", "h2", "l2", "1", "t2"),      # resume visit A
+        _hit(D1, "269,240", None, "en", "h3", "l3", "1", "t3"),  # resume visit B
+    ]
+    staged = tmp_path / "hits.parquet"
+    cols = {name: [r[name] for r in rows] for name in rows[0]}
+    arrays = [pa.array(cols[n], type=pa.date32() if n == "hit_date" else pa.string())
+              for n in cols]
+    pq.write_table(pa.table(arrays, names=list(cols)), staged)
+
+    wide = gold_lib.build_kpis_spark(
+        spark.read.parquet(str(staged)), EVENT_IDS, SERIES,
+        date_col=DATE_COL, needed_cols=NEEDED_COLS,
+        visit_key_cols=VISIT_KEY_COLS, visitor_key_cols=VISITOR_KEY_COLS,
+        event_basis=EVENT_BASIS, null_safe_keys=NULL_SAFE_KEYS)
+    row = wide.collect()[0].asDict()
+    assert row["funnel_app_start_over_quote_start"] == pytest.approx(2.0)
+    assert row["funnel_app_confirm_over_quote_start"] == pytest.approx(1.0)
+
+
 def test_melt_to_long_respects_date_col(spark, tmp_path):
     staged = tmp_path / "hits.parquet"
     cols = {name: [r[name] for r in ROWS] for name in ROWS[0]}

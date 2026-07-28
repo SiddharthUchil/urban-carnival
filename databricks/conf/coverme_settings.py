@@ -16,15 +16,18 @@ from __future__ import annotations
 SOURCE_TABLE = "csdo_prod_catalog.adobe_coverme_bronze.hit_data"
 PARTITION_COL = "hit_date"   # typed date -- predicates prune partitions directly
 
-# URL scope (SME ruling 2026-07-27, item 3): the two production brand domains, plus the
-# retired insttrip host for BASELINE ONLY -- it went dead 2024-03-11, so it contributes
-# history to the backfill and nothing going forward. Everything else (legacy life hits,
-# unclassified prod-adjacent hosts) is out of scope.
+# URL scope (SME ruling 2026-07-27, item 3): exactly the two production brand domains.
+# Everything else (legacy life hits, unclassified prod-adjacent hosts) is out of scope.
 URL_SCOPE_INCLUDE = [
     "%coverme.com%",            # EN brand domain
     "%pourmeproteger.com%",     # FR brand domain
-    "%insttrip.manulife.com%",  # retired 2024-03-11 -- kept for baseline history only
 ]
+
+# Retired insttrip host, BASELINE ONLY (same ruling): dead since 2024-03-11. Ingest admits
+# it solely for hit_date <= BASELINE_INCLUDE_END (cm_silver_lib.scope_expr baseline
+# clause), so it contributes backfill history and can never re-enter go-forward scope.
+URL_SCOPE_BASELINE_INCLUDE = ["%insttrip.manulife.com%"]
+BASELINE_INCLUDE_END = "2024-03-11"
 
 # Non-production noise excluded even when matched by the include list (EDA S4b-confirmed):
 # AEM authoring/staging hosts, UAT mirrors of both brand domains, local dev.
