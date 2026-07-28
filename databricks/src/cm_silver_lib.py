@@ -50,6 +50,18 @@ def lang_from_host_expr(url: Column) -> Column:
              .otherwise("unknown"))
 
 
+def event_ts_expr(local_col: str = "date_time", gmt_col: str = "hit_time_gmt") -> Column:
+    """ANSI-safe sibling of silver_lib.event_ts_expr. The production cluster runs
+    spark.sql.ansi.enabled=true, where a plain cast of an unparseable string THROWS
+    (CAST_INVALID_INPUT) instead of returning NULL -- the coalesce fallback would never
+    be reached (doc-17 E1 lesson: always prefer try_* in these notebooks). try_cast
+    keeps the fallback chain intact; identical output on well-formed data."""
+    return F.coalesce(
+        F.expr(f"try_cast({local_col} as timestamp)"),
+        F.expr(f"cast(from_unixtime(try_cast({gmt_col} as bigint)) as timestamp)"),
+    )
+
+
 def eligible_expr(hit_source_exclude) -> Column:
     """Analysis-Workspace hit eligibility (Adobe datafeeds-calculate): keep hits where
     exclude_hit = 0 and hit_source is not a data-source row. This feed has no

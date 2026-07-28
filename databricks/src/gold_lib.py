@@ -38,12 +38,32 @@ def _evd_key(spec):
     return f"{spec.event_id}||{spec.dim_value if spec.dim_value is not None else _OTHER}"
 
 
+def _key_expr(cols, null_safe):
+    """Composite distinct-count key over ``cols``.
+
+    concat_ws silently SKIPS NULL components, so ("h", NULL, "1") and ("h", "1", NULL)
+    both collapse to "h_1" and an all-NULL tuple becomes a countable "". With
+    ``null_safe`` a NULL component keeps its position via a sentinel, and a fully-NULL
+    key becomes NULL so countDistinct skips it (matching single-column countDistinct
+    semantics). The non-safe form is kept as the default for GWAM parity.
+    """
+    parts = [F.col(c).cast("string") for c in cols]
+    if not null_safe:
+        return F.concat_ws("_", *parts)
+    key = F.concat_ws("_", *[F.coalesce(p, F.lit("␀")) for p in parts])
+    all_null = parts[0].isNull()
+    for p in parts[1:]:
+        all_null = all_null & p.isNull()
+    return F.when(all_null, F.lit(None).cast("string")).otherwise(key)
+
+
 def build_kpis_spark(df, event_ids, series,
                      date_col="process_date",
                      needed_cols=None,
                      visit_key_cols=("post_visid_high", "post_visid_low", "visit_num"),
                      visitor_key_cols=None,
-                     event_basis="hits"):
+                     event_basis="hits",
+                     null_safe_keys=False):
     """Return a wide DataFrame ``[date_col] + [metric_id...]`` matching build_kpis().
 
     ``event_ids`` and ``series`` come from a registry module (dependency-injected so this
@@ -51,7 +71,9 @@ def build_kpis_spark(df, event_ids, series,
     build byte-for-byte; ``visitor_key_cols=None`` keeps the exact distinct(mcvisid)
     semantics (a concat key would turn NULLs into a countable empty string).
     ``event_basis="visits"`` counts distinct visit keys carrying the event instead of
-    token occurrences.
+    token occurrences. ``null_safe_keys`` opts the composite visit/visitor keys into the
+    NULL-positional handling documented on ``_key_expr`` (CoverMe passes True; the GWAM
+    default stays False for parity).
     """
     if event_basis not in ("hits", "visits"):
         raise ValueError(f"unknown event_basis: {event_basis!r}")
@@ -65,13 +87,13 @@ def build_kpis_spark(df, event_ids, series,
 
     hits = d.groupBy("date").count().withColumnRenamed("count", "hits_total")
 
-    vkey = F.concat_ws("_", *[F.col(c).cast("string") for c in visit_key_cols])
+    vkey = _key_expr(visit_key_cols, null_safe_keys)
     visits = (d.withColumn("_vk", vkey).groupBy("date")
               .agg(F.countDistinct("_vk").alias("visits_total")))
     if visitor_key_cols is None:
         visitors = d.groupBy("date").agg(F.countDistinct("mcvisid").alias("visitors_total"))
     else:
-        vis_key = F.concat_ws("_", *[F.col(c).cast("string") for c in visitor_key_cols])
+        vis_key = _key_expr(visitor_key_cols, null_safe_keys)
         visitors = (d.withColumn("_vr", vis_key).groupBy("date")
                     .agg(F.countDistinct("_vr").alias("visitors_total")))
 

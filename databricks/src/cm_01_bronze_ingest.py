@@ -35,7 +35,8 @@ for sch in (BRONZE_SCHEMA, SILVER_SCHEMA, GOLD_SCHEMA):
 
 # COMMAND ----------
 src = spark.table(SOURCE_TABLE)
-common.assert_source_columns(src.columns, REQUIRED_SOURCE_COLUMNS)   # schema contract, ADR-0006
+common.assert_source_columns(src.columns, REQUIRED_SOURCE_COLUMNS,   # schema contract, ADR-0006
+                             conf_hint="databricks/conf/coverme_bronze_columns.py")
 cols = bronze_select(src.columns)
 print(f"projecting {len(cols)} columns into bronze")
 
@@ -73,3 +74,21 @@ else:
 n = spark.table(s.bronze).where(pred).count()
 common.set_task_value(dbutils, "process_from", start)
 print(f"bronze {s.bronze}: {n} rows in window >= {start}")
+
+# COMMAND ----------
+# Backfill-only sanity (design spec): both production brand domains present in bronze.
+# This check lives HERE, where URLs exist -- the gold language gate can't distinguish
+# coverme.com from the retired insttrip host (both derive language "en").
+if s.mode == "backfill":
+    u = cml.url_expr()
+    hosts = (spark.table(s.bronze).where(pred)
+             .agg(F.sum(F.when(u.like("%coverme.com%"), 1).otherwise(0)).alias("coverme"),
+                  F.sum(F.when(u.like("%pourmeproteger.com%"), 1).otherwise(0))
+                   .alias("pourmeproteger"))
+             .first())
+    dead = [h for h in ("coverme", "pourmeproteger") if not (hosts[h] or 0) > 0]
+    if dead:
+        raise ValueError(f"bronze backfill sanity: zero rows for production host(s) {dead} "
+                         "in the ingest window -- scope filter regression?")
+    print(f"backfill sanity: coverme.com={hosts['coverme']} "
+          f"pourmeproteger.com={hosts['pourmeproteger']}")

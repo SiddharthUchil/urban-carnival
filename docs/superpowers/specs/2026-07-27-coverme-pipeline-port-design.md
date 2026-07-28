@@ -62,8 +62,11 @@ coalesce; `OVERLAP_DAYS = 5` (late-arrival p99); tables `adobe_hit_coverme` /
 `hits_conformed_coverme` / `kpi_daily_coverme`; `DOMAIN = "coverme"`; tz pinned America/Toronto.
 
 Silver DQ gates: hard-fail on 0 rows and `post_event_list` non-null < 0.90 (CoverMe baseline
-93.2%; GWAM's 0.95 would false-fail); warn if eligible share leaves ~[0.90, 0.98]; backfill-only
-sanity: both prod hosts non-zero, all 5 funnel events firing.
+93.2%; GWAM's 0.95 would false-fail); warn if eligible share leaves ~[0.90, 0.98].
+Backfill-only sanity: bronze (cm_01, where URLs exist) asserts both production brand domains
+non-zero — the language proxy cannot distinguish coverme.com from the retired insttrip host,
+both derive "en" — and gold (cm_03) asserts all 5 funnel events fire plus both language
+buckets present as corroboration.
 
 ## 5. Governance
 

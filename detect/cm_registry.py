@@ -39,6 +39,8 @@ DATE_COL = "hit_date"
 VISIT_KEY_COLS = ("post_visid_high", "post_visid_low", "visit_num", "visit_start_time_gmt")
 VISITOR_KEY_COLS = ("post_visid_high", "post_visid_low")
 EVENT_BASIS = "visits"       # visit-distinct event counts (SME ruling 2026-07-27)
+NULL_SAFE_KEYS = True        # positional NULLs in composite keys must not collide, and a
+                             # fully-NULL visitor pair is skipped, not counted as ""
 
 # Columns the gold build reads from silver.
 NEEDED_COLS = ["hit_date", "post_event_list", "language", "post_evar4",

@@ -57,14 +57,16 @@ def read_watermark(spark, table, col="process_date"):
     return None if v is None else str(v)[:10]
 
 
-def assert_source_columns(available, required):
-    """Fail fast on upstream schema drift (ADR-0006 consequence: schema contract in ingest)."""
+def assert_source_columns(available, required, conf_hint="databricks/conf/bronze_columns.py"):
+    """Fail fast on upstream schema drift (ADR-0006 consequence: schema contract in ingest).
+
+    ``conf_hint`` names the column-policy module the failure message points the on-call
+    engineer at; product forks (CoverMe) pass their own so the hint stays correct."""
     missing = [c for c in required if c not in set(available)]
     if missing:
         raise ValueError(
             f"Source schema contract violation (ADR-0006): missing columns {missing}. "
-            "The upstream Adobe feed changed -- reconcile databricks/conf/bronze_columns.py "
-            "before ingesting."
+            f"The upstream Adobe feed changed -- reconcile {conf_hint} before ingesting."
         )
 
 

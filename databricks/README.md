@@ -124,7 +124,7 @@ databricks jobs run-now --job-id <id> \
 ```
 Expected (per the verified EDA manifest):
 - **bronze** `adobe_hit_coverme` ≈ 57.7M rows across ~1,211 `hit_date` partitions (~30 known
-  missing source days).
+  missing source days); the backfill run asserts both production brand domains are present.
 - **silver** `hits_conformed_coverme` ≈ 94% of bronze; DQ prints `event_list_nonnull≈0.93`
   (gate is 0.90 here, not GWAM's 0.95).
 - **gold** `kpi_daily_coverme` = 53 series × days, no calendar gaps; backfill sanity gate

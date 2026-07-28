@@ -27,6 +27,7 @@ import pyarrow.parquet as pq  # noqa: E402
 
 from cm_registry import (  # noqa: E402
     SERIES, EVENT_IDS, NEEDED_COLS, DATE_COL, VISIT_KEY_COLS, VISITOR_KEY_COLS, EVENT_BASIS,
+    NULL_SAFE_KEYS,
 )
 import gold_lib  # noqa: E402
 
@@ -117,7 +118,7 @@ def built(spark, tmp_path_factory):
         sdf, EVENT_IDS, SERIES,
         date_col=DATE_COL, needed_cols=NEEDED_COLS,
         visit_key_cols=VISIT_KEY_COLS, visitor_key_cols=VISITOR_KEY_COLS,
-        event_basis=EVENT_BASIS)
+        event_basis=EVENT_BASIS, null_safe_keys=NULL_SAFE_KEYS)
     rows = wide.collect()
     out = {}
     for r in rows:
@@ -141,6 +142,36 @@ def test_series_value(built, metric_id):
     assert got == pytest.approx(want), f"{metric_id}: {got} != {want}"
 
 
+def test_null_safe_keys_no_collision_no_phantom_visitor(spark, tmp_path):
+    """concat_ws silently drops NULL key components: an all-NULL visid pair becomes a
+    countable "" visitor, and (h, NULL, 1, t) collides with (h, 1, NULL, t). With
+    null_safe_keys=True the fully-NULL visitor key is skipped (like countDistinct on a
+    single column) and NULL components keep their position."""
+    rows = [
+        _hit(D1, None, None, "en", None, None, "9", "tx"),   # all-NULL visitor pair
+        _hit(D1, None, None, "en", None, None, "9", "tx"),   # (two hits, same visit)
+        _hit(D1, None, None, "en", "h", None, "1", "t"),     # ambiguous visit key A
+        _hit(D1, None, None, "en", "h", "1", None, "t"),     # ambiguous visit key B
+    ]
+    staged = tmp_path / "hits.parquet"
+    cols = {name: [r[name] for r in rows] for name in rows[0]}
+    arrays = [pa.array(cols[n], type=pa.date32() if n == "hit_date" else pa.string())
+              for n in cols]
+    pq.write_table(pa.table(arrays, names=list(cols)), staged)
+
+    wide = gold_lib.build_kpis_spark(
+        spark.read.parquet(str(staged)), EVENT_IDS, SERIES,
+        date_col=DATE_COL, needed_cols=NEEDED_COLS,
+        visit_key_cols=VISIT_KEY_COLS, visitor_key_cols=VISITOR_KEY_COLS,
+        event_basis=EVENT_BASIS, null_safe_keys=True)
+    row = wide.collect()[0].asDict()
+    # visitors: ("h", NULL) and ("h", "1") are distinct; the all-NULL pair is skipped.
+    assert row["visitors_total"] == 2
+    # visits: the two ambiguous keys stay distinct; the all-NULL-pair visit still counts
+    # (visit_num/visit_start_time_gmt are populated) -> 3 total.
+    assert row["visits_total"] == 3
+
+
 def test_melt_to_long_respects_date_col(spark, tmp_path):
     staged = tmp_path / "hits.parquet"
     cols = {name: [r[name] for r in ROWS] for name in ROWS[0]}
@@ -151,7 +182,7 @@ def test_melt_to_long_respects_date_col(spark, tmp_path):
         spark.read.parquet(str(staged)), EVENT_IDS, SERIES,
         date_col=DATE_COL, needed_cols=NEEDED_COLS,
         visit_key_cols=VISIT_KEY_COLS, visitor_key_cols=VISITOR_KEY_COLS,
-        event_basis=EVENT_BASIS)
+        event_basis=EVENT_BASIS, null_safe_keys=NULL_SAFE_KEYS)
     long = gold_lib.melt_to_long(wide, date_col=DATE_COL)
     assert long.columns == [DATE_COL, "metric_id", "value"]
     assert long.count() == 3 * len(SERIES)

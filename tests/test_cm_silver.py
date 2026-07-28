@@ -40,6 +40,12 @@ def spark():
          .config("spark.ui.enabled", "false")
          .getOrCreate())
     s.sparkContext.setLogLevel("ERROR")
+    # ANSI on: the production cluster runs ansi.enabled=true (doc-17 E1 lesson), so every
+    # silver expression is exercised under the strict-cast regime it will actually face.
+    # Set as RUNTIME conf: getOrCreate() ignores builder configs when another test module's
+    # session is being reused, and runtime conf applies either way.
+    s.conf.set("spark.sql.ansi.enabled", "true")
+    s.conf.set("spark.sql.session.timeZone", "UTC")
     yield s
     s.stop()
 
@@ -101,6 +107,22 @@ def test_lang_from_host_domain_derived(spark, tmp_path):
     })
     got = [r["l"] for r in df.withColumn("l", cml.lang_from_host_expr(cml.url_expr())).collect()]
     assert got == ["en", "en", "fr", "fr", "unknown", "unknown"]
+
+
+def test_event_ts_ansi_safe_fallback(spark, tmp_path):
+    from pyspark.sql import functions as F
+    df = _stage(spark, tmp_path, {
+        "date_time": ["2026-07-01 10:00:00", "not-a-timestamp", None],
+        "hit_time_gmt": ["1751364000", "1751364000", None],
+    })
+    # Compare as Spark-formatted strings (parse and format share the session tz), so the
+    # assertion is independent of the Python process timezone.
+    got = [r["s"] for r in df.withColumn(
+        "s", F.date_format(cml.event_ts_expr(), "yyyy-MM-dd HH:mm:ss")).collect()]
+    assert got[0] == "2026-07-01 10:00:00"   # parseable date_time preferred
+    assert got[1] is not None                # junk date_time -> GMT fallback, not an
+    #                                          ANSI CAST_INVALID_INPUT crash
+    assert got[2] is None                    # nothing usable -> NULL
 
 
 def test_eligible_expr_workspace_parity(spark, tmp_path):

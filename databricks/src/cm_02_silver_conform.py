@@ -49,7 +49,7 @@ b = spark.table(s.bronze).where(pred).select(*SILVER_COLUMNS)
 n_raw = b.count()
 elig = b.where(cml.eligible_expr(ELIGIBLE_HIT_SOURCE_EXCLUDE))
 
-conf = (elig.withColumn("event_ts", sl.event_ts_expr())
+conf = (elig.withColumn("event_ts", cml.event_ts_expr())
             .withColumn("language", cml.lang_from_host_expr(cml.url_expr()))
             .withColumn("post_event_list", sl.normalize_event_list_expr("post_event_list"))
             .drop("date_time", "hit_time_gmt", "exclude_hit", "hit_source",

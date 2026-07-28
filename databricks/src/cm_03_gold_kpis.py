@@ -19,7 +19,7 @@ from conf.coverme_settings import resolve
 import gold_lib
 from cm_registry import (
     SERIES, EVENT_IDS, NEEDED_COLS, DATE_COL, VISIT_KEY_COLS, VISITOR_KEY_COLS,
-    EVENT_BASIS, FUNNEL_EVENT_IDS, EVENT_METRICS,
+    EVENT_BASIS, NULL_SAFE_KEYS, FUNNEL_EVENT_IDS, EVENT_METRICS,
 )
 
 s = resolve(dbutils)
@@ -32,7 +32,7 @@ wide = gold_lib.build_kpis_spark(
     silver, EVENT_IDS, SERIES,
     date_col=DATE_COL, needed_cols=NEEDED_COLS,
     visit_key_cols=VISIT_KEY_COLS, visitor_key_cols=VISITOR_KEY_COLS,
-    event_basis=EVENT_BASIS)
+    event_basis=EVENT_BASIS, null_safe_keys=NULL_SAFE_KEYS)
 long = gold_lib.melt_to_long(wide, date_col=DATE_COL)
 
 # COMMAND ----------
@@ -48,8 +48,9 @@ print(f"gold {s.gold_kpi}: {n_days} days x {n_series} series = {long.count()} lo
 # Backfill-only sanity gates (EDA S12 first-run checks, rebased onto gold):
 #   - all 5 funnel events fire somewhere in history (any silent zero needs a business
 #     conversation before that series can be an anomaly KPI);
-#   - both language domains present (language is domain-derived, so en>0 and fr>0 over
-#     history means both production hosts made it through scope).
+#   - both language buckets present (corroboration only -- the authoritative host check
+#     runs in cm_01 at bronze where URLs exist; the retired insttrip host also derives
+#     "en", so language alone cannot prove coverme.com made it through scope).
 if s.mode == "backfill":
     from pyspark.sql import functions as F
     funnel_metrics = [EVENT_METRICS[eid][0] for eid in FUNNEL_EVENT_IDS]
