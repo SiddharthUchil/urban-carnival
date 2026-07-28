@@ -19,6 +19,14 @@
   ΔE 11.3 worst-pair): warn/minor/major/critical ALWAYS render with a text label or
   labeled count — never color alone (normal-vision worst pair 13.6 + light-mode contrast
   relief rule both demand it).
+
+  Business-user layer (2026-07-28 redesign): plain-language L3 takeaways everywhere —
+  computed verdict line + severity-ranked insight feed (templated NLG bound to the same
+  series the charts draw), takeaway chart titles, calendar heatmap of anomaly history,
+  journey-map funnel (equal-width stages, NO taper — SME-compliant), 7/28/90-day presets
+  (multiples of 7 keep DOW-balanced means), click-to-filter KPI tiles, clickable deviation
+  cells, Y-cap at 1.5×max(hi) with ▲ markers. Exactly TWO disclosure levels: all
+  engineering provenance lives in ⓘ popovers, never in card subs.
 -->
 <style>
 /* ============================== tokens ==================================== */
@@ -361,6 +369,105 @@ details.cube > summary:hover { color: var(--ink); }
   .pulse-dot, .pg-tile.t-critical { animation: none; }
   * { transition: none !important; }
 }
+/* ==== visually hidden (screen-reader status) ==== */
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* ==== chart cap marker ==== */
+.clip-mark { font-size: 10px; fill: var(--sev-major); font-weight: 700; }
+.t-cap { color: var(--sev-major); font-weight: 600; }
+/* ==== popover ==== */
+.pop-wrap { position: relative; display: inline-flex; vertical-align: middle; }
+.info-btn { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--hair);
+  background: var(--surface-2); color: var(--muted); font: italic 600 11px/1 var(--sans);
+  cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+.info-btn:hover, .info-btn[aria-expanded="true"] { color: var(--brand-text); border-color: var(--brand); }
+.pop-panel { position: absolute; top: calc(100% + 8px); right: 0; z-index: 60;
+  width: min(360px, 82vw); background: var(--surface); border: 1px solid var(--hair);
+  border-radius: 10px; padding: 12px 14px; box-shadow: var(--shadow);
+  font-size: 12px; line-height: 1.5; color: var(--ink-2); text-align: left;
+  font-weight: 400; white-space: normal; }
+.pop-panel .pop-title { font-weight: 650; color: var(--ink); margin-bottom: 6px; font-size: 12px; }
+.pop-panel p { margin: 0 0 6px; max-width: none; }
+.pop-panel p:last-child { margin-bottom: 0; }
+.pop-panel code { font-family: var(--mono); font-size: 11px; }
+/* ==== verdict hero ==== */
+.verdict-card { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px;
+  border-left: 4px solid var(--brand); }
+.verdict-card.vw-critical { border-left-color: var(--sev-critical); }
+.verdict-card.vw-major { border-left-color: var(--sev-major); }
+.verdict-card.vw-minor { border-left-color: var(--sev-minor); }
+.verdict-card.vw-warn { border-left-color: var(--sev-warn); }
+.verdict-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.verdict { margin: 0; font-size: 19px; line-height: 1.45; font-weight: 550; color: var(--ink); max-width: 100ch; }
+.verdict-sub { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; color: var(--muted); font-size: 12px; }
+/* ==== interactive stat tiles ==== */
+button.stat { font: inherit; color: inherit; text-align: left; cursor: pointer; }
+button.stat:hover { outline: 1.5px solid var(--brand); outline-offset: -1.5px; }
+.stat-link .d { color: var(--brand-text); }
+.stat-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.kpi-num { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; color: inherit; display: block; }
+.kpi-num:hover .v { color: var(--brand-text); }
+.kpi-seg { background: none; border: 1px solid transparent; border-radius: 6px; padding: 1px 4px;
+  cursor: pointer; font: inherit; color: inherit; }
+.kpi-seg:hover { border-color: var(--hair); background: var(--surface-2); }
+.kpi-seg[aria-pressed="true"] { border-color: var(--brand); background: var(--brand-soft); }
+/* ==== insight feed / card heads ==== */
+.acard .headline { display: block; font-size: 13px; font-weight: 550; color: var(--ink); line-height: 1.4; }
+.card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.card-head h2 { margin: 0; }
+/* ==== calendar heatmap ==== */
+.cal-wrap { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.cal-days { display: grid; grid-template-rows: repeat(7, 16px); row-gap: 3px; font-size: 9px;
+  color: var(--muted); align-items: center; margin-top: 17px; }
+.cal-months { display: grid; grid-auto-flow: column; grid-auto-columns: 16px; column-gap: 3px;
+  font-size: 10px; color: var(--muted); height: 14px; margin-bottom: 3px; }
+.cal-months span { white-space: nowrap; }
+.cal-grid { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 16px);
+  grid-auto-columns: 16px; gap: 3px; }
+.cal-cell { width: 16px; height: 16px; border-radius: 4px; background: var(--surface-2);
+  border: 0; padding: 0; font: 600 9px/1 var(--sans); color: var(--ink);
+  display: inline-flex; align-items: center; justify-content: center; }
+.cal-blank { background: transparent; }
+button.cal-cell { cursor: pointer; border: 1.5px solid transparent; }
+.cal-hit:hover { outline: 1.5px solid var(--brand); outline-offset: 1px; }
+.cal-closed { opacity: .55; border-style: dashed; }
+.cal-legend { margin-top: 8px; }
+/* ==== clickable deviation cells ==== */
+.heat-btn { width: 13px; height: 13px; border-radius: 3px; padding: 0; cursor: pointer;
+  border: 1.5px solid var(--ink-2); }
+.heat-btn:hover { outline: 1.5px solid var(--brand); outline-offset: 1px; }
+/* ==== journey map ==== */
+.journey { display: flex; align-items: stretch; gap: 10px; margin-top: 4px; }
+.j-node { flex: 1 1 0; min-width: 0; background: var(--surface-2); border: 1px solid var(--hair);
+  border-radius: 10px; padding: 10px 12px; text-align: left; cursor: pointer; font: inherit;
+  color: inherit; display: flex; flex-direction: column; gap: 6px; }
+.j-node:hover { border-color: var(--brand); }
+.j-node.j-opt { border-style: dashed; background: transparent; }
+.j-name { font-size: 12px; font-weight: 600; color: var(--ink); }
+.j-tag { font-size: 10px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: .05em; }
+.j-val { font-size: 18px; font-weight: 650; color: var(--ink); }
+.j-unit { font-size: 11px; color: var(--muted); font-weight: 500; margin-left: 2px; }
+.j-bar { display: block; height: 6px; border-radius: 3px; background: var(--surface);
+  border: 1px solid var(--hair); overflow: hidden; }
+.j-fill { display: block; height: 100%; background: var(--brand); }
+.j-badge { font-size: 11px; }
+.j-link { flex: 0 0 auto; width: 104px; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 2px; text-align: center; }
+.j-arrow { color: var(--muted); font-size: 15px; }
+.j-link .rv { font-size: 14px; font-weight: 650; color: var(--ink); }
+.j-lbl { font-size: 10px; color: var(--muted); line-height: 1.25; }
+.j-below { display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  margin-top: 10px; flex-wrap: wrap; }
+.j-branchwrap { display: flex; align-items: center; gap: 10px; }
+.j-branchwrap .j-node { flex: 0 1 190px; }
+.j-elbow { color: var(--muted); font-size: 16px; margin-left: 40px; }
+.j-branch-note { max-width: 340px; }
+@media (max-width: 1020px) {
+  .journey { flex-direction: column; }
+  .j-link { width: auto; flex-direction: row; gap: 8px; justify-content: flex-start; padding-left: 12px; }
+  .j-arrow { transform: rotate(90deg); }
+  .j-elbow { margin-left: 12px; }
+}
 /* END-CSS */
 </style>
 </head>
@@ -383,7 +490,8 @@ details.cube > summary:hover { color: var(--ink); }
     <button class="theme-btn" id="theme-btn" aria-label="Toggle color theme">◐ Theme</button>
   </span>
 </header>
-<main id="app" aria-live="polite"></main>
+<main id="app"></main>
+<div id="sr-status" class="visually-hidden" role="status"></div>
 <div class="footer">
   GMAI-Pulse concept prototype — single file, no external requests, deterministic synthetic data.
   Data shapes mirror gold.kpi_daily / gold.anomalies / gold.run_meta (docs 13 &amp; 16, ADR-0008);
@@ -581,6 +689,21 @@ function metricSeries(propId, metricId) {
   return genSeries(propId + ":" + metricId, base, { ratio, anomalies: inj });
 }
 
+/* ============================== series windowing ========================== */
+// Slice AFTER generation so the band math and the cache stay untouched.
+function sliceSeries(s, days) {
+  if (days >= N_DAYS) return { series: s, dates: DATES, offset: 0 };
+  const o = N_DAYS - days;
+  return {
+    series: { vals: s.vals.slice(o), expected: s.expected.slice(o), lo: s.lo.slice(o), hi: s.hi.slice(o) },
+    dates: DATES.slice(o), offset: o,
+  };
+}
+function windowAnoms(anoms, days) {
+  const o = Math.max(0, N_DAYS - days);
+  return (anoms || []).map(a => Object.assign({}, a, { i: a.i - o })).filter(a => a.i >= 0);
+}
+
 /* ============================== anomalies ================================= */
 // Records carry the real gold.anomalies shape:
 // anomaly_id, date, domain, metric_id, segment, observed, expected, score,
@@ -681,9 +804,9 @@ const RCA = {
     needs_human_review: true,
     // dimension localization: Cramér's V ranking + standardized residuals (doc-04 §2a)
     contribution: {
-      dims: [["browser", 0.41], ["device_type", 0.38], ["product_category", 0.19],
-             ["language", 0.07], ["geo_region", 0.05]],
-      residuals: { dim: "browser", values: [
+      dims: [["dfc_user_agent", 0.41], ["dfc_os", 0.38], ["product_category", 0.19],
+             ["language", 0.07], ["dfc_geo_region", 0.05]],
+      residuals: { dim: "dfc_user_agent", values: [
         ["Mobile Safari", -8.2], ["Chrome Android", -0.9], ["Chrome Desktop", 0.4],
         ["Edge Desktop", 0.3], ["Firefox", 0.1]] },
     },
@@ -710,6 +833,104 @@ const DETECTORS = [
   ["event_coverage", "operational", "local:rule.event_coverage", "always-on event (≥90% active) hits zero", "deterministic → critical"],
   ["dim_coverage", "operational", "local:rule.dim_coverage", "blank-rate jump / unseen value with share", "+10 pp · 1% share"],
 ];
+/* ============================== plain language ============================ */
+// L3 takeaway text: every sentence is bound to the same numbers the charts draw,
+// and every % deviation is vs the DOW-median expected (never a weekly mean).
+const SERIES_MONITORED = 88; // 53 CoverMe + 35 GWAM (registry v0.3.0)
+const METRIC_LABELS = {
+  hits_total: "Page views", visits_total: "Visits", visitors_total: "Visitors",
+  pel_228_quote_start: "Quote starts", pel_229_quote_complete: "Quote completes",
+  pel_232_save_quote: "Saved quotes", pel_269_app_start: "Application starts",
+  pel_240_app_confirm: "Application confirms",
+  funnel_quote_complete_over_quote_start: "Quote completes per quote start",
+  funnel_save_quote_over_quote_start: "Saved quotes per quote start",
+  funnel_app_start_over_quote_start: "Application starts per quote start",
+  funnel_app_confirm_over_app_start: "Confirms per application start",
+  funnel_app_confirm_over_quote_start: "Confirms per quote start",
+  event_10036_rate: "Always-on tag coverage",
+  language_share_en: "English share", language_share_fr: "French share",
+  language_share_unknown: "Unknown-language share",
+};
+function metricLabel(m) {
+  if (METRIC_LABELS[m]) return METRIC_LABELS[m];
+  return m.replace(/^pel_\d+_/, "").replace(/^event_(\d+)_/, "event $1 ")
+          .replace(/__evar4_/, " · ").replace(/_/g, " ")
+          .replace(/^./, c => c.toUpperCase());
+}
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MON_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function fmtDay(iso) { // manual name arrays on UTC parts — deterministic, no locale
+  const d = new Date(iso + "T00:00:00Z");
+  return DAY_NAMES[d.getUTCDay()] + " " + MON_NAMES[d.getUTCMonth()] + " " + d.getUTCDate();
+}
+function isRatioMetric(propId, metricId) {
+  const cat = CATALOGS[propId];
+  if (cat) for (const g of cat) for (const [m] of g.metrics) if (m === metricId) return !!g.ratio;
+  return false;
+}
+function fmtVal(v, ratio) { return ratio ? v.toFixed(2) : fmtN(v); }
+function insightText(a) {
+  const prop = propById[a.domain] || { name: a.domain };
+  const ratio = isRatioMetric(a.domain, a.metric_id);
+  const s = metricSeries(a.domain, a.metric_id);
+  const i = DATES.indexOf(a.date);
+  const obs = i >= 0 ? s.vals[i] : a.observed;
+  const exp = i >= 0 ? s.expected[i] : a.expected;
+  const lo = i >= 0 ? s.lo[i] : null, hi = i >= 0 ? s.hi[i] : null;
+  const label = metricLabel(a.metric_id), day = fmtDay(a.date);
+  const pct = exp ? Math.round(100 * Math.abs(obs - exp) / exp) : 0;
+  let headline;
+  if (a.detector === "event_coverage" || a.detector === "zero_volume") {
+    const inj = INJECTIONS.find(x => x.prop === a.domain && x.metric === a.metric_id && x.day === a.date);
+    headline = label + " on " + prop.name + " reported zero for " +
+      ((inj && inj.len) || 1) + " days starting " + day + ".";
+  } else if (a.detector === "level_shift") {
+    headline = label + " on " + prop.name + " have held about " + pct + "% " +
+      (obs >= exp ? "above" : "below") + " expected since " + day + ".";
+  } else {
+    headline = label + " on " + prop.name + " ran " + pct + "% " +
+      (obs >= exp ? "above" : "below") + " expected on " + day +
+      " (" + fmtVal(obs, ratio) + " vs " + fmtVal(exp, ratio) + " expected).";
+  }
+  const detail = lo != null
+    ? "Normal range that day: " + fmtVal(lo, ratio) + "–" + fmtVal(hi, ratio) + "."
+    : "";
+  return { headline, detail, pct: exp ? Math.abs(obs - exp) / exp : 0 };
+}
+function rankedInsights(list) {
+  return list.slice().sort((a, b) => {
+    const d = SEV_ORDER[a.severity] - SEV_ORDER[b.severity];
+    return d || insightText(b).pct - insightText(a).pct;
+  });
+}
+function verdictLine(items) {
+  if (!items.length) {
+    const live = PROPERTIES.filter(p => p.status === "live").length;
+    return "All " + SERIES_MONITORED + " monitored series across " + live +
+      " live properties are within their expected ranges.";
+  }
+  const props = new Set(items.map(a => a.domain)).size;
+  const worst = rankedInsights(items)[0];
+  const bySev = {};
+  items.forEach(a => { bySev[a.severity] = (bySev[a.severity] || 0) + 1; });
+  const sevBits = ["critical", "major", "minor", "warn"].filter(s => bySev[s])
+    .map(s => bySev[s] + " " + s).join(", ");
+  return items.length + (items.length === 1 ? " anomaly" : " anomalies") +
+    " across " + props + (props === 1 ? " property" : " properties") +
+    " — " + sevBits + ". " + insightText(worst).headline;
+}
+function takeaway(propId, metricId, days) {
+  const cutoff = N_DAYS - days;
+  const inWin = ANOMALIES.filter(a => a.domain === propId && a.metric_id === metricId &&
+    DATES.indexOf(a.date) >= cutoff);
+  const open = inWin.filter(a => a.status !== "closed");
+  const sub = metricLabel(metricId) + " · " + metricId;
+  if (open.length) return { title: insightText(rankedInsights(open)[0]).headline, sub };
+  if (inWin.length) return { title: metricLabel(metricId) + ": back inside the expected range (" +
+    inWin.length + " resolved anomal" + (inWin.length === 1 ? "y" : "ies") + " in the last " + days + " days)", sub };
+  return { title: metricLabel(metricId) + ": tracking the expected range — last " + days + " days", sub };
+}
+
 /* ============================== svg kit =================================== */
 function sparkSvg(vals, anoms) {
   const w = 200, h = 34, p = 3;
@@ -727,7 +948,7 @@ function sparkSvg(vals, anoms) {
     <circle cx="${x(last).toFixed(1)}" cy="${y(vals[last]).toFixed(1)}" r="2.6" fill="var(--brand)"></circle>${dots}</svg>`;
 }
 
-const BAND_REGISTRY = {};
+let BAND_REGISTRY = {};
 let bandSeq = 0;
 function bandChart(series, opts) {
   opts = opts || {};
@@ -736,10 +957,17 @@ function bandChart(series, opts) {
   const iw = w - mL - mR, ih = h - mT - mB;
   const n = series.vals.length;
   const isRatio = !!opts.ratio;
+  const dts = opts.dates || DATES;
+  // Y-cap: band-relative (1.5 × max hi) so a one-day spike can't flatten the
+  // series, while a sustained level shift (which raises the band) stays visible.
+  const cap = opts.cap === false ? Infinity : 1.5 * Math.max(...series.hi);
+  const drawn = series.vals.map(v => Math.min(v, cap));
+  const clipped = [];
+  series.vals.forEach((v, i) => { if (v > cap) clipped.push(i); });
   let mn = Infinity, mx = -Infinity;
   for (let i = 0; i < n; i++) {
-    mn = Math.min(mn, series.vals[i], series.lo[i]);
-    mx = Math.max(mx, series.vals[i], series.hi[i]);
+    mn = Math.min(mn, drawn[i], series.lo[i]);
+    mx = Math.max(mx, drawn[i], series.hi[i]);
   }
   mn = Math.max(0, mn - (mx - mn) * 0.06); mx += (mx - mn) * 0.06;
   const x = i => mL + iw * i / (n - 1);
@@ -755,12 +983,16 @@ function bandChart(series, opts) {
   }
   for (let t = 0; t < 6; t++) {
     const i = Math.round((n - 1) * t / 5);
-    axis += `<text x="${x(i).toFixed(1)}" y="${h - 8}" text-anchor="middle">${DATES[i].slice(5)}</text>`;
+    axis += `<text x="${x(i).toFixed(1)}" y="${h - 8}" text-anchor="middle">${dts[i].slice(5)}</text>`;
   }
   let dots = "";
   for (const a of (opts.anoms || [])) {
     if (a.i < 0) continue;
-    dots += `<circle class="anom-dot sev-${a.sev}" cx="${x(a.i).toFixed(1)}" cy="${y(series.vals[a.i]).toFixed(1)}" r="${a.sev === "critical" ? 6 : 5}"></circle>`;
+    dots += `<circle class="anom-dot sev-${a.sev}" cx="${x(a.i).toFixed(1)}" cy="${y(drawn[a.i]).toFixed(1)}" r="${a.sev === "critical" ? 6 : 5}"></circle>`;
+  }
+  let clipMarks = "";
+  for (const i of clipped) {
+    clipMarks += `<text class="clip-mark" x="${x(i).toFixed(1)}" y="${mT + 9}" text-anchor="middle">▲</text>`;
   }
   let refline = "";
   if (opts.refline != null && opts.refline > mn && opts.refline < mx) {
@@ -768,20 +1000,21 @@ function bandChart(series, opts) {
     refline = `<line x1="${mL}" x2="${w - mR}" y1="${ry}" y2="${ry}" stroke="var(--sev-major)" stroke-width="1" stroke-dasharray="2 4"></line>
       <text x="${w - mR}" y="${+ry - 4}" text-anchor="end" fill="var(--sev-major)" font-size="10" font-weight="600">${opts.reflineLabel || opts.refline}</text>`;
   }
-  BAND_REGISTRY[id] = { series, anoms: opts.anoms || [], mL, iw, n, ratio: isRatio };
+  BAND_REGISTRY[id] = { series, anoms: opts.anoms || [], mL, iw, n, ratio: isRatio, dates: dts, cap };
   return `<div class="chart-wrap bandchart" data-band="${id}">
     <div class="legend">
       <span class="li"><span class="ln" style="border-color:var(--brand)"></span>observed</span>
       <span class="li"><span class="ln dashed" style="border-color:var(--muted)"></span>expected (DOW median)</span>
       <span class="li"><span class="sw" style="background:var(--band-fill);border:1px solid var(--hair)"></span>normal band (±3.5σ)</span>
       ${(opts.anoms || []).length ? '<span class="li"><span class="sw" style="background:var(--sev-major)"></span>anomaly (sized by severity, labeled on hover)</span>' : ""}
+      ${clipped.length ? `<span class="li">▲ ${clipped.length} point${clipped.length === 1 ? "" : "s"} above the chart cap — hover for the true value</span>` : ""}
     </div>
     <svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(opts.label || "time series with expected band")}">
       <g class="svg-grid">${grid}</g>
       <path class="band" d="${bandPath}"></path>
       <path class="exp-line" d="${line(series.expected)}"></path>
-      <path class="obs-line" d="${line(series.vals)}"></path>
-      ${refline}${dots}
+      <path class="obs-line" d="${line(drawn)}"></path>
+      ${refline}${dots}${clipMarks}
       <line class="crosshair" data-x id="x-${id}" y1="${mT}" y2="${mT + ih}" x1="-10" x2="-10"></line>
       <g class="svg-axis">${axis}</g>
       <rect data-hover="${id}" x="${mL}" y="${mT}" width="${iw}" height="${ih}" fill="transparent"></rect>
@@ -801,9 +1034,11 @@ function wireBandCharts(root) {
       ch.setAttribute("x1", sx); ch.setAttribute("x2", sx);
       const f = reg.ratio ? (v => v.toFixed(3)) : fmtN;
       const an = reg.anoms.find(a => a.i === i);
+      const capped = reg.series.vals[i] > reg.cap;
       showTip(ev,
-        `<div class="t-title">${DATES[i]}</div>` +
+        `<div class="t-title">${reg.dates[i]}</div>` +
         `observed <b>${f(reg.series.vals[i])}</b> · expected ${f(reg.series.expected[i])}` +
+        (capped ? ` <span class="t-cap">▲ above chart cap</span>` : "") +
         (an ? `<div><b>${an.sev}</b> — ${esc(an.label || an.sev + " anomaly")}</div>` : ""));
     });
     r.addEventListener("mouseleave", () => { ch.setAttribute("x1", -10); ch.setAttribute("x2", -10); hideTip(); });
@@ -841,8 +1076,14 @@ function zColor(z) {
 }
 
 /* ============================== state ===================================== */
-const FEED_STATE = { sev: "all", status: "open" };
+const FEED_STATE = { sev: "all", status: "open", day: null, expanded: false };
 const PROP_STATE = { prop: "coverme", metric: "pel_228_quote_start" };
+const RANGE_STATE = { property: 90, funnel: 28, anomaly: 90 }; // per-route day windows
+const RANGE_LABELS = { 7: "Last week", 28: "Last 4 weeks", 90: "Full history" };
+function rangeChips(route) { // 7/28/90 — multiples of 7 keep DOW-balanced means
+  return `<div class="chip-row">` + [7, 28, 90].map(d =>
+    `<button class="chip" data-range="${d}" aria-pressed="${RANGE_STATE[route] === d}">${RANGE_LABELS[d]}</button>`).join("") + `</div>`;
+}
 
 /* ============================== overview view ============================= */
 function anomalyCounts() {
@@ -855,19 +1096,19 @@ function feedItems() {
   return ANOMALIES
     .filter(a => FEED_STATE.sev === "all" || a.severity === FEED_STATE.sev)
     .filter(a => FEED_STATE.status === "all" || (FEED_STATE.status === "open" ? a.status !== "closed" : a.status === FEED_STATE.status))
+    .filter(a => !FEED_STATE.day || a.date === FEED_STATE.day)
     .sort((a, b) => (SEV_ORDER[a.severity] - SEV_ORDER[b.severity]) || (a.date < b.date ? 1 : -1));
 }
 function anomalyCard(a) {
   const p = propById[a.domain];
-  const delta = (a.observed != null && a.expected) ? (a.observed - a.expected) / a.expected : null;
-  const dCls = delta == null ? "" : (delta < 0 ? "delta-bad" : "delta-good");
+  const t = insightText(a);
   return `<button class="acard${a.status === "closed" ? " closed" : ""}" data-anomaly="${esc(a.anomaly_id)}">
-    <span class="top">${sevBadge(a.severity)}<span class="metric">${esc(a.metric_id)}</span>
+    <span class="headline">${esc(t.headline)}</span>
+    <span class="top">${sevBadge(a.severity)}<span>${esc(p.name)}</span>
       <span class="status-chip">${a.status}${a.reconciled ? " · reconciled" : ""}</span></span>
-    <span class="meta"><span>${esc(p.name)}</span><span>${a.date}</span>
-      ${delta != null ? `<span class="${dCls}">${delta >= 0 ? "+" : ""}${fmtPct(delta, 0)} vs expected</span>` : ""}
-      <span>${a.detector}${a.score != null ? ` · z ${a.score.toFixed(1)}` : ""}</span></span>
-    <span class="meta">${esc(a.note || "")}</span></button>`;
+    ${a.note ? `<span class="meta">${esc(a.note)}</span>` : ""}
+    <span class="meta"><span class="metric">${esc(a.metric_id)}</span>
+      <span>${a.detector}${a.score != null ? ` · z ${a.score.toFixed(1)}` : ""}</span></span></button>`;
 }
 function pulseGrid() {
   let html = `<div class="pulse-grid">`;
@@ -877,7 +1118,7 @@ function pulseGrid() {
     html += `<div class="pg-region"><div class="pg-label"><span class="eyebrow">${esc(region)}</span><span class="seg">eVar105 segment: ${esc(seg)}</span></div><div class="pg-tiles">`;
     for (const p of props) {
       if (p.status === "onboarding") {
-        html += `<div class="pg-tile t-onboarding" data-tip="<b>${esc(p.name)}</b><br>Mapped for onboarding — the pipeline is config-not-code per domain (doc 13 §6)." >
+        html += `<div class="pg-tile t-onboarding" data-tip="<b>${esc(p.name)}</b><br>Mapped for onboarding — not yet monitored." >
           <div class="nm">${esc(p.name)}</div><div class="st">onboarding</div></div>`;
         continue;
       }
@@ -916,7 +1157,7 @@ function overviewSparks() {
     const sev = worstSeverity(pid);
     html += `<button class="spark-cell" data-goto-prop="${pid}"
       data-tip="<b>${esc(p.name)}</b><br>hits_total, last 90 days · yesterday ${fmtN(last)}<br>WoW ${wow >= 0 ? "+" : ""}${fmtPct(wow, 1)}">
-      <div class="nm">${esc(p.name)} · hits_total</div>
+      <div class="nm">${esc(p.name)}</div>
       <div class="row"><span class="v num">${fmtN(last)}</span>
         <span class="hint num">${wow >= 0 ? "▲" : "▼"} ${fmtPct(Math.abs(wow), 1)} WoW</span></div>
       ${sparkSvg(s.vals.slice(-60), anoms.map(a => ({ i: a.i - 30, sev: a.sev })).filter(a => a.i >= 0))}
@@ -925,42 +1166,137 @@ function overviewSparks() {
   }
   return html + "</div>";
 }
+function calHeatmap() {
+  const byDay = new Map();
+  for (const a of ANOMALIES) {
+    const e = byDay.get(a.date) || { n: 0, worst: null, allClosed: true };
+    e.n++;
+    if (a.status !== "closed") e.allClosed = false;
+    if (!e.worst || SEV_ORDER[a.severity] < SEV_ORDER[e.worst]) e.worst = a.severity;
+    byDay.set(a.date, e);
+  }
+  const lead = DOW[0]; // leading blanks so the first column starts on Sunday
+  let cells = "";
+  for (let k = 0; k < lead; k++) cells += `<div class="cal-cell cal-blank" aria-hidden="true"></div>`;
+  for (let i = 0; i < N_DAYS; i++) {
+    const date = DATES[i], e = byDay.get(date);
+    if (!e) {
+      cells += `<div class="cal-cell" data-tip="${esc(fmtDay(date))} — nothing flagged"></div>`;
+      continue;
+    }
+    const heads = ANOMALIES.filter(a => a.date === date)
+      .map(a => `${esc(metricLabel(a.metric_id))} — ${a.severity}${a.status === "closed" ? " (closed)" : ""}`).join("<br>");
+    const mix = 20 + Math.min(e.n, 3) * 8;
+    cells += `<button type="button" class="cal-cell cal-hit${e.allClosed ? " cal-closed" : ""}" data-cal-day="${date}"
+      style="background:color-mix(in srgb, var(--sev-${e.worst}) ${mix}%, var(--surface-2));border-color:var(--sev-${e.worst})"
+      aria-label="${esc(fmtDay(date))}: ${e.n} anomal${e.n === 1 ? "y" : "ies"}, worst ${e.worst}${e.allClosed ? ", all closed" : ""}"
+      data-tip="<b>${esc(fmtDay(date))}</b><br>${heads}">${e.n}</button>`;
+  }
+  const weeks = Math.ceil((lead + N_DAYS) / 7);
+  let months = "", prevM = -1;
+  for (let w = 0; w < weeks; w++) {
+    const i = Math.max(0, w * 7 - lead);
+    const m = new Date(DATES[Math.min(i, N_DAYS - 1)] + "T00:00:00Z").getUTCMonth();
+    months += `<span>${m !== prevM ? MON_NAMES[m] : ""}</span>`;
+    prevM = m;
+  }
+  return `<div class="cal-wrap">
+    <div class="cal-days" aria-hidden="true"><span></span><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span></div>
+    <div>
+      <div class="cal-months" aria-hidden="true">${months}</div>
+      <div class="cal-grid">${cells}</div>
+      <div class="cal-legend hint">colour follows the worst severity that day (named in the label) · dashed &amp; faded = all closed</div>
+    </div></div>`;
+}
 function viewOverview() {
   const { open, c } = anomalyCounts();
   const live = PROPERTIES.filter(p => p.status === "live").length;
   const onb = PROPERTIES.length - live;
+  const items = feedItems();
+  const ranked = rankedInsights(items);
+  const shown = FEED_STATE.expanded ? ranked : ranked.slice(0, 5);
+  let verdict;
+  if (FEED_STATE.day) {
+    verdict = items.length
+      ? "On " + fmtDay(FEED_STATE.day) + ": " + verdictLine(items)
+      : "No anomalies were flagged on " + fmtDay(FEED_STATE.day) + ".";
+  } else if (!items.length && (FEED_STATE.sev !== "all" || FEED_STATE.status !== "open")) {
+    verdict = "No " + (FEED_STATE.sev === "all" ? "" : FEED_STATE.sev + " ") + "anomalies match these filters.";
+  } else {
+    verdict = verdictLine(items);
+  }
+  const worst = ranked.length ? ranked[0].severity : null;
   const sevChips = ["all", "critical", "major", "minor", "warn"].map(s =>
     `<button class="chip" data-feed-sev="${s}" aria-pressed="${FEED_STATE.sev === s}">${s === "all" ? "All severities" : s + (s === "all" ? "" : " (" + (c[s] || 0) + ")")}</button>`).join("");
   const stChips = ["open", "triaged", "all"].map(s =>
     `<button class="chip" data-feed-status="${s}" aria-pressed="${FEED_STATE.status === s}">${s}</button>`).join("");
+  const dayChip = FEED_STATE.day
+    ? `<button class="chip" data-clear-day="1" aria-pressed="true">on ${fmtDay(FEED_STATE.day)} ✕</button>` : "";
   return `
   <div class="view-head"><h1>Global overview</h1>
-    <p>Every Manulife web property on one pulse — anomalies triaged by severity, expansion mapped by region. Synthetic data; shapes mirror <span class="mono">gold.anomalies</span> and <span class="mono">gold.kpi_daily</span>.</p></div>
+    <p>Is every Manulife web property behaving as expected today?</p></div>
+  <div class="card verdict-card${worst ? " vw-" + worst : ""}">
+    <div class="verdict-row"><p class="verdict">${esc(verdict)}</p>
+      ${popover("pop-verdict", "About this console",
+        `<p>One scoring run checks all ${SERIES_MONITORED} monitored series every morning at 06:00 ET; anything outside its expected range lands in the list below.</p>
+         <p>Concept prototype on synthetic data — shapes mirror <code>gold.anomalies</code> and <code>gold.kpi_daily</code> (ADR-0008 serving contract).</p>`)}
+    </div>
+    <div class="verdict-sub"><span><span style="color:var(--brand-text);font-weight:600">✓ fresh</span> · last scored 06:00 ET · <span class="mono">${RUN_META.run_id}</span></span></div>
+  </div>
   <div class="stat-row">
-    <div class="stat"><div class="eyebrow">Open anomalies</div><div class="v num">${open}</div>
-      <div class="d">${["critical", "major", "minor", "warn"].filter(s => c[s]).map(s => `${sevBadge(s)}&nbsp;<b>${c[s]}</b>`).join(" · ") || "none"}</div></div>
+    <div class="stat"><div class="eyebrow">Open anomalies</div>
+      <button class="kpi-num" data-kpi-sev="all" aria-pressed="${FEED_STATE.sev === "all" && FEED_STATE.status === "open" && !FEED_STATE.day}"><span class="v num">${open}</span></button>
+      <div class="d">${["critical", "major", "minor", "warn"].filter(s => c[s]).map(s =>
+        `<button class="kpi-seg" data-kpi-sev="${s}" aria-pressed="${FEED_STATE.sev === s && FEED_STATE.status === "open"}">${sevBadge(s)}&nbsp;<b>${c[s]}</b></button>`).join(" ") || "none"}</div></div>
     <div class="stat"><div class="eyebrow">Properties</div><div class="v num">${live}</div>
       <div class="d"><b>live</b> · ${onb} mapped for onboarding</div></div>
-    <div class="stat"><div class="eyebrow">Series monitored</div><div class="v num">88</div>
-      <div class="d">53 CoverMe + 35 GWAM · registry <span class="mono">v0.3.0</span></div></div>
-    <div class="stat"><div class="eyebrow">Eligible traffic</div><div class="v num">94.3%</div>
-      <div class="d">bots excluded (<span class="mono">exclude_hit&gt;0</span>, SME rule)</div></div>
-    <div class="stat"><div class="eyebrow">Last scoring run</div><div class="v num">06:00 ET</div>
-      <div class="d"><span style="color:var(--brand-text);font-weight:600">✓ fresh</span> · ${RUN_META.run_id.slice(0, 22)}…</div></div>
+    <button class="stat stat-link" data-route="property"><div class="eyebrow">Series monitored</div><div class="v num">${SERIES_MONITORED}</div>
+      <div class="d">53 CoverMe + 35 GWAM · open the series browser →</div></button>
+    <div class="stat"><div class="stat-head"><div class="eyebrow">Eligible traffic</div>
+      ${popover("pop-elig", "Eligible traffic",
+        `<p>The share of raw hits that counts toward monitoring after bot removal.</p>
+         <p>Bots are excluded with the SME-confirmed rule <code>exclude_hit&gt;0</code>; the excluded 5.7% never reaches a KPI.</p>`)}</div>
+      <div class="v num">94.3%</div>
+      <div class="d">bots excluded before scoring</div></div>
+    <button class="stat stat-link" data-route="ops"><div class="eyebrow">Last scoring run</div><div class="v num">06:00 ET</div>
+      <div class="d"><span style="color:var(--brand-text);font-weight:600">✓ fresh</span> · pipeline detail →</div></button>
   </div>
   <div class="grid cols-overview">
     <div class="card">
-      <h2>Anomaly feed</h2><p class="sub">Severity-sorted · click to investigate &amp; triage</p>
+      <div class="card-head"><h2>What needs attention</h2>
+        ${popover("pop-feed", "How this list is ranked",
+          `<p>Each line is one detected anomaly, worded from the same numbers the charts draw — ranked by severity, then by how far the day landed from expected.</p>
+           <p>Click a line to investigate and triage. The filters narrow this list, and the verdict sentence above follows the same filters.</p>`)}
+      </div>
+      <p class="sub">Plain language, severity-ranked · click a line to investigate</p>
       <div class="chip-row">${sevChips}</div>
-      <div class="chip-row">${stChips}</div>
-      <div class="feed">${feedItems().map(anomalyCard).join("") || `<p class="hint">No anomalies match these filters.</p>`}</div>
+      <div class="chip-row">${stChips}${dayChip}</div>
+      <div class="feed">${shown.map(anomalyCard).join("") || `<p class="hint">${FEED_STATE.day ? "Nothing was flagged on " + fmtDay(FEED_STATE.day) + "." : "All " + SERIES_MONITORED + " monitored series were within their expected ranges for these filters."}</p>`}
+        ${ranked.length > 5 ? (FEED_STATE.expanded
+          ? `<button class="chip" data-feed-expand="0">Show top 5 only</button>`
+          : `<button class="chip" data-feed-expand="1">Show all ${ranked.length}</button>`) : ""}</div>
     </div>
     <div class="stack">
-      <div class="card"><h2>Manulife pulse grid</h2>
-        <p class="sub">All regions, one glance — worst open severity per property, expansion path included</p>
+      <div class="card"><div class="card-head"><h2>When things went wrong — last 90 days</h2>
+        ${popover("pop-cal", "Reading the calendar",
+          `<p>Each cell is one day; the number is how many series were flagged that day. Colour follows the worst severity, and the day's anomalies are listed on hover.</p>
+           <p>Click a day to see exactly what happened. An empty row of cells is good news.</p>`)}
+        </div>
+        <p class="sub">Anomaly history by day · click a day to see its anomalies</p>
+        ${calHeatmap()}</div>
+      <div class="card"><div class="card-head"><h2>Manulife pulse grid</h2>
+        ${popover("pop-pulse", "Reading the pulse grid",
+          `<p>One tile per web property, grouped by region. Tile colour is the worst <b>open</b> severity — always labelled on the tile; tile size is traffic share from the rsid census.</p>
+           <p>Dashed tiles are mapped for onboarding but not yet monitored — adding one is configuration, not code (doc 13 §6). Region groups carry their <code>eVar105</code> segment.</p>`)}
+        </div>
+        <p class="sub">All regions at a glance — click a tile to drill in</p>
         ${pulseGrid()}</div>
-      <div class="card"><h2>Headline traffic — last 60 days</h2>
-        <p class="sub"><span class="mono">hits_total</span> per property · dot = flagged anomaly (severity labeled on the tile badge)</p>
+      <div class="card"><div class="card-head"><h2>Headline traffic — last 60 days</h2>
+        ${popover("pop-sparks", "About these sparklines",
+          `<p>Daily page views (<code>hits_total</code>) per property, all on their own scale — read the shape, not the height, and compare properties by the number, not the line.</p>
+           <p>A dot marks a day the detector flagged; its severity is labelled on the tile badge.</p>`)}
+        </div>
+        <p class="sub">Page views per property · a dot marks a flagged day</p>
         ${overviewSparks()}</div>
     </div>
   </div>`;
@@ -973,26 +1309,37 @@ function metricOptions(propId) {
   for (const g of cat) {
     if (g.cube) continue;
     out += `<optgroup label="${esc(g.label)}">` +
-      g.metrics.map(([m]) => `<option value="${m}"${m === PROP_STATE.metric ? " selected" : ""}>${m}</option>`).join("") +
+      g.metrics.map(([m]) => `<option value="${m}"${m === PROP_STATE.metric ? " selected" : ""}>${esc(metricLabel(m))}</option>`).join("") +
       "</optgroup>";
   }
   return out;
 }
-function propHeatmap(propId) {
+function propHeatmap(propId, nD) {
   const cat = CATALOGS[propId];
   const rows = [];
   for (const g of cat) { if (!g.cube) for (const [m] of g.metrics) rows.push(m); }
   const top = rows.slice(0, 12);
-  const nD = 30, off = N_DAYS - nD;
+  nD = Math.min(nD || 30, 30); // 90 × 13px cells would overflow the column
+  const off = N_DAYS - nD;
+  const anomBy = new Map();
+  for (const a of ANOMALIES) if (a.domain === propId) anomBy.set(a.metric_id + "|" + a.date, a.anomaly_id);
   let html = `<div style="display:grid;grid-template-columns:max-content 1fr;gap:2px 10px;align-items:center">`;
   for (const m of top) {
     const s = metricSeries(propId, m);
-    html += `<div class="mono" style="font-size:10.5px;color:var(--ink-2)">${esc(m)}</div><div style="display:flex;gap:2px">`;
+    html += `<div style="font-size:10.5px;color:var(--ink-2)" data-tip="<span class='t-mono'>${esc(m)}</span>">${esc(metricLabel(m))}</div><div style="display:flex;gap:2px">`;
     for (let i = off; i < N_DAYS; i++) {
       const sig = (s.hi[i] - s.expected[i]) / 3.5 || 1;
       const z = (s.vals[i] - s.expected[i]) / sig;
-      html += `<div data-tip="<span class='t-mono'>${esc(m)}</span><br>${DATES[i]} · z = ${z.toFixed(1)}"
-        style="width:13px;height:13px;border-radius:3px;background:${zColor(z)}"></div>`;
+      const aid = anomBy.get(m + "|" + DATES[i]);
+      if (aid) {
+        html += `<button type="button" class="heat-btn" data-anomaly="${esc(aid)}"
+          aria-label="${esc(metricLabel(m))} ${esc(fmtDay(DATES[i]))}: z ${z.toFixed(1)} — open anomaly detail"
+          data-tip="<span class='t-mono'>${esc(m)}</span><br>${DATES[i]} · z = ${z.toFixed(1)}<br><b>click to open this anomaly</b>"
+          style="background:${zColor(z)}"></button>`;
+      } else {
+        html += `<div data-tip="<span class='t-mono'>${esc(m)}</span><br>${DATES[i]} · z = ${z.toFixed(1)}"
+          style="width:13px;height:13px;border-radius:3px;background:${zColor(z)}"></div>`;
+      }
     }
     html += `</div>`;
   }
@@ -1001,18 +1348,22 @@ function propHeatmap(propId) {
     <span class="li"><span class="sw" style="background:var(--div-neg)"></span>drop (z ≤ −5)</span>
     <span class="li"><span class="sw" style="background:var(--div-mid);border:1px solid var(--hair)"></span>normal (|z| &lt; 1.75)</span>
     <span class="li"><span class="sw" style="background:var(--div-pos)"></span>spike (z ≥ +5)</span>
-    <span class="li hint">hover a cell for the exact z</span>
+    <span class="li hint">hover for exact values · ringed cells are flagged anomalies — click to open</span>
   </div>`;
   return html;
 }
 function viewProperty() {
   const pid = PROP_STATE.prop, p = propById[pid];
+  const range = RANGE_STATE.property;
   const s = metricSeries(pid, PROP_STATE.metric);
+  const win = sliceSeries(s, range);
   const isRatio = (CATALOGS[pid] || []).some(g => g.ratio && g.metrics.some(([m]) => m === PROP_STATE.metric));
-  const anoms = ANOMALIES
+  const anoms = windowAnoms(ANOMALIES
     .filter(a => a.domain === pid && a.metric_id === PROP_STATE.metric)
     .map(a => ({ i: DATES.indexOf(a.date), sev: a.severity, label: a.note }))
-    .filter(a => a.i >= 0);
+    .filter(a => a.i >= 0), range);
+  const tw = takeaway(pid, PROP_STATE.metric, range);
+  const heatDays = Math.min(range, 30);
   const cat = CATALOGS[pid] || [];
   let groupsHtml = "";
   for (const g of cat) {
@@ -1022,7 +1373,7 @@ function viewProperty() {
       const mAn = ANOMALIES.filter(a => a.domain === pid && a.metric_id === m && a.status !== "closed");
       return `<button class="spark-cell" data-pick-metric="${m}"
         data-tip="<span class='t-mono'>${esc(m)}</span><br>latest ${g.ratio ? last.toFixed(3) : fmtN(last)} — click to chart">
-        <div class="nm">${esc(m)}</div>
+        <div class="nm">${esc(metricLabel(m))}</div>
         <div class="row"><span class="v num">${g.ratio ? last.toFixed(2) : fmtN(last)}</span></div>
         ${sparkSvg(ss.vals.slice(-42))}
         ${mAn.length ? `<div class="badges">${sevBadge(mAn[0].severity)}</div>` : ""}
@@ -1034,23 +1385,35 @@ function viewProperty() {
   }
   return `
   <div class="view-head"><h1>Property drill — ${esc(p.name)}</h1>
-    <p><span class="mono">${esc(p.rsid)}</span> · segment ${esc(p.segment)} · every registered series, its expected band, and a 30-day deviation map.</p></div>
+    <p>How is every measured series on this property behaving? <span class="mono">${esc(p.rsid)}</span> · segment ${esc(p.segment)}</p></div>
   <div class="chip-row">
     ${["coverme", "gwam-ca"].map(id => `<button class="chip" data-pick-prop="${id}" aria-pressed="${pid === id}">${esc(propById[id].name)}</button>`).join("")}
     <span class="hint" style="align-self:center">other properties expose headline series only in this concept</span>
   </div>
+  ${rangeChips("property")}
   <div class="card">
-    <h2>Expected-band chart</h2>
-    <p class="sub">metric&nbsp;
+    <div class="card-head"><h2>${esc(tw.title)}</h2>
+      ${popover("pop-band", "How to read this chart",
+        `<p>The solid line is what actually happened. The dashed line is what we expected for that day of the week, and the shaded band is the normal range around it.</p>
+         <p>Dots mark days that broke out of the band — <b>if no dots are shown, everything is within its expected range.</b> The band comes from the trailing same-weekday median ±3.5σ, the same baseline the detector uses.</p>`)}
+    </div>
+    <p class="sub"><span class="mono">${esc(PROP_STATE.metric)}</span> · metric&nbsp;
       <select class="select" id="metric-select" aria-label="Metric">${metricOptions(pid)}</select>
     </p>
-    ${bandChart(s, { anoms, ratio: isRatio, label: PROP_STATE.metric })}
+    ${bandChart(win.series, { anoms, ratio: isRatio, label: PROP_STATE.metric, dates: win.dates })}
   </div>
   <div class="grid cols-2" style="margin-top:16px">
-    <div class="card"><h2>Deviation map — 30 days × top series</h2>
-      <p class="sub">robust z vs the DOW-median expectation (diverging scale, hover for values)</p>
-      ${propHeatmap(pid)}</div>
-    <div class="card"><h2>Series browser</h2>
+    <div class="card"><div class="card-head"><h2>Deviation map — last ${heatDays} days × top series</h2>
+      ${popover("pop-heat", "Reading the deviation map",
+        `<p>One row per series, one cell per day. Blue = below expected, red = above; faint cells are normal days (the scale stays neutral below |z| = 1.75 so noise doesn't ink).</p>
+         <p>Cells with a ring are flagged anomalies — click one to open its detail page.</p>`)}
+      </div>
+      <p class="sub">where and when this property deviated · click a ringed cell to investigate</p>
+      ${propHeatmap(pid, heatDays)}</div>
+    <div class="card"><div class="card-head"><h2>Series browser</h2>
+      ${popover("pop-series", "About these series",
+        `<p>Every registered series for this property (registry <code>v0.3.0</code>, owner: Kerrian). Funnel events are visit-distinct; funnel ratios are population proxies and can exceed 1.0; language shares are domain-derived under the interim SME rule.</p>`)}
+      </div>
       <p class="sub">click any series to chart it above${pid === "coverme" ? " · cube collapsed by default (30 series)" : ""}</p>
       ${groupsHtml}</div>
   </div>`;
@@ -1079,8 +1442,11 @@ function viewAnomaly() {
   let rcaHtml;
   if (rca) {
     rcaHtml = `
-    <div class="card"><h2>RCA insight card <span class="mono hint">${esc(rca.incident)}</span></h2>
-      <p class="sub">generated by the investigation agent · schema per doc-04 §3</p>
+    <div class="card"><div class="card-head"><h2>Why it likely happened <span class="mono hint">${esc(rca.incident)}</span></h2>
+      ${popover("pop-rca", "About this analysis",
+        `<p>Generated by the investigation agent when an anomaly reaches <b>major</b> severity or above (schema per doc-04 §3). Hypotheses are ranked by confidence; every claim cites its evidence.</p>
+         <p>It is a starting point for a human, not a verdict — hence the review flag at the bottom.</p>`)}
+      </div>
       <p style="margin:0 0 12px">${esc(rca.summary)}</p>
       <div class="rec-grid" style="margin-bottom:12px">
         <div class="f"><div class="k">What</div><div class="v">${esc(rca.what)}</div></div>
@@ -1109,8 +1475,11 @@ function viewAnomaly() {
       </div>
     </div>`;
   } else {
-    rcaHtml = `<div class="card"><h2>RCA insight card</h2>
-      <p class="sub">not generated — Gen-AI RCA runs for <b>major+</b> severities only (doc-03 §6 routing)</p>
+    rcaHtml = `<div class="card"><div class="card-head"><h2>Why it likely happened</h2>
+      ${popover("pop-rca", "When analysis runs",
+        `<p>The automated root-cause analysis runs for <b>major</b> and <b>critical</b> anomalies only (doc-03 §6 routing) — this one is below that bar.</p>`)}
+      </div>
+      <p style="margin:0 0 8px">No automated root-cause analysis for this anomaly — it runs for major and critical severities only.</p>
       <p class="hint" style="margin:0">${esc(a.note || "")}</p></div>`;
   }
   let contribHtml = "";
@@ -1131,8 +1500,12 @@ function viewAnomaly() {
       rsvg += `<text class="hbar-val" x="${(v < 0 ? xx - 8 : xx + bw + 8).toFixed(1)}" y="${yy + rh / 2 + 4}"${v < 0 ? ' text-anchor="end"' : ""}>${v.toFixed(1)}</text>`;
     });
     rsvg += "</svg>";
-    contribHtml = `<div class="card"><h2>Contribution analysis</h2>
-      <p class="sub">dimension relevance by Cramér's V, then standardized residuals inside the top dimension (doc-04 §2a)</p>
+    contribHtml = `<div class="card"><div class="card-head"><h2>Where the change is concentrated</h2>
+      ${popover("pop-contrib", "How this is computed",
+        `<p>Dimensions are ranked by how strongly they associate with the anomaly (Cramér's V); the bars below then show which values inside the top dimension moved, as standardized residuals (doc-04 §2a).</p>
+         <p>Long blue bars are the drivers of a drop; red bars moved the other way.</p>`)}
+      </div>
+      <p class="sub">which slice of traffic actually moved</p>
       <div class="eyebrow" style="margin-bottom:6px">Dimension ranking (Cramér's V)</div>
       <div class="chart-wrap">${hbars(cw.dims.map(([d, v]) => ({
         label: d, value: v, valText: v.toFixed(2), color: "var(--s1)",
@@ -1144,34 +1517,99 @@ function viewAnomaly() {
     </div>`;
   }
   const statuses = ["open", "triaged", "closed"];
+  const insight = insightText(a);
+  const range = RANGE_STATE.anomaly;
+  const effRange = (i >= 0 && i < N_DAYS - range) ? 90 : range; // never an empty context chart
+  const win = sliceSeries(s, effRange);
+  const chartAnoms = windowAnoms(i >= 0 ? [{ i, sev: a.severity, label: a.note }] : [], effRange);
   return `
   <div class="view-head"><h1>Anomaly detail</h1>
-    <p>The full <span class="mono">gold.anomalies</span> record, the series in context, machine RCA, and the analyst write-back — status and reconciliation flow to the governed feedback table (ADR-0008).</p></div>
+    <p>What happened, why it likely happened, and what to do about it.</p></div>
   <div class="chip-row">${ANOMALIES.filter(x => x.status !== "closed" || x.anomaly_id === a.anomaly_id).map(x =>
-    `<button class="chip" data-anomaly="${esc(x.anomaly_id)}" aria-pressed="${x.anomaly_id === a.anomaly_id}">${sevBadge(x.severity)}&nbsp;<span class="mono">${esc(x.metric_id.length > 26 ? x.metric_id.slice(0, 26) + "…" : x.metric_id)}</span></button>`).join("")}</div>
-  <div class="card">
-    <h2>Record <span class="mono hint">${esc(a.anomaly_id)}</span></h2>
-    <p class="sub">${esc(p.name)} · ${esc(a.note || "")}</p>
-    <div class="rec-grid">${rec.map(([k, v]) => `<div class="f"><div class="k">${k}</div><div class="v">${esc(v)}</div></div>`).join("")}</div>
-    <div class="triage-row">
+    `<button class="chip" data-anomaly="${esc(x.anomaly_id)}" aria-pressed="${x.anomaly_id === a.anomaly_id}"
+      data-tip="<span class='t-mono'>${esc(x.metric_id)}</span>">${sevBadge(x.severity)}&nbsp;${esc(propById[x.domain].name)} · ${esc(metricLabel(x.metric_id))}</button>`).join("")}</div>
+  <div class="card verdict-card vw-${a.severity}">
+    <div class="verdict-row"><p class="verdict">${esc(insight.headline)}</p>
+      ${popover("pop-anom", "About this record",
+        `<p>Everything on this page comes from one detection record in <code>gold.anomalies</code>. Analyst actions — status and reconciled — write back through the BFF to the governed feedback table (ADR-0008).</p>
+         <p>Record id: <code>${esc(a.anomaly_id)}</code></p>`)}
+    </div>
+    <div class="verdict-sub">${sevBadge(a.severity)}<span>${esc(p.name)}</span><span>${fmtDay(a.date)}</span>${insight.detail ? `<span>${esc(insight.detail)}</span>` : ""}</div>
+    ${a.note ? `<p style="margin:0;font-size:13px;color:var(--ink-2)">${esc(a.note)}</p>` : ""}
+    <div class="triage-row" style="margin-top:2px">
       <span class="eyebrow">Triage</span>
       ${statuses.map(st => `<button class="tbtn" data-triage="${st}" aria-pressed="${a.status === st}">${st === "open" ? "Reopen" : st === "triaged" ? "Mark triaged" : "Close"}</button>`).join("")}
       <button class="tbtn" data-reconcile aria-pressed="${a.reconciled}">${a.reconciled ? "✓ Reconciled" : "Mark reconciled"}</button>
       <span class="hint">writes status/reconciled back through the BFF (mocked here)</span>
     </div>
+    <details class="cube"><summary>Full detection record (gold.anomalies)</summary>
+      <div class="rec-grid" style="margin-top:10px">${rec.map(([k, v]) => `<div class="f"><div class="k">${k}</div><div class="v">${esc(v)}</div></div>`).join("")}</div>
+    </details>
   </div>
-  <div class="card" style="margin-top:16px">
-    <h2>Series in context — <span class="mono">${esc(a.metric_id)}</span></h2>
-    <p class="sub">90 days · expected band from the ${esc(a.detector)} detector's baseline</p>
-    ${bandChart(s, { anoms: i >= 0 ? [{ i, sev: a.severity, label: a.note }] : [], ratio: isRatio, label: a.metric_id })}
+  ${rangeChips("anomaly")}
+  <div class="card">
+    <div class="card-head"><h2>The series in context — ${esc(metricLabel(a.metric_id))}</h2>
+      ${popover("pop-ctx", "How to read this chart",
+        `<p>The solid line is what actually happened; the dashed line is the day-of-week expectation and the shaded band its normal range — the same baseline the <code>${esc(a.detector)}</code> detector scored against.</p>
+         <p><b>If no dots are shown, everything is within its expected range.</b></p>`)}
+    </div>
+    <p class="sub"><span class="mono">${esc(a.metric_id)}</span> · last ${effRange} days</p>
+    ${effRange !== range ? `<p class="hint" style="margin:0 0 6px">This anomaly (${esc(fmtDay(a.date))}) is outside the ${range}-day window — showing the full history instead.</p>` : ""}
+    ${bandChart(win.series, { anoms: chartAnoms, ratio: isRatio, label: a.metric_id, dates: win.dates })}
   </div>
   <div class="grid cols-anomaly" style="margin-top:16px">${rcaHtml}${contribHtml}</div>`;
 }
 
 /* ============================== funnel view =============================== */
+function journeyMap(days) {
+  const off = N_DAYS - days;
+  const mean = arr => arr.slice(off).reduce((a, b) => a + b, 0) / days;
+  const stAvg = {}, stSev = {};
+  for (const [m] of CM_FUNNEL) {
+    stAvg[m] = mean(metricSeries("coverme", m).vals);
+    const open = ANOMALIES.filter(a => a.domain === "coverme" && a.metric_id === m && a.status !== "closed");
+    stSev[m] = open.length ? rankedInsights(open)[0].severity : null;
+  }
+  const rAvg = m => mean(metricSeries("coverme", m).vals);
+  const maxAvg = Math.max(...CM_FUNNEL.map(([m]) => stAvg[m]));
+  const node = (m, name, optional) => {
+    const sev = stSev[m];
+    return `<button type="button" class="j-node${optional ? " j-opt" : ""}" data-goto-series="coverme:${m}"
+      data-tip="<span class='t-mono'>${esc(m)}</span><br>${fmtN(Math.round(stAvg[m]))} visits/day (${days}-day mean)${optional ? "<br>optional — a visit can skip straight to App Start" : ""}<br>click to chart this series">
+      <span class="j-name">${esc(name)}${optional ? ` <span class="j-tag">optional</span>` : ""}</span>
+      <span class="j-val num">${fmtN(Math.round(stAvg[m]))}<span class="j-unit">/day</span></span>
+      <span class="j-bar"><span class="j-fill" style="width:${Math.round(100 * stAvg[m] / maxAvg)}%"></span></span>
+      <span class="j-badge">${sev ? sevBadge(sev) : `<span class="hint">no open anomalies</span>`}</span>
+    </button>`;
+  };
+  const link = (rm, note) =>
+    `<div class="j-link" data-tip="<span class='t-mono'>${esc(rm)}</span><br>${days}-day mean population ratio${note ? "<br>" + note : ""}">
+      <span class="j-arrow" aria-hidden="true">→</span>
+      <span class="rv num">${rAvg(rm).toFixed(2)}</span>
+      <span class="j-lbl">${esc(metricLabel(rm))}</span>
+    </div>`;
+  return `<div class="journey">
+    ${node("pel_228_quote_start", "Quote Start")}
+    ${link("funnel_quote_complete_over_quote_start")}
+    ${node("pel_229_quote_complete", "Quote Complete")}
+    ${link("funnel_app_start_over_quote_start", "denominator is quote starts — a population proxy, not a step conversion")}
+    ${node("pel_269_app_start", "App Start")}
+    ${link("funnel_app_confirm_over_app_start")}
+    ${node("pel_240_app_confirm", "App Confirm")}
+  </div>
+  <div class="j-below">
+    <div class="j-branchwrap">
+      <span class="j-elbow" aria-hidden="true">↳</span>
+      ${node("pel_232_save_quote", "Save Quote", true)}
+      <span class="j-branch-note hint">optional side-step — <span class="num">${rAvg("funnel_save_quote_over_quote_start").toFixed(2)}</span> per quote start; a resumed quote re-enters at App Start with no quote events that visit</span>
+    </div>
+    <span class="ratio-chip" data-tip="<span class='t-mono'>funnel_app_confirm_over_quote_start</span><br>end-to-end population ratio, ${days}-day mean">
+      <span class="rv num">${rAvg("funnel_app_confirm_over_quote_start").toFixed(2)}</span>end-to-end · confirms per quote start</span>
+  </div>`;
+}
 function viewFunnel() {
-  const W = 28, off = N_DAYS - W;
-  const mean = arr => arr.slice(off).reduce((a, b) => a + b, 0) / W;
+  const days = RANGE_STATE.funnel, off = N_DAYS - days;
+  const mean = arr => arr.slice(off).reduce((a, b) => a + b, 0) / days;
   const stages = CM_FUNNEL.map(([m, name]) => {
     const s = metricSeries("coverme", m);
     return { m, name, avg: mean(s.vals), optional: m === "pel_232_save_quote" };
@@ -1185,21 +1623,17 @@ function viewFunnel() {
     ["app_confirm / quote_start", "funnel_app_confirm_over_quote_start"],
   ].map(([label, m]) => {
     const s = metricSeries("coverme", m);
-    const mx = Math.max(...s.vals);
-    const mxDay = DATES[s.vals.indexOf(mx)];
+    const winVals = s.vals.slice(off);
+    const mx = Math.max(...winVals);
+    const mxDay = DATES[off + winVals.indexOf(mx)];
     return { label, m, avg: mean(s.vals), max: mx, mxDay };
   });
   const rs = metricSeries("coverme", "funnel_app_start_over_quote_start");
-  const rAnoms = ANOMALIES
+  const rWin = sliceSeries(rs, days);
+  const rAnoms = windowAnoms(ANOMALIES
     .filter(a => a.domain === "coverme" && a.metric_id === "funnel_app_start_over_quote_start")
-    .map(a => ({ i: DATES.indexOf(a.date), sev: a.severity, label: a.note })).filter(a => a.i >= 0);
-  const stageBars = hbars(stages.map(st => ({
-    label: st.name + (st.optional ? " *" : ""), value: st.avg,
-    valText: fmtN(Math.round(st.avg)),
-    after: st.optional ? "optional step" : "",
-    color: "var(--brand)",
-    tip: `<b>${esc(st.name)}</b><br><span class='t-mono'>${esc(st.m)}</span><br>${fmtN(Math.round(st.avg))} visits/day (28-day mean)${st.optional ? "<br>optional — a visit can skip straight to App Start" : ""}`,
-  })), { labW: 150, label: "funnel stage volumes" });
+    .map(a => ({ i: DATES.indexOf(a.date), sev: a.severity, label: a.note })).filter(a => a.i >= 0), days);
+  const rTw = takeaway("coverme", "funnel_app_start_over_quote_start", days);
   const enfrRows = [];
   for (const st of stages) {
     enfrRows.push({ label: st.name, value: st.avg * langSplit.en, valText: fmtN(Math.round(st.avg * langSplit.en)), color: "var(--s1)", tip: `<b>${esc(st.name)}</b> · EN (coverme.com)<br>${fmtN(Math.round(st.avg * langSplit.en))} visits/day` });
@@ -1207,38 +1641,49 @@ function viewFunnel() {
   }
   return `
   <div class="view-head"><h1>CoverMe quote → application funnel</h1>
-    <p>Visit-level stage populations, exactly as the SME ruled them (2026-07-27): <b>non-monotonic</b> across visits, Save Quote optional, ratios are population proxies — so this page draws magnitude bars, never a funnel taper.</p></div>
-  <div class="grid cols-2">
-    <div class="card">
-      <h2>Stage populations — visits/day, 28-day mean</h2>
-      <p class="sub">visit-distinct counts (<span class="mono">registry v0.3.0</span>, status: active, owner: Kerrian) · * optional step</p>
-      <div class="chart-wrap">${stageBars}</div>
-      <div class="callout"><b>Why not a funnel shape?</b> A saved-quote resume visit enters at App Start with
-        no quote events, so a later stage can exceed an earlier one on any given day. A tapering funnel
-        would render that legitimate pattern as a bug. Ratios below are population-level proxies —
-        <b>never within-visit sequences</b>.</div>
+    <p>Where in the quote-to-application journey are customers, and is any step off its normal level?</p></div>
+  ${rangeChips("funnel")}
+  <div class="card">
+    <div class="card-head"><h2>The journey — visits/day, ${days}-day mean</h2>
+      ${popover("pop-journey", "Why not a funnel shape?",
+        `<p>These are visit-level stage populations, exactly as the SME ruled them (2026-07-27): <b>non-monotonic</b> across visits, Save Quote optional, ratios are population proxies — so this page draws magnitude bars, never a funnel taper.</p>
+         <p>A saved-quote resume visit enters at App Start with no quote events, so a later stage can exceed an earlier one on any given day. A tapering funnel would render that legitimate pattern as a bug. The ratios shown are population-level proxies — <b>never within-visit sequences</b>.</p>
+         <p>Counts are visit-distinct (<code>registry v0.3.0</code>, status: active, owner: Kerrian).</p>`)}
     </div>
+    <p class="sub">equal-width stages, bar = relative volume · a badge marks a stage with an open anomaly · click a stage to chart it</p>
+    ${journeyMap(days)}
+  </div>
+  <div class="grid cols-2" style="margin-top:16px">
     <div class="card">
-      <h2>Population ratios</h2>
-      <p class="sub">28-day mean, with each ratio's 90-day peak — values above 1.0 are legitimate</p>
+      <div class="card-head"><h2>${esc(rTw.title)}</h2>
+        ${popover("pop-ratio", "Reading the ratio chart",
+          `<p>Daily population ratio of application starts to quote starts. The dashed line is the day-of-week expectation; the shaded band is its normal range. <b>Values above 1.0 are legitimate</b> — a saved-quote resume day produces app starts without quote starts.</p>
+           <p>Chips show each registered ratio's ${days}-day mean and peak.</p>`)}
+      </div>
+      <p class="sub">population ratios · ${days}-day means, peaks marked · values above 1.0 are legitimate</p>
       <div class="ratio-chips">
         ${ratios.map(r => `<span class="ratio-chip${r.max > 1 ? " gt1" : ""}" data-tip="<span class='t-mono'>${esc(r.m)}</span><br>mean ${r.avg.toFixed(2)} · peak ${r.max.toFixed(2)} on ${r.mxDay}${r.max > 1 ? "<br><b>&gt;1.0 — saved-quote resume day</b>" : ""}">
           <span class="rv num">${r.avg.toFixed(2)}</span>${esc(r.label)}
           <div class="hint num">peak ${r.max.toFixed(2)}${r.max > 1 ? " ▲" : ""}</div></span>`).join("")}
       </div>
-      <div class="eyebrow" style="margin:14px 0 4px">app_start / quote_start — daily</div>
-      ${bandChart(rs, { ratio: true, anoms: rAnoms, refline: 1.0, reflineLabel: "1.0", label: "app start over quote start daily ratio" })}
-      <p class="hint" style="margin:6px 0 0">2026-07-25 crosses 1.0: quote starts were suppressed by the mobile-Safari incident while
-        saved-quote resumes continued — the ratio is working as designed, the <em>level</em> anomaly is on
+      <div style="margin-top:14px">
+      ${bandChart(rWin.series, { ratio: true, anoms: rAnoms, refline: 1.0, reflineLabel: "1.0", label: "app start over quote start daily ratio", dates: rWin.dates })}
+      </div>
+      <p class="hint" style="margin:6px 0 0">Sat Jul 25 crosses 1.0: quote starts were suppressed by the mobile-Safari incident while
+        saved-quote resumes continued — the ratio is working as designed; the <em>level</em> anomaly is on
         <span class="mono">pel_228_quote_start</span>.</p>
     </div>
-  </div>
-  <div class="card" style="margin-top:16px">
-    <h2>Stages by language — domain-derived (interim SME rule)</h2>
-    <p class="sub">EN = coverme.com · FR = pourmeproteger.com · eVar8 is NOT language of record (pending SME); bots excluded (<span class="mono">exclude_hit&gt;0</span>)</p>
-    <div class="legend"><span class="li"><span class="sw" style="background:var(--s1)"></span>EN — coverme.com</span>
-      <span class="li"><span class="sw" style="background:var(--s2)"></span>FR — pourmeproteger.com</span></div>
-    <div class="chart-wrap">${hbars(enfrRows, { labW: 150, label: "funnel stages by language" })}</div>
+    <div class="card">
+      <div class="card-head"><h2>English vs French volumes by stage</h2>
+        ${popover("pop-lang", "How language is derived",
+          `<p>EN = coverme.com · FR = pourmeproteger.com — language is derived from the domain under the interim SME rule; <code>eVar8</code> is NOT the language of record (pending SME confirmation).</p>
+           <p>Bots are excluded before counting (<code>exclude_hit&gt;0</code>, SME-confirmed).</p>`)}
+      </div>
+      <p class="sub">${days}-day mean visits/day per stage and language</p>
+      <div class="legend"><span class="li"><span class="sw" style="background:var(--s1)"></span>EN — coverme.com</span>
+        <span class="li"><span class="sw" style="background:var(--s2)"></span>FR — pourmeproteger.com</span></div>
+      <div class="chart-wrap">${hbars(enfrRows, { labW: 150, label: "funnel stages by language" })}</div>
+    </div>
   </div>`;
 }
 
@@ -1252,7 +1697,8 @@ function viewOps() {
   ];
   return `
   <div class="view-head"><h1>Ops &amp; data health</h1>
-    <p>The run behind the numbers — <span class="mono">gold.run_meta</span>, the six detectors, the severity routing ladder, and alert-fatigue accounting.</p></div>
+    <p>Pipeline healthy — last run passed its freshness check; 3.2 alerts/day, 71% actionable.
+       The run behind the numbers: <span class="mono">gold.run_meta</span>, the six detectors, and the severity routing ladder.</p></div>
   <div class="stat-row">
     <div class="stat"><div class="eyebrow">Run</div><div class="v num" style="font-size:15px" title="${esc(RUN_META.run_id)}">${esc(RUN_META.run_id)}</div>
       <div class="d">${esc(RUN_META.started)} · ${esc(RUN_META.duration)}</div></div>
@@ -1294,13 +1740,42 @@ function viewOps() {
           shifts below ×1.9 at an acceptable FP rate — ×1.35 sits inside the 14-day noise envelope by design.</p>
       </div>
       <div class="card">
-        <h2>Severity routing ladder</h2>
+        <div class="card-head"><h2>Severity routing ladder</h2>
+        ${popover("pop-ladder", "Why a ladder",
+          `<p>Severity decides who gets interrupted, and how. Low rungs log quietly; high rungs page a human and trigger the automated root-cause analysis — fewer, better alerts by design.</p>`)}
+        </div>
         <p class="sub">fewer, better alerts — severity decides who is interrupted</p>
         <div class="ladder">${ladder.map(([s, t, r]) => `<div class="rung">
           <span>${sevBadge(s)}</span><span class="thresh">${esc(t)}</span><span class="route">${esc(r)}</span></div>`).join("")}</div>
       </div>
     </div>
   </div>`;
+}
+
+/* ============================== popover =================================== */
+// The second disclosure level: ⓘ buttons reveal per-card provenance/method copy.
+// Ephemeral by design — a re-render closes any open panel (openPop reset in render).
+let openPop = null;
+function popover(id, title, bodyHtml) {
+  return `<span class="pop-wrap"><button type="button" class="info-btn" data-pop="${id}" aria-expanded="false" aria-controls="${id}" aria-label="About: ${esc(title)}">i</button><div class="pop-panel" id="${id}" role="note" tabindex="-1" hidden><div class="pop-title">${esc(title)}</div>${bodyHtml}</div></span>`;
+}
+function closePop() {
+  if (!openPop) return;
+  openPop.panel.hidden = true;
+  openPop.btn.setAttribute("aria-expanded", "false");
+  openPop = null;
+}
+function togglePop(btn) {
+  const panel = document.getElementById(btn.getAttribute("data-pop"));
+  if (!panel) return;
+  const wasOpen = openPop && openPop.panel === panel;
+  closePop();
+  if (!wasOpen) {
+    panel.hidden = false;
+    btn.setAttribute("aria-expanded", "true");
+    openPop = { btn, panel };
+    panel.focus();
+  }
 }
 
 /* ============================== tooltip =================================== */
@@ -1339,8 +1814,11 @@ function currentRoute() {
   if (r === "anomaly" && rest.length) ANOM_STATE.id = decodeURIComponent(rest.join("/"));
   return VIEWS[r] ? r : "overview";
 }
+let lastRoute = null;
 function render() {
   const route = currentRoute();
+  BAND_REGISTRY = {}; bandSeq = 0;   // per-render — stale entries would leak
+  openPop = null;                    // panel DOM is about to be replaced
   app.innerHTML = VIEWS[route]();
   wireBandCharts(app);
   document.querySelectorAll(".tab").forEach(t =>
@@ -1348,14 +1826,25 @@ function render() {
   const n = anomalyCounts().open;
   const badge = document.getElementById("tab-open-n");
   if (badge) badge.textContent = "· " + n;
-  window.scrollTo(0, 0);
+  const h1 = app.querySelector(".view-head h1");
+  const sr = document.getElementById("sr-status"); // announce once, not the whole page
+  if (sr && h1) sr.textContent = h1.textContent + " — " + n + " open anomal" + (n === 1 ? "y" : "ies");
+  if (route !== lastRoute) window.scrollTo(0, 0);  // filter clicks must not teleport to top
+  lastRoute = route;
 }
 window.addEventListener("hashchange", render);
 document.addEventListener("click", ev => {
   const el = t => ev.target.closest(t);
   let b;
+  if ((b = el("[data-pop]"))) { togglePop(b); return; }              // pure DOM — never re-renders
+  if (openPop && !ev.target.closest(".pop-panel")) closePop();       // close, then fall through
   if ((b = el("[data-route]"))) { location.hash = "#/" + b.dataset.route; return; }
   if ((b = el("[data-anomaly]"))) { location.hash = "#/anomaly/" + encodeURIComponent(b.dataset.anomaly); render(); return; }
+  if ((b = el("[data-goto-series]"))) {
+    const parts = b.dataset.gotoSeries.split(":");
+    if (CATALOGS[parts[0]]) { PROP_STATE.prop = parts[0]; PROP_STATE.metric = parts[1]; }
+    location.hash = "#/property"; render(); return;
+  }
   if ((b = el("[data-goto-prop]"))) {
     const pid = b.dataset.gotoProp;
     if (CATALOGS[pid]) { PROP_STATE.prop = pid; PROP_STATE.metric = pid === "coverme" ? "pel_228_quote_start" : "hits_total"; }
@@ -1367,6 +1856,24 @@ document.addEventListener("click", ev => {
     render(); return;
   }
   if ((b = el("[data-pick-metric]"))) { PROP_STATE.metric = b.dataset.pickMetric; render(); return; }
+  if ((b = el("[data-range]"))) { RANGE_STATE[currentRoute()] = +b.dataset.range; render(); return; }
+  if ((b = el("[data-kpi-sev]"))) {
+    FEED_STATE.sev = b.dataset.kpiSev; FEED_STATE.status = "open"; FEED_STATE.day = null;
+    render(); return;
+  }
+  if ((b = el("[data-clear-day]"))) { FEED_STATE.day = null; render(); return; }
+  if ((b = el("[data-cal-day]"))) {
+    const day = b.dataset.calDay;
+    const dayAnoms = ANOMALIES.filter(a => a.date === day);
+    if (dayAnoms.length === 1) {
+      location.hash = "#/anomaly/" + encodeURIComponent(dayAnoms[0].anomaly_id); render();
+    } else {
+      FEED_STATE.sev = "all"; FEED_STATE.status = "all"; FEED_STATE.day = day; FEED_STATE.expanded = true;
+      render();
+    }
+    return;
+  }
+  if ((b = el("[data-feed-expand]"))) { FEED_STATE.expanded = b.dataset.feedExpand === "1"; render(); return; }
   if ((b = el("[data-feed-sev]"))) { FEED_STATE.sev = b.dataset.feedSev; render(); return; }
   if ((b = el("[data-feed-status]"))) { FEED_STATE.status = b.dataset.feedStatus; render(); return; }
   if ((b = el("[data-triage]"))) {
@@ -1389,6 +1896,13 @@ document.addEventListener("click", ev => {
 });
 document.addEventListener("change", ev => {
   if (ev.target.id === "metric-select") { PROP_STATE.metric = ev.target.value; render(); }
+});
+document.addEventListener("keydown", ev => {
+  if (ev.key === "Escape" && openPop) {
+    const btn = openPop.btn;
+    closePop();
+    btn.focus();
+  }
 });
 (function initTheme() {
   let t = null;
