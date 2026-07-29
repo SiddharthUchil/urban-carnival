@@ -32,7 +32,10 @@ from dataclasses import dataclass
 
 from registry import slug
 
-REGISTRY_VERSION = "0.3.0"   # research/claude/metric-registry.yaml pin
+# research/claude/metric-registry.yaml pin. This is the single pin for the whole registry,
+# so a GWAM-only change bumps it too: v0.4.0 added the gwam_channel_metrics section and
+# touched nothing CoverMe. The CoverMe entries below are unchanged from v0.3.0.
+REGISTRY_VERSION = "0.4.0"
 
 # --- Gold build parameters (consumed by cm_03_gold_kpis via gold_lib) ---
 DATE_COL = "hit_date"
