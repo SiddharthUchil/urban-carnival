@@ -11,15 +11,23 @@ planned **Akka** migration.
 > different platforms (GWAM on Databricks/Unity Catalog; CoverMe on **Synapse serverless SQL**), that both
 > share one canonical Adobe hit schema, and that no streaming collection or production time-series exists
 > yet. Full traceability: [10-data-profile-alignment.md](10-data-profile-alignment.md).
+>
+> **↺ What changed since (2026-07-29 decision audit):** both halves of that finding are superseded.
+> CoverMe turned out to be a **Databricks-native Delta table** (`csdo_prod_catalog`, 17 GB — no Synapse
+> read path needed; [17 §1](17-coverme-eda-readiness.md)), and **production time-series now exist for
+> both domains**: GWAM 3.25 B rows / 883 days ([19 §0](19-gwam-channel-readiness.md)), CoverMe 57.7 M
+> scoped rows / 1,211 days ([17 §1](17-coverme-eda-readiness.md)). The 2026-07-02 text is kept as the
+> historical record.
 
 ## Executive summary
 
 GMAI–Pulse shifts monitoring from reactive to **proactive, explained alerts** ("what changed, where,
 when, why, and what to do"). The design rests on eight decisions:
 
-1. **One Databricks compute plane over two source platforms** — detection/ML runs only on Databricks;
-   CoverMe's ADLS-backed data is read via a **UC external location** (primary) or **Lakehouse Federation
-   `sqldw`** (fallback), while its existing Synapse serverless surface stays untouched.
+1. **One Databricks compute plane over two source platforms** — detection/ML runs only on Databricks.
+   *↺ superseded in part (2026-07-23, doc 17): CoverMe's feed is a native Databricks Delta table, so the
+   UC-external-location / Lakehouse-Federation read paths were never needed — the one-compute-plane
+   decision stands, the CoverMe binding is direct.*
    *(new — reflects the profiled landing zones)* → [ADR-0006](adr/adr-0006-unified-databricks-compute-plane.md).
 2. **Batch-first micro-batch ingestion** — both feeds land as at-rest tables, so Phase 1 runs scheduled
    micro-batch jobs at feed cadence (**daily grain first**); the Edge Network → Event Hubs streaming hot
@@ -46,13 +54,18 @@ when, why, and what to do"). The design rests on eight decisions:
 8. **Identity & Privacy layer with keyed pseudonymization; stitching deferred.** Visitor identifiers are
    pseudonymized with a Key Vault-held HMAC key at Bronze→Silver (joinability preserved, crypto-erasure
    possible); identity stitching is **gated** on a person-level ID actually existing in the feed (none
-   does today); Synapse serverless secure-view governance recommended for CoverMe's direct consumers.
+   does today). *↺ amended (2026-07-23, ADR-0007 §5 + doc-16 D2): profiling/EDA is now **full-raw** —
+   all masking/redaction helpers were deleted from the notebooks; the pipeline's silver-layer keyed
+   pseudonymization of visitor identifiers remains in place. The Synapse secure-view recommendation is
+   moot — CoverMe is Databricks-native (doc 17).*
    *(new 2026-07-04 — verdicts on the Perplexity/Gemini extension research)*
    → [11](11-privacy-identity-governance.md), [ADR-0007](adr/adr-0007-identity-privacy-layer.md).
 
-> **#1 blocker:** the profiled corpus is schema + dictionary only — **no production time-series exists**.
-> Baselines, thresholds, and model selection are blocked until a **≥30-day (ideally 90-day) hit-level
-> feed** lands per domain ([03 §1](03-phase1-anomaly-detection.md), [10 §3](10-data-profile-alignment.md)).
+> **↺ #1 blocker — CLEARED for both domains (2026-07-23/29).** Production hit-level history now exists:
+> GWAM 3.25 B rows / 883 days, CoverMe 57.7 M scoped rows / 1,211 days. The current top blocker is the
+> **D8-vs-D9 conflict** — the SME's four-channel scope needs the sign-in traffic the D8 login rule
+> excludes ([20 Q1](20-gwam-sme-questions.md), [16 §1 D8](16-e2e-production-blueprint.md)) — followed by
+> `manucustomer.prod` feed access (20 Q2) and segment-scope sign-off (20 Q3).
 
 ## How to read this package
 
@@ -73,13 +86,18 @@ when, why, and what to do"). The design rests on eight decisions:
 | 13 | [13-global-serving-topology.md](13-global-serving-topology.md) | **Global serving topology** — React/AKS surface + BFF, Azure AI Foundry Gen-AI plane, unstructured data lane (ADLS Gen2 → AI Search), global access/residency |
 | 14 | [14-manugrs-cross-suite-analysis.md](14-manugrs-cross-suite-analysis.md) | **manugrs cross-suite analysis** — legacy vs current report suite, eVar overlap, geo/language profile · ⚠️ its 2026-02-01 cutover reading is corrected by doc-16 D7 (marketing site only; the suite is still live) |
 | 15 | [15-consolidated-eda-report.md](15-consolidated-eda-report.md) | Consolidated EDA report across both report suites (stakeholder-facing) · same cutover caveat as doc 14 · **rev. 2026-07-22**: EDDL dictionary folded in, privacy regime inverted, open questions refreshed, **§8b EDA exit criteria** added |
-| 16 | [16-e2e-production-blueprint.md](16-e2e-production-blueprint.md) | **End-to-end production blueprint & agent guidance — START HERE** — standing decisions D1–D10, EDDL eVar dictionary, 2-notebook EDA contract, URL scope inventory results, Databricks/jobs/AKS phases; supersedes older docs on conflict. Revised 2026-07-28: **D9** four-channel Canada-Retirement scope + **D10** segment-vs-URL re-baseline (both 🟡 proposed), and a ⚠️ conflict notice on D8 |
+| 16 | [16-e2e-production-blueprint.md](16-e2e-production-blueprint.md) | **End-to-end production blueprint & agent guidance — START HERE** — standing decisions D1–D10, EDDL eVar dictionary, 2-notebook EDA contract, URL scope inventory results, Databricks/jobs/AKS phases; supersedes older docs on conflict. Revised 2026-07-28: **D9** four-channel Canada-Retirement scope + **D10** segment-vs-URL re-baseline (both 🟡 proposed), and a ⚠️ conflict notice on D8 · revised 2026-07-29 (decision audit — eVar166/169 claim retired, D1 restated, C3 figure flagged) |
 | 17 | [17-coverme-eda-readiness.md](17-coverme-eda-readiness.md) | **CoverMe** EDA readiness & SME gap assessment — E1–E4 engineering must-fixes, the SME agenda, readiness verdict. E1 fixed and re-run verified 2026-07-27 |
 | 18 | [18-coverme-sme-questions.md](18-coverme-sme-questions.md) | **CoverMe** send-ready SME questionnaire, with Kerrian's 2026-07-27 rulings merged inline (Q1–Q10; Q4 language + Q10 events 510-514 still ⏳) |
-| 19 | [19-gwam-channel-readiness.md](19-gwam-channel-readiness.md) | **GWAM Canada Retirement** multi-channel readiness & SME gap assessment — the 2026-07-28 four-channel scope table mapped cell-by-cell to the repo, G1–G6 engineering gates, 12-item SME agenda. **Pre-probe** — ⏳ cells await `eda/gwam_channel_discovery.py` |
-| 20 | [20-gwam-sme-questions.md](20-gwam-sme-questions.md) | **GWAM Canada Retirement** send-ready SME questionnaire (Q1–Q12). Three blockers: sign-in traffic vs the D8 login rule, the two unlocated report suites, and segment-vs-URL scope sign-off |
+| 19 | [19-gwam-channel-readiness.md](19-gwam-channel-readiness.md) | **GWAM Canada Retirement** multi-channel readiness & SME gap assessment — the 2026-07-28 four-channel scope table mapped cell-by-cell to the repo, G1–G6 engineering gates, 12-item SME agenda. ↺ **Probe run clean 2026-07-29 — G1 closed**; results folded into §0/§2/§4 (C3 `segment_only` figure suspect pending re-run) |
+| 20 | [20-gwam-sme-questions.md](20-gwam-sme-questions.md) | **GWAM Canada Retirement** send-ready SME questionnaire (Q1–Q12). Three blockers: sign-in traffic vs the D8 login rule, ↺ `manucustomer.prod` feed **access** (3 of 4 suites located by the probe — this is the only one absent), and segment-vs-URL scope sign-off |
 | — | [metric-registry.yaml](metric-registry.yaml) | Versioned Phase-1 metric registry — **v0.4.0**: 29 CoverMe AD-tagged seeds (SME-confirmed) + 17 GWAM four-channel `candidate` seeds (draft input, not yet ruled) |
 | — | [adr/](adr/) | ADR-0001 ingestion (v2) · ADR-0002 models · ADR-0003 Gen-AI · ADR-0004 Akka · ADR-0005 Adaptive ML · ADR-0006 compute plane · ADR-0007 identity & privacy · **ADR-0008 serving topology & Gen-AI plane** |
+
+> **Namespace note:** "D1–D5" in doc 06 are *Mermaid diagram ids* and "D6/D7" in doc 13 continue that
+> *diagram/topology* numbering — both are unrelated to doc 16's *standing decisions* **D1–D10** (where
+> D6 = AKS serving, D7 = concurrent suites). Same letters, different registries; resolve by source doc.
+> Do not renumber either scheme.
 
 ## Requirement-coverage map
 
@@ -111,11 +129,14 @@ when, why, and what to do"). The design rests on eight decisions:
   `new_data/README.md` and marked **provisional pending data-platform-owner confirmation**.
 - **Latency honesty:** detection latency = source feed cadence (daily first). No "real-time" claims; the
   streaming upgrade path and its trigger criteria live in [ADR-0001 v2](adr/adr-0001-near-real-time-microbatch.md).
-- **Hard gates before build:** production feed acquisition (≥30/90 days) and the PII classification review
-  of the 24 flagged columns ([10 §3](10-data-profile-alignment.md)).
+- **Hard gates before build:** ↺ *both cleared/reshaped 2026-07-29* — production feed acquisition is
+  **done for both domains** (GWAM 883 days, CoverMe 1,211 days); the PII review is superseded by the
+  **full-raw regime** (ADR-0007 §5) plus the outstanding CoverMe consent sign-off
+  ([17 §4 item 9](17-coverme-eda-readiness.md)).
 - Open items needing business input: feed refresh cadence/SLA per domain, holiday/campaign calendars, the
-  labeled incident set for evaluation ([02 §7](02-solution-architecture.md)), and owners for the 29
-  registry metrics.
+  labeled incident set for evaluation ([02 §7](02-solution-architecture.md)), and owners for the **43
+  still-`candidate`** entries among the 46 registry metrics (v0.4.0: 29 CoverMe + 17 GWAM channel seeds;
+  only the 5 CoverMe funnel events are `active` with an owner).
 - Diagrams are **Mermaid** (render in GitHub/VS Code; import to Lucidchart) per the agreed format.
 
 > This package is a solutioning blueprint, not running code. Detection logic, thresholds, and Gen-AI prompts
