@@ -51,10 +51,12 @@ same thing). This document answers those four questions from the executed notebo
 
 ## TL;DR — what the legacy suite tells us
 
-1. **There is a clean, datable cutover.** `manugrs` ran healthy from **Jan 2024 through Jan 2026**
+1. **There is a clean, datable cutover** *(↺ in the URL-scoped CA-Retirement slice only — see the
+   banner above and doc-16 D7: at suite level `manugrs` never collapsed and the suites are
+   CONCURRENT)*. `manugrs` ran healthy from **Jan 2024 through Jan 2026**
    (~100–520 K hits/month), then **collapsed in Feb 2026** (10,806 → 2,136 → single digits) — exactly
-   when the new `manulifeglobalprod` suite **begins (2026‑02‑01)**. This is a report‑suite migration,
-   not two overlapping populations. **It directly answers doc‑12 open question Q1:** earlier
+   when the new `manulifeglobalprod` suite **begins (2026‑02‑01)**. This is a report‑suite migration
+   of the marketing population, not two overlapping populations *within this slice*. **It directly answers doc‑12 open question Q1:** earlier
    CA‑Retirement history *does* exist, under `manugrs`.
 2. **The prize is history depth.** `manugrs` holds **5,568,271 rows over 2023‑12‑31 → 2026‑07‑07**.
    Splicing the pre‑Feb‑2026 legacy series to the new suite yields **~2.5 years** of CA‑Retirement
@@ -86,6 +88,10 @@ same thing). This document answers those four questions from the executed notebo
 
 ## 1. The cutover (S3, both runs)
 
+*↺ Scope note (doc-16 D7): "cutover" throughout this section means the URL-scoped CA-Retirement
+marketing slice. The suite-level rsids are concurrent — `manugrs` carried 320 M+ hits through
+2026-07-19 and still runs 8–13 M/month.*
+
 Same source table, same day‑level scan, two report suites. Monthly CA‑subset hits around the
 handover:
 
@@ -102,13 +108,21 @@ handover:
 
 The legacy suite's healthy history runs **2023‑12‑31 → 2026‑01** (peaks in RRSP season: 2024‑02 =
 519,373, 2024‑01 = 403,928); the residual single/low‑double‑digit hits after Feb 2026 are the tail of
-a decommissioned tag, **not data loss**. The new suite switches on **2026‑02‑01**. The two series are
-end‑to‑end complementary.
+a decommissioned tag, **not data loss**. The new suite switches on **2026‑02‑01** *(↺ suite-level
+first unfiltered day may be 2026-03-10 — doc-16 backlog #4, unresolved)*. The two series are
+end‑to‑end complementary *in this URL-scoped slice (↺ banner / doc-16 D7)*.
 
 **`manugrs` is a material report suite in its own right.** In the 13‑month profiling window it is the
 **3rd‑largest rsid** (7.8 % of all GWAM hits), behind the mobile app (56.9 %) and `jhfswamjhreupeprod`
 (26.6 %) — whereas `manulifeglobalprod` is not even top‑10. The business filtered on the *smaller*
 suite.
+
+> ↺ **Update (probe C1/C4, 2026‑07‑29).** Full‑history shares differ from this window's:
+> `manufingbrsmobileapp.prod` **68.9 %**, `jhfswamjhreupeprod` 14.6 %, `manugrs` **9.9 %** (322M rows,
+> 883 days). More importantly, `manugrs` is no longer just a cross‑suite curiosity — it is the SME's
+> **"GRS+" Web Member channel**: `post_evar185 = 'MPS Member'` covers 54.14 % of the suite and **100 %
+> of its populated eVar185**. Note it carries **no eVar105** (0.0001 % populated), so nothing in this
+> document's brand‑tag reasoning transfers to it. See [19 §0 and §2.1](19-gwam-channel-readiness.md).
 
 ---
 
@@ -258,7 +272,7 @@ Confirming the migration changed tagging, not infrastructure — these match the
 
 | Signal from the legacy suite | Design consequence |
 |---|---|
-| Clean, datable cutover at 2026‑02‑01 | Encode **2026‑02‑01 as a hard change‑point**; never compare eVar KPIs across it. |
+| Clean, datable cutover at 2026‑02‑01 *(↺ marketing-slice only — suites concurrent, doc-16 D7)* | Encode **2026‑02‑01 as a hard change‑point** *for URL-scoped marketing series*; never compare eVar KPIs across it. |
 | +~2.5 yr history recoverable under `manugrs` | **Suite‑agnostic** KPIs (hits, visits, geography, language) become spliceable → seasonal/holiday models become fittable, lifting doc‑12's 158‑day ceiling. |
 | Only 12 shared eVars; 50 legacy‑only | eVar‑derived KPIs are **not** cross‑suite splice‑able until the dictionary confirms shared semantics; treat old/new eVars as separate series. |
 | `pagename` namespace renamed (`crt-public:` → `ca-ret:personal:`) | Map page taxonomies explicitly before any cross‑suite page‑level metric. |

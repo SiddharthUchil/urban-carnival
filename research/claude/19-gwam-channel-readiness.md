@@ -10,10 +10,13 @@
 > CoverMe precedent [17](17-coverme-eda-readiness.md) / [18](18-coverme-sme-questions.md). The
 > send-ready questionnaire is [20 — GWAM SME Questions](20-gwam-sme-questions.md).
 
-**Status:** Written 2026-07-28, **pre-probe.** Unlike doc 17 — which was written after the CoverMe
-EDA had run — this assessment is written *before* `gwam_channel_discovery` executes. Cells marked ⏳
-are answerable from data and are waiting on that run (**G1**). Revise this document with the results
-before treating any ⏳ as settled.
+**Status:** Written 2026-07-28 pre-probe; **revised 2026-07-29 with the probe results — G1 is closed.**
+`gwam_channel_discovery` ran on Databricks (`generated_at` 2026-07-29T02:00:54, window
+2026-04-29 → 2026-07-28, 90 days, table `gwam_prod_catalog.inv_typed_common.adobe_hit_data`,
+1,198 columns). **11 SHAREABLE sections emitted, `run_manifest.skipped == {}`, `complete: true`** —
+export tracked at [`gwam_channel_discovery.html`](../../gwam_channel_discovery.html). Every ⏳ marker
+below has been replaced by its result, cited as **C1–C10**. Findings that *contradicted* the
+pre-probe text are called out inline as **↺ corrected**, not silently overwritten.
 
 ---
 
@@ -32,26 +35,43 @@ This is the same situation CoverMe was in on 2026-07-27, and the same treatment 
 what we were given, verify every cell, answer from data what we can, and send the business a short
 list of genuine decisions rather than a long list of things we could have looked up ourselves.
 
-### ⭐ Headline: three of the four report suites do not exist anywhere in this repo
+### ⭐ Headline: ↺ **three of the four report suites are in our data after all — one is not**
 
-`GRS+`, `GBRS Mobile App - Production`, and `manucustomer.prod` appear in **zero** files — not in
-`databricks/conf/`, not in any doc, not in any test. Only `Manulife Global Prod` maps to something we
-run (`manulifeglobalprod`).
+The pre-probe version of this section said all three unknown suites "do not exist anywhere in this
+repo." That was true of the *repo* and false of the *data*. **C1**'s unfiltered full-history census
+over `gwam_prod_catalog.inv_typed_common.adobe_hit_data` (3.25B rows, **16 rsids**) locates three of
+the four channels:
 
-There is one strong lead. The unfiltered rsid census over
-`gwam_prod_catalog.inv_typed_common.adobe_hit_data` puts **`manufingbrsmobileapp.prod` at 56.9% of
-all rows** — the single largest report suite in our source table, and almost certainly the SME's
-"GBRS Mobile App - Production" ([12 §](12-eda-findings-analysis.md); it also appears as the
-`grs-mobile` tile at [gmai-pulse-concept.html:549](../../frontend/gmai-pulse-concept.html), which is
-concept UI, not governed config). If that identification holds, **the majority of our source table is
-Canada-Retirement-relevant traffic we have never touched.**
+| SME label | rsid | Rows (full history) | Share | Days of history |
+|---|---|---|---|---|
+| Manulife Global Prod | `manulifeglobalprod` | 9,108,890 | 0.28% | **138** (from 2026-03-10) |
+| GBRS Mobile App - Production | `manufingbrsmobileapp.prod` | 2,239,037,706 | **68.9%** | 881 |
+| GRS+ | **`manugrs`** | 322,394,428 | 9.92% | 883 |
+| manucustomer.prod | **— absent —** | 0 | — | — |
 
-That is the optimistic reading. The pessimistic one is equally important: `manucustomer.prod` and any
-GRS+ suite do **not** appear in the top-10 rsid census at all, and an rsid absent from this table is
-not proof the suite doesn't exist — it may sit in a different Adobe instance. The SME's own table
-notes Mobile lives under a **different Adobe login company** ("Manulife Financial"). Whether that is a
-naming detail or a separate data feed we lack access to is the difference between a two-week build
-and a data-acquisition project.
+Three consequences, in order of how much they change the plan:
+
+1. **`manugrs` is the Web Member suite.** Not a guess: **C4** shows `post_evar185 = 'MPS Member'`
+   covers **54.14%** of `manugrs` and **100% of its populated eVar185** — the SME's Web Member
+   predicate, verbatim, on a suite we already knew about but had only ever considered as a
+   cross-suite curiosity ([14](14-manugrs-cross-suite-analysis.md)). The rsid *string* still wants
+   SME ratification ([20](20-gwam-sme-questions.md) Q2), but the identification is data-confirmed.
+2. **↺ Mobile is 68.9% of the table, not 56.9%.** The pre-probe figure came from a partial census;
+   the corrected full-history share is higher. It remains entirely unmodelled — **the majority of our
+   source table is traffic we have never touched.**
+3. **`manucustomer.prod` is genuinely not in our feed** — **C9** found **0 rows** in the window and
+   it is absent from all 16 rsids. This is no longer a modelling question. It is a **data-access
+   request**, and it is the longest-lead item on the list, so it should be started now rather than
+   at build time.
+
+The `manulifeglobalprod` history is the quiet risk: **138 days**, first day 2026-03-10 (the
+discrepancy [12 §](12-eda-findings-analysis.md) already flagged). It clears the ≥90-day baseline gate,
+but with far less margin than the other two suites, and any scope change consumes that margin.
+
+One caveat the probe cannot lift: an rsid absent from this table is still not proof the suite doesn't
+exist — it may sit in a different Adobe instance. The SME's table puts Mobile under a **different
+Adobe login company** ("Manulife Financial"), yet `manufingbrsmobileapp.prod` is present in *this*
+feed, which is suggestive but not conclusive ([20](20-gwam-sme-questions.md) Q10).
 
 ---
 
@@ -86,37 +106,92 @@ channel, and whether the four channels alert independently or roll up to one Can
 
 ### 2.1 Report suites
 
-| Channel | SME label | Repo reality | Verdict |
+| Channel | SME label | Data reality (C1/C2/C4) | Verdict |
 |---|---|---|---|
-| Public Website | Manulife Global Prod | `manulifeglobalprod` — the one suite the pipeline ingests ([settings.py:19](../../databricks/conf/settings.py)) | ✅ Known |
-| Mobile | GBRS Mobile App - Production | `manufingbrsmobileapp.prod`, **56.9%** of the source table, entirely unmodelled. Name never confirmed against the SME's label. | 🟡 Probable (⏳ **C1**) |
-| Web Member | GRS+ | No matching rsid in config, docs, or the top-10 census. | 🔴 Unidentified (⏳ **C1**) |
-| ManulifeID | manucustomer.prod | Not in config; not in the top-10 census. Presence in our source table unverified. | 🔴 Unidentified (⏳ **C1**) |
+| Public Website | Manulife Global Prod | `manulifeglobalprod` — the one suite the pipeline ingests ([settings.py:19](../../databricks/conf/settings.py)). 9.1M rows, **138 days** of history. `verdict=web` (URL rate 1.000). | ✅ **Confirmed** |
+| Mobile | GBRS Mobile App - Production | `manufingbrsmobileapp.prod`, **68.9%** of the source table (↺ was 56.9%), 881 days, entirely unmodelled. `verdict=app_or_mixed` — **URL rate 0.000**. | ✅ **Present** — SME to ratify the name (Q2/Q10) |
+| Web Member | GRS+ | **`manugrs`** — 322M rows, 883 days. `post_evar185='MPS Member'` = 54.14% of the suite, **100% of its populated eVar185**. `verdict=web` (URL rate 1.000). | ✅ **Data-confirmed** — SME to ratify the rsid string (Q2) |
+| ManulifeID | manucustomer.prod | **0 rows** (C9). Absent from all 16 rsids in the census. | 🔴 **Not in our feed** → access request (Q2) |
+
+**The `MPS Member` tag is not suite-unique.** It also covers 18.16% of `manufingbrsmobileapp.prod`
+(≈38M hits), which is consistent with the mobile app hosting the same MPS retirement platform. Every
+channel predicate must therefore be **suite AND segment**, never segment alone.
 
 ### 2.2 Scope model — the re-baseline problem
 
-The SME scopes by segment; we scope by URL. The good news is that the segment value is
-*self-consistent with our own dictionary*: eVar105 is documented as `Brand | Line of Business |
-Segment`, "delimited multi-value; Segment ∈ CA / JH / GWAM / Asia — **the scope discriminator**"
-([16 §3](16-e2e-production-blueprint.md), [15 §](15-consolidated-eda-report.md)). The SME's
-`ca-retirement :  : GWAM` splits on `" : "` into exactly `["ca-retirement", "", "GWAM"]` — Brand,
-blank Line of Business, Segment. That is the documented triple, not a coincidence.
+The SME scopes by segment; we scope by URL. **C3 confirms the SME's value is real**:
+`ca-retirement :  : GWAM` is a **literal** `post_evar105` value with **776,860 hits** in the window.
+A second Canada-Retirement form also exists — `Manulife : GWAM : group-plans:ca-retirement`
+(526,357) — so any predicate must be a `contains`-style match on *ca-retirement* + *GWAM*, not
+string equality against the one value the SME quoted.
 
-If it holds, segment-scope is **better** than what we ship: it is language-agnostic, so it would close
-the French-traffic gap doc 16 calls *"the single largest scope gap"* ([16 §2](16-e2e-production-blueprint.md))
-without needing FR URL patterns at all.
+**↺ Corrected — the delimiter is `":"`, not `" : "`.** The pre-probe text asserted `" : "` from the
+doc's `Brand | LoB | Segment` shorthand. C3 measured all six candidates instead of assuming:
 
-Two hard constraints on acting on it:
+| Delimiter | avg parts | % splitting into exactly 3 |
+|---|---|---|
+| `":"` | 2.380 | **37.62%** |
+| `" : "` | 1.037 | 1.84% |
+| `" \| "`, `"\|"`, `" - "`, `","` | 1.000 | 0.00% |
+
+The documented triple still holds — `ca-retirement :  : GWAM` on `":"` yields
+`["ca-retirement ", "  ", " GWAM"]`, i.e. Brand / blank LoB / Segment once trimmed — but any parser
+we write must split on the bare colon and trim, or it will silently produce one part instead of three.
+
+**↺ Corrected — segment scope is *narrower* than URL scope on the Public Website, not wider.** The
+pre-probe text claimed segment scope "would close the French-traffic gap." C3's sizing on
+`manulifeglobalprod` over the window says otherwise:
+
+| | Rows |
+|---|---|
+| Window rows | 6,148,797 |
+| Today's URL scope (broad) | 1,418,435 |
+| Segment scope (`ca-retirement` + `GWAM`) | 1,304,325 |
+| In both | 1,302,889 |
+| **Segment only — traffic we would GAIN** | **1,436** |
+| **URL only — traffic we would LOSE** | **60,594** |
+
+The two models agree on **~96%** of the traffic. Switching would gain 1,436 rows and lose 60,594.
+Two caveats before reading that as an argument against switching: `URL_SCOPE_BROAD` already includes
+`%/regimes-collectifs%`, so French is *not* the gap here that [16 §2](16-e2e-production-blueprint.md)
+described; and the probe's URL predicate deliberately does **not** apply D8's
+`SCOPE_LOGIN_HOST_EXCLUDE`, so the shipped scope is somewhat smaller than the 1,418,435 shown.
+
+> **↺ corrected (2026-07-29 audit):** probe C3 had a null-guard bug — the URL coalesce lacked the
+> trailing `F.lit("")` fallback and `like_any` lacked its NULL guard, so rows with NULL `page_url`
+> AND NULL `post_page_url` (the mobile-app-hit shape) evaluated `in_url_scope = NULL` and fell out
+> of the `segment_only` bucket. **The +1,436 GAIN figure is an undercount (suspect).** The −60,594
+> and in-both figures are unaffected, so the ~96% overlap may shift slightly downward. The code is
+> fixed; the figures above stand pending a probe re-run on Databricks.
+
+**So the case for segment scope changes shape.** It is *not* "segment scope is bigger and fixes
+French." It is: on the Public Website the two are near-equivalent, so the **re-baseline cost there is
+low** — and the real reason to adopt the segment model is that **the other three channels cannot be
+expressed by URL at all**. Adopting it is a decision about the other three channels, priced on the
+first.
+
+Two further findings constrain how far the segment model generalises:
+
+- **`manugrs` has eVar105 populated at 0.0001%** — effectively unpopulated (a handful of rows out of
+  23.5M in the window). Web Member scope cannot come from eVar105; it must come from eVar185 (C4).
+  The segment field is *per-suite*, not a universal key.
+- **`manufingbrsmobileapp.prod` is 93.6% populated on eVar105, but its dominant value is
+  `GWAM:US Retirement:Mobile` (92.5M) — US, not Canada.** eVar105 on the mobile suite selects the
+  wrong country; the Canada-Retirement subset there has to come from pagename (C8).
+
+Two hard constraints on acting on any of it:
 
 - **Any scope change is a re-baseline event.** Stated identically at [settings.py:25-31](../../databricks/conf/settings.py)
   and [:88-90](../../databricks/conf/settings.py): flipping scope re-baselines every downstream KPI,
   detector threshold, and injected-anomaly calibration; done under `mode=incremental` it also writes a
   step change mid-series that the detector reads as a level-shift anomaly. Any flip must be a full
-  `mode=backfill` with gold truncated. **C3** measures the magnitude (segment-only vs url-only rows)
-  so this is a sized decision, not a leap.
-- **A URL-based scope cannot express the Mobile channel at all.** Every scope predicate in the repo is
-  a SQL `LIKE` on a URL column ([01_bronze_ingest.py:62-101](../../databricks/src/01_bronze_ingest.py));
-  a hit with no page URL cannot enter scope. App hits carry no page URL. **C2** confirms this per suite.
+  `mode=backfill` with gold truncated. C3 has now **sized** it: on the Public Website the delta is
+  ~4%, which makes this a cheap cutover rather than the leap it looked like pre-probe.
+- **A URL-based scope cannot express the Mobile channel at all — now proven.** Every scope predicate
+  in the repo is a SQL `LIKE` on a URL column ([01_bronze_ingest.py:62-101](../../databricks/src/01_bronze_ingest.py));
+  a hit with no page URL cannot enter scope. **C2 measured `manufingbrsmobileapp.prod`'s coalesced URL
+  rate at exactly 0.000** (`verdict=app_or_mixed`). Note also that **`mobileappid` is 0.000 populated
+  on every suite**, so the obvious app discriminator is unusable — pagename is the only handle (C8).
 
 ### 2.3 ⚠️ The D8 conflict — the single biggest blocker
 
@@ -137,6 +212,19 @@ authority that issued it rules otherwise ([20](20-gwam-sme-questions.md) Q1). No
 records that ~94% of the `manugrs` suite is D8 login traffic, so this ruling moves an order of
 magnitude more data than any other question on the list.
 
+**What the probe changes about this conflict — it narrows, but does not shrink.** With
+`manucustomer.prod` absent from our feed (C9), the ManulifeID half of the collision is **moot until
+access is granted**: we could not build those four metrics today even if D8 were reversed tomorrow.
+The *live* half is therefore **Web Member**, and C1/C4 have now put a number on it —
+`manugrs` is 322M rows, and the D8 hosts include `grsmembers.manulife.com`, which C8 shows is exactly
+where its retirement-planner pages live (`.../passport/Jsp/RetirementGoals/*.jsp`, ~330k hits across
+ten pages in the window).
+
+C8 also shows the ManulifeID sign-in flow is **partially observable inside `manugrs`** without any new
+access: `mfid:sign-in` (1,160,058 hits) and `grs:id-flow:member:account-selection` (2,312,927). That is
+a genuine option for the sign-in metrics — and it is *precisely* the traffic D8 excludes, so it is
+gated on the same ruling. It does not create a workaround; it raises the cost of answering "no."
+
 ### 2.4 Metrics
 
 | Metric | Exists? | Detail |
@@ -144,20 +232,105 @@ magnitude more data than any other question on the list.
 | Page Views | 🟡 Approximately | We compute `hits_total` = row count ([gold_lib.py:149-154](../../databricks/src/gold_lib.py)) and surface it as page views. Adobe's *page views* are narrower than *hits*. Which the SME means changes the number ([20](20-gwam-sme-questions.md) Q6). |
 | Visits | ✅ | `visits_total` = distinct `concat(post_visid_high, post_visid_low, visit_num)`. |
 | Visitors | ✅ | `visitors_total` = distinct `mcvisid`. |
-| Errors | 🔴 Nothing | No error metric anywhere. eVar181-184 (Error Code / Description / Type / Category) are labeled only in [gwam_canada_retirement_eda.py:169-179](../../eda/gwam_canada_retirement_eda.py); `event173` is listed in [16 §3](16-e2e-production-blueprint.md). `RULE_DIMS` ([registry.py:108](../../detect/registry.py)) has no error dimension. ⏳ **C5** |
-| Sign in % rate completion | 🟡 Engine ready, inputs missing | `gold_lib.build_kpis_spark` already has a **`ratio`** kind that divides one metric by a sibling ([gold_lib.py:168-175](../../databricks/src/gold_lib.py)) — exactly how CoverMe's funnel works ([cm_registry.py:151-162](../../detect/cm_registry.py)). But GWAM's `SeriesSpec` ([registry.py:68-83](../../detect/registry.py)) is `count \| rate \| share` only, with no numerator/denominator (**G2**), and nothing marks a sign-in attempt vs success (⏳ **C6**). |
-| Sign in Error | 🔴 Nothing | eVar122 "Login Step" / eVar135 "Login Method" labeled in the EDA only. ⏳ **C6** |
+| Errors | 🟢 **Buildable** (C5) | ↺ was "🔴 Nothing". The error eVars are **populated at scale on the channels that need them**: on `manugrs` eVar181 **52.0%** (12.2M rows) / eVar182 **69.9%** (16.4M) / eVar184 **61.3%** (14.4M); on mobile eVar184 **17.9%** (**37.6M rows** — the largest error footprint anywhere). ⚠ **eVar183 is effectively absent from the Canada channels** — 0.00% on `manugrs`, 0.14% on mobile — so it is a John Hancock field, not ours. Remaining work is **G3** + Q7 (field of record, and errors-vs-affected-visits). See the attribution caveat below before quoting any example value. |
+| Sign in % rate completion | 🔴 **Not buildable from the assumed fields** (C6) | ↺ was "🟡 engine ready, inputs missing" — the inputs are now known to be *absent*. **eVar122 and eVar135 are 0% populated on `manugrs` and on mobile.** eVar122's entire footprint is John Hancock (2.77% of `jhfswamjhreupeprod`), where its values **duplicate eVar182 exactly** — so eVar122 carries error descriptions there, not ordered login steps. eVar135 is an auth-method enum (`email` 23.7M / `mfa` 145k / `biometrics` 1k / `username/password` 17), not an attempt/success marker. **The remaining path is pagename-based** (C8): `mfid:sign-in` → `grs:id-flow:member:account-selection` on `manugrs`, or `CIAM Sign In` (9.27M) on mobile. That needs an SME definition (Q8), and G2 still blocks *declaring* the ratio. |
+| Sign in Error | 🟡 **Likely buildable, not yet proven** (C5/C6) | ↺ was "🔴 Nothing". Sign-in failure strings are present in the window (`Username & Password, Invalid, Attempt` 1,054,850 · `Your password is required.` 800,213 · `Username & Password, Invalid, Locked` 462,428) and eVar181 carries `N/A_CAS_INVALID_CREDENTIALS` / `N/A_CAS_USER_LOCKED`. **But none of these can be attributed to a Canada channel from this probe** — see the caveat below. Same G3 + Q7 dependency as Errors, plus one confirming query. |
+
+⚠ **Attribution caveat — C5's value lists are cross-suite, its population rates are not.** `top_values`
+is computed over the whole window across all 16 rsids; only `per_rsid_population` is per-suite. So a
+value's *presence* in the list is not evidence it occurs on a GWAM Canada channel. Capacity
+arithmetic (value count vs a suite's populated-row count) resolves only a few cases:
+
+- **Forced onto `manugrs`:** eVar181 `"N/A"` at **8,750,383** exceeds every other suite's eVar181
+  capacity combined (223,328). Worth noting on its own terms — **~72% of `manugrs`'s populated
+  eVar181 is the literal string `"N/A"`**, so Error *Code* is mostly a non-value there. That is an
+  argument for eVar182 (Description) as the field of record in Q7.
+- **Forced OFF the mobile suite:** `ServerFetchFailure_BottomSheet_RetirementPlannerDataFailedtoLoad`
+  (2,102,470) cannot be a Canada mobile error — that suite has only **295,898** populated eVar183
+  rows in total. It belongs to `jhfswamjhreupeprod` (6,965,243 capacity). *An earlier draft of this
+  document attributed it to the app; that was wrong.*
+- **Unresolvable:** the sign-in failure strings above fit inside either `manugrs` (16.4M) or
+  `jhfswamjhreupeprod` (2.86M). Note they are **exactly** eVar122's top values with identical counts,
+  and eVar122 is John-Hancock-only (2,860,959 of its 2,862,198 populated rows) — so the parsimonious
+  reading is that they are *John Hancock's*, not ours.
+
+**Consequence: a small follow-up query is needed before Q7 can be answered** — per-rsid top values for
+eVar181/182/184 on `manugrs` and `manufingbrsmobileapp.prod`. The probe emitted global value lists by
+design (to bound payload size); this is the one place that bound costs us an answer. Worth folding
+into the next revision of `gwam_channel_discovery.py`.
+
+**↺ Corrected — `event173` is not the GWAM error event.** [16 §3](16-e2e-production-blueprint.md)
+lists it as the error event; C5 shows it fires on **John Hancock / investments** suites (99.95% of
+`jhfsjhinvestments`, 72.4% of `jhfsmanulifeinvestmentmgt2.0prod`) and effectively **zero on
+`manugrs` (0.000001)** and zero on mobile. Errors on the GWAM Canada channels are an **eVar** signal,
+not an event signal.
 
 Compounding all of it: **GWAM's 23 tracked event ids are unresolved** ([registry.py:18-22](../../detect/registry.py)),
 and the registry's own `meta.report_suite_caveat` ([metric-registry.yaml:57-61](metric-registry.yaml))
-warns that CoverMe's ids do not transfer to GWAM. The three new suites' event spaces are wholly
-unknown (⏳ **C7**).
+warns that CoverMe's ids do not transfer to GWAM. **C7 mapped the id spaces but could not label
+them** — this feed carries no event dictionary:
+
+| Suite | Top ids (window) |
+|---|---|
+| `manugrs` | `152` 23.5M · `151` 20.4M · `107` 19.8M · `500`/`501`/`502`/`503` 11.5M each · `132` 7.4M · `121` 5.2M · `122` 4.9M |
+| `manufingbrsmobileapp.prod` | `10030`/`108` 210.0M · `10004` 143.4M · `10000` 99.3M · `112` 95.0M · `151` 83.2M |
+| `manulifeglobalprod` | `10004`/`10044`/`10005`/`10099` 5.5M · `20` 2.9M · `502` 1.0M |
+
+Ids in `100-199` and `10000-10099` are Adobe **Instance-of-eVar** events (the same formula CoverMe's
+`decode_event()` uses); the `500`-series and `20xxx` are custom and need the EDDL workbook or the SME.
+`152` firing on 100% of `manugrs` rows suggests a page-view-equivalent — a candidate answer to Q6,
+but not one to assert without a label. Note also the tight co-firing blocks: `500`/`501`/`502`/`503`
+at *exactly* 11,472,195 each on `manugrs`, and `501`-`504` at exactly 1,033,283 each on
+`manulifeglobalprod` — one instrumented action emitting a fixed set.
+
+**A cheap lead for Q8 that the probe could not close.** [16 §3](16-e2e-production-blueprint.md)
+line 117 documents **event154/155/156 = Login Start / Complete / Error** — which is precisely the
+numerator/denominator pair "Sign in % rate completion" needs. **None of `154`, `155`, `156` (nor the
+registration trio `157`-`159`) appears in the top-25 events of any GWAM Canada suite.** The probe
+capped at `TOP_N=25` to avoid Databricks' stdout truncation, so this bounds rather than excludes
+them: on `manugrs` they fire fewer than ~3.0M times in the window, on mobile fewer than ~16.9M, on
+`manulifeglobalprod` fewer than ~951k. **A targeted count of those three ids is a single cheap query
+and would settle Q8 outright** — it should run before we accept the pagename-funnel fallback.
 
 ### 2.5 "Ideally non-marketing"
 
-Undefined operationally; no marketing discriminator is implemented for GWAM. **C10** profiles the
-candidates (campaign / ref_type / referrer / channel) so [20](20-gwam-sme-questions.md) Q5 can offer
-concrete options instead of an open question.
+Undefined operationally; no marketing discriminator is implemented for GWAM. **C10 bounds the
+options, and the answer is largely structural:**
+
+| Suite | `post_campaign` | `ref_type` | `post_referrer` | `post_channel` |
+|---|---|---|---|---|
+| `manulifeglobalprod` | **57.03%** | 100% | 58.56% | 68.07% |
+| `manugrs` | 0.51% | 100% | 10.36% | 56.34% |
+| `manufingbrsmobileapp.prod` | 0.02% | 100% | 0.00% | 37.68% |
+
+**"Non-marketing" is only a meaningful filter on the Public Website.** Campaign tagging is
+effectively absent from the authenticated member portal and the app — those channels are
+non-marketing *by construction*, being post-login experiences. So Q5 reduces to a single decision
+about one channel, not four. `ref_type` is 100% populated everywhere but is a coded enum (`8` 312M,
+`6` 46.7M, `2` 5.3M) with no dictionary in this feed — usable as a fallback only if the SME can
+supply the code meanings.
+
+### 2.6 "Canada Retirement App Pages v2" — reconstructible from pagename (C8)
+
+The Mobile channel's segment is an Adobe segment *name*, which we cannot implement. C8 profiled
+`post_pagename` on the mobile suite and found it partitions cleanly by **product-line prefix**:
+
+| Prefix | Meaning | Examples (window) |
+|---|---|---|
+| `GB ` | **Group Benefits** — not retirement | GB Home 10.2M · GB Recent Claims 4.9M · GB Coverage 4.9M · GB Submit A Claim 3.4M |
+| **`MPS `** | **the retirement platform** — matches eVar185 `MPS Member` | MPS Account Balances 8.1M · MPS Transac/Contrib History 1.5M |
+| `MM ` | Manulife Mobile shell | MM Select Account 5.1M |
+| `CIAM Sign In` | the sign-in flow | 9.3M |
+
+So the candidate predicate is **`rsid = manufingbrsmobileapp.prod` AND `post_pagename LIKE 'MPS %'`**,
+optionally intersected with `post_evar185 = 'MPS Member'` (18.16% of the suite). That needs
+confirmation against the real Adobe segment definition (Q11) — a prefix reconstruction can miss pages
+the segment includes.
+
+⚠ **Do not misread the probe's `retirement_like` output here.** It returned a single row for this
+suite (`GR Retirement Redefined`, 741 hits) because it searched for the substring *retire* — and
+**the Canada retirement pages are named `MPS`, not "Retirement."** The near-empty result is an
+artifact of the search term, not evidence of absent retirement traffic.
 
 ---
 
@@ -168,9 +341,9 @@ Numbered **G1–G6**. Deliberately *not* the `E1–E4` series: that namespace be
 
 | # | Gap | Evidence | Fix | Impact if unfixed |
 |---|---|---|---|---|
-| **G1** | **The discovery probe has not been run.** Ten of the questions in §2 are answerable from data, not from the SME. | [`eda/gwam_channel_discovery.py`](../../eda/gwam_channel_discovery.py) written 2026-07-28, never executed. | Run it on Databricks; paste the SHAREABLE blocks back; fold results into §2 and §4. **Check `run_manifest.skipped == {}`** — a silently skipped section is how CoverMe's S6 went missing (doc-17 E1). | Every ⏳ above stays open, and we ask the SME questions we could have answered ourselves. |
+| **G1** | ✅ **CLOSED 2026-07-29.** The discovery probe has been run. | [`eda/gwam_channel_discovery.py`](../../eda/gwam_channel_discovery.py) executed on Databricks; export [`gwam_channel_discovery.html`](../../gwam_channel_discovery.html). `generated_at` 2026-07-29T02:00:54, 11 sections, **`skipped == {}`**, `complete: true`. | Done — results folded into §0, §2.1-2.6 and §4. Three pre-probe claims were **corrected**, not just filled in (suite count, delimiter, segment-vs-URL direction). | — |
 | **G2** | **GWAM's `SeriesSpec` cannot express a ratio or carry governance.** The Spark engine supports `ratio`; the GWAM Python spec does not. | [registry.py:68-83](../../detect/registry.py) — `kind` is `count \| rate \| share`; no `numerator`/`denominator`, no `status`/`direction`/`owner`. `CmSeriesSpec` ([cm_registry.py:106-134](../../detect/cm_registry.py)) has all of them. | Port the missing fields from `CmSeriesSpec`. `gold_lib` needs **no** change — [gold_lib.py:168-175](../../databricks/src/gold_lib.py) already resolves ratios by sibling `metric_id`. | "Sign in % rate completion" cannot be declared at all, and GWAM metrics stay ungoverned (no owner/status). |
-| **G3** | **No error or sign-in columns reach bronze/silver.** | [bronze_columns.py](../../databricks/conf/bronze_columns.py) — `DETECTOR_COLUMNS` / `SILVER_COLUMNS` carry no eVar181-184, eVar122, eVar135. | Add them once **C5/C6** confirm which are populated. | Errors and Sign-in Errors are unbuildable regardless of any SME ruling. |
+| **G3** | **No error or sign-in columns reach bronze/silver.** Now **actionable** — C5/C6 determined which columns are worth carrying. | [bronze_columns.py](../../databricks/conf/bronze_columns.py) — `DETECTOR_COLUMNS` / `SILVER_COLUMNS` carry no eVar181-184, eVar122, eVar135. | Add **`post_evar181`, `post_evar182`, `post_evar184`** — the three populated at scale on the Canada channels (12.2M / 16.4M / 14.4M rows on `manugrs`; 37.6M on mobile for eVar184). **Do NOT add `post_evar183`** (0.00% on `manugrs`, 0.14% on mobile — a John Hancock field) **or eVar122/eVar135** (0% on both Canada suites). Carrying any of those three costs bronze width for near-guaranteed nulls. | Errors and Sign-in Errors are unbuildable regardless of any SME ruling. |
 | **G4** | **Scope has no channel dimension.** `SCOPE_RSID` is a single string and the predicate is one rsid AND a URL match. | [settings.py:19](../../databricks/conf/settings.py), [01_bronze_ingest.py:62-101](../../databricks/src/01_bronze_ingest.py). | Per-channel scope config (rsid + its own segment predicate), and a `channel` column carried to gold so metrics break down by it. **Blocked on the D8 ruling** — do not build until §4 item 1 lands. | A four-channel product cannot be expressed. Note this is also the change that re-baselines everything (§2.2). |
 | **G5** | **GWAM has no registry pin or drift test.** CoverMe has both. | [test_registry_yaml.py](../../tests/test_registry_yaml.py) covers only the three CoverMe sheets; `detect/registry.py` has no `REGISTRY_VERSION`. | Pin GWAM's binding to the YAML and add a drift guard, mirroring `test_series_governance_matches_yaml`. Seeded 2026-07-28 by `test_gwam_channel_seed_counts`. | GWAM metric definitions can drift from the governed registry silently — the exact failure the CoverMe test was written to prevent. |
 | **G6** | **No test covers the scope constants.** | Nothing asserts `SCOPE_RSID`, `SCOPE_URL_MODE`, `SCOPE_SUITE_MODE`, or `SCOPE_LOGIN_HOST_EXCLUDE`. CoverMe's equivalent predicate *is* tested ([test_cm_silver.py](../../tests/test_cm_silver.py) `test_scope_expr_include_minus_exclude`). | Add scope-predicate unit tests before touching scope. | The single highest-consequence config in the repo (§2.2 re-baseline) is unguarded — precisely the wrong thing to change untested. |
@@ -185,33 +358,38 @@ this table is the technical agenda behind it.
 | # | What we need clarified | Why it blocks | Our current assumption | Resolving artifact |
 |---|---|---|---|---|
 | **1** | 🚩 **Does the four-channel scope supersede the 2026-07-20 login-exclusion rule (D8)?** Two channels require the traffic D8 removes. | Scope is the denominator of every metric. D8 is enforced in *every* mode and moves ~94% of one suite. | D8 stands until explicitly reversed. **We have not changed it.** | Written ruling from the authority that issued D8 → doc 20 Q1 |
-| **2** | 🚩 **The actual report-suite IDs for "GRS+" and "manucustomer.prod".** | Three of four channels cannot be located in our source table. | `manufingbrsmobileapp.prod` = the Mobile suite (probable, ⏳ C1); the other two unknown. | The rsid strings, or Adobe admin access → doc 20 Q2 |
-| **3** | 🚩 **Is `ca-retirement :  : GWAM` the literal eVar105 value, and does segment-scope replace our URL filter?** | Switching the scope model re-baselines every KPI and threshold; it must happen before baselines are fit, not after. | It is the documented `Brand \| LoB \| Segment` triple, `" : "`-delimited. ⏳ C3 sizes the change. | Confirmation + sign-off on the re-baseline → doc 20 Q3 |
+| **2a** | 🚩 **Access to `manucustomer.prod`.** ↺ Escalated from "what is the ID" to "we do not have this data." | The ManulifeID channel — 4 of the 17 metric×channel pairs — cannot be built at all. | **C9: 0 rows.** Absent from all 16 rsids. Not a naming problem. | A data-access request, started **now** — longest lead time on the list → doc 20 Q2 |
+| **2b** | **Ratify `manugrs` = GRS+ and `manufingbrsmobileapp.prod` = GBRS Mobile.** ↺ Downgraded from blocking. | Only the rsid *strings* are unconfirmed; the identifications are data-backed. | **C1/C4: `manugrs` carries the SME's own `MPS Member` predicate at 100% of its populated eVar185.** Mobile is 68.9% of the table. | One-line confirmation → doc 20 Q2 |
+| **3** | 🚩 **Does segment-scope replace our URL filter?** ↺ The *value* question is answered; only the decision remains. | Switching the scope model re-baselines every KPI and threshold; it must happen before baselines are fit, not after. | **C3: `ca-retirement :  : GWAM` is a literal value (776,860 hits); delimiter is `":"` not `" : "`.** Sizing on the Public Website: **+1,436 / −60,594 rows, ~96% overlap** — a *cheap* cutover, and one justified by the other three channels rather than by this one. | Sign-off on the re-baseline → doc 20 Q3 |
 | **4** | **Does `1`/`0` mean in/out of scope?** And do the four channels alert independently? | Determines whether the deliverable is 17 metrics or a ranked subset. | 1 = in scope; channels alert independently. | One-line confirmation → doc 20 Q4 |
-| **5** | **What defines "marketing" traffic?** | Three of six metrics carry the "ideally non-marketing" qualifier. | Campaign-tagged is the likely definition; ⏳ C10 bounds the options. | A rule we can encode → doc 20 Q5 |
-| **6** | **"Page Views" — Adobe page views, or all hits?** | We currently report hits. The two differ materially. | Adobe page views. | Confirmation → doc 20 Q6 |
-| **7** | **Which field is the error of record, and is "count" errors or affected visits?** | No error metric exists; we would be guessing at both field and grain. | eVar181-184; count = error hits. ⏳ C5 | Field + grain → doc 20 Q7 |
-| **8** | **Numerator and denominator of "Sign in % rate completion", and over what unit.** | A ratio without a defined denominator is not a metric. | Successful sign-ins ÷ sign-in attempts, at visit level. ⏳ C6 | Definition → doc 20 Q8 |
-| **9** | **How to separate Retirement from other ManulifeID sign-ins** — the SME's own open item. | Without a discriminator the ManulifeID channel cannot be scoped to Canada Retirement. | None known. ⏳ C9 profiles every candidate; if none isolates it, this is a **tagging change**, not something solvable downstream. | A field + value, or acceptance that it needs new tagging → doc 20 Q9 |
-| **10** | **Is the "Manulife Financial" Adobe instance the same feed?** | If Mobile is a separate feed we lack access to, this is data acquisition, not modelling. | Same feed — `manufingbrsmobileapp.prod` is visible in our catalog. ⏳ C1 | Confirmation from Adobe admin → doc 20 Q10 |
-| **11** | **The definition of the "Canada Retirement App Pages v2" segment.** | It is an Adobe segment name; we cannot implement a name. | Translatable to a pagename prefix. ⏳ C8 | The segment definition → doc 20 Q11 |
+| **5** | **What defines "marketing" traffic?** ↺ Narrowed to one channel. | Three of six metrics carry the "ideally non-marketing" qualifier. | **C10: campaign tagging is 57% on the Public Website but ~0% on Web Member (0.51%) and Mobile (0.02%)** — those two are non-marketing by construction. The question only bites on one channel. | A rule for the Public Website → doc 20 Q5 |
+| **6** | **"Page Views" — Adobe page views, or all hits?** | We currently report hits. The two differ materially. | Adobe page views. C7 notes event `152` fires on ~100% of `manugrs` rows and may be the page-view event, but the id is unlabeled. | Confirmation → doc 20 Q6 |
+| **7** | **Which field is the error of record, and is "count" errors or affected visits?** ↺ Now a menu, not an open question. | An error metric is buildable; we would still be guessing at field and grain. | **C5: eVar181 52% / eVar182 70% / eVar184 61% populated on `manugrs`, eVar184 17.9% on mobile. eVar183 and `event173` are BOTH ruled out** (John Hancock fields). Leaning eVar182 — eVar181 is ~72% the literal string `"N/A"`. Needs one follow-up query for per-suite values. | Field + grain → doc 20 Q7 |
+| **8** | **Numerator and denominator of "Sign in % rate completion", and over what unit.** ↺ The assumed inputs are gone. | A ratio without a defined denominator is not a metric. | **C6: eVar122 and eVar135 are 0% populated on the Canada suites.** Remaining path is the C8 pagename funnel (`mfid:sign-in` → `account-selection`, or `CIAM Sign In`). | Definition, chosen from the pagename options → doc 20 Q8 |
+| **9** | **How to separate Retirement from other ManulifeID sign-ins** — the SME's own open item. ↺ Answered, negatively. | Without a discriminator the ManulifeID channel cannot be scoped to Canada Retirement. | **C9: the suite has 0 rows in our feed — no field could be profiled.** This is not solvable downstream; it needs access first, then likely a tagging change. | Access, then a field + value → doc 20 Q9 |
+| **10** | **Is the "Manulife Financial" Adobe instance the same feed?** | If Mobile is a separate feed we lack access to, this is data acquisition, not modelling. | **C1: `manufingbrsmobileapp.prod` is present in our feed with 881 days of history** — strongly suggests same feed, but the instance label is an Adobe-admin fact no query can settle. | Confirmation from Adobe admin → doc 20 Q10 |
+| **11** | **The definition of the "Canada Retirement App Pages v2" segment.** ↺ Reconstructed; needs confirming. | It is an Adobe segment name; we cannot implement a name. | **C8: `post_pagename LIKE 'MPS %'`** isolates the retirement platform from `GB ` (Group Benefits) and `MM `. | Confirm the reconstruction, or export the real definition → doc 20 Q11 |
 | **12** | Alert thresholds / severity per channel, and a named owner per metric. | Not blocking — detection can be built with defaults and tuned. | Reuse the existing severity ladder (`warn 3.5 / minor 5.0 / major 8.0 / critical 12.0`). | Non-blocking attachment → doc 20 Q12 |
 
 ---
 
 ## 5. Gap to the full build (roadmap, post-SME)
 
-**A. Close what data can close — now.** Run **G1**. Fold the results into §2 and §4; every ⏳ either
-becomes a fact or moves to §4 with a stated reason it could not be settled from data. This is the only
-step that needs nothing from anyone else.
+**A. Close what data can close — ✅ done 2026-07-29.** G1 ran clean; §0 and §2.1-2.6 now carry results
+rather than ⏳ markers, and three pre-probe claims were corrected. What remains in §4 is there because
+**no query can settle it**, not because we haven't looked.
 
-**B. Get the three blocking rulings.** Items 1–3 in §4. Until item 1 lands, **G4 must not be built** —
-a channel-aware scope that assumes the wrong answer on D8 is worse than no scope change, because it
-re-baselines everything in the wrong direction.
+**B. Get the rulings, and start the access request.** Items 1, 2a, 3 in §4. Until item 1 lands,
+**G4 must not be built** — a channel-aware scope that assumes the wrong answer on D8 is worse than no
+scope change, because it re-baselines everything in the wrong direction. Item **2a is now the longest
+pole**: `manucustomer.prod` access is procurement-shaped, not engineering-shaped, and nothing about
+the ManulifeID channel can start until it lands.
 
 **C. Engineering, in dependency order.** G2 (SeriesSpec ratio + governance) and G6 (scope tests) are
-safe to do immediately — neither depends on a ruling. G3 follows C5/C6. G4 follows item 1. G5 follows
-the GWAM registry entries being promoted past `candidate`.
+safe to do immediately — neither depends on a ruling. **G3 is now also unblocked**: C5/C6 determined
+exactly which columns to carry (eVar181/182/184 in; **eVar183 OUT** — John Hancock field per the G3
+gate above and §2.4; eVar122/135 out — ↺ corrected 2026-07-29, this line previously listed eVar183
+as in), and it is the cheapest of the three. G4 follows item 1. G5 follows the GWAM registry entries being promoted past `candidate`.
 
 **D. Then the pipeline.** Per-channel bronze scope → `channel` carried through silver → gold series per
 (metric × channel) → detector wiring. A full `mode=backfill` with gold truncated, per §2.2. Sequenced
@@ -228,35 +406,41 @@ blocker text and the Synapse-era claims in docs 01/02/03/10/11 remain open.
 | Area | Status |
 |---|---|
 | SME scope table received & recorded | ✅ **Complete** — §1, and `meta.gwam_sme_inputs` in the registry |
-| Report suites identified | 🔴 **1 of 4 confirmed** — two unlocated, one probable pending C1 |
-| Discovery probe | 🟡 **Written, not run** (G1) — [`gwam_channel_discovery.py`](../../eda/gwam_channel_discovery.py) |
-| Scope model (URL → segment) | 🔴 **Blocked** — on SME item 3 *and* C3 sizing; re-baseline event either way |
-| D8 / login-traffic conflict | 🔴 **Blocked on SME** — item 1, the biggest single question on the list |
+| Discovery probe | ✅ **Run clean 2026-07-29** (G1 closed) — 11 sections, `skipped == {}` |
+| Report suites identified | 🟢 **3 of 4 located** — `manulifeglobalprod`, `manugrs` (data-confirmed), `manufingbrsmobileapp.prod`; `manucustomer.prod` **absent from our feed** |
+| Scope model (URL → segment) | 🟡 **Sized, awaiting sign-off** — SME item 3; ~96% overlap on the Public Website (+1,436 / −60,594; the +1,436 is an undercount — see the §2.1 C3 correction, re-run pending), so a cheap cutover; still a full re-baseline |
+| D8 / login-traffic conflict | 🔴 **Blocked on SME** — item 1, still the biggest single question; now narrowed to the **Web Member** channel |
 | Page Views / Visits / Visitors | ✅ **Engine ready** — exist today; only the page-views definition is open (item 6) |
-| Errors | 🔴 **Not implemented** — field unknown (C5), columns not in bronze (G3) |
-| Sign-in completion rate | 🟡 **Engine ready, inputs unknown** — `ratio` kind exists; `SeriesSpec` can't express it (G2); no attempt/success marker known (C6) |
-| Sign-in errors | 🔴 **Not implemented** |
-| Mobile-app ingestion | 🔴 **Net-new** — pipeline is URL-scoped end to end; app hits carry no URL (C2, G4) |
-| ManulifeID retirement split | 🔴 **Open — SME's own flagged unknown** (item 9, C9) |
+| Errors | 🟢 **Buildable** — eVar181/182/184 at 12.2M/16.4M/14.4M rows on `manugrs`, eVar184 at 37.6M on mobile; needs G3 + field-of-record ruling (item 7) + one per-suite value query |
+| Sign-in errors | 🟡 **Likely buildable** — the failure strings exist but cannot be attributed to a Canada channel from this probe; same G3 + item 7 |
+| Sign-in completion rate | 🔴 **Assumed inputs are empty** — eVar122/135 0% on the Canada suites (C6); pagename funnel is the remaining path, needs item 8 + G2 |
+| Mobile-app ingestion | 🔴 **Net-new, and proven necessary** — mobile URL rate is exactly 0.000; `mobileappid` unusable; pagename `MPS %` is the handle (C2/C8, G4) |
+| ManulifeID channel | 🔴 **Blocked on data access** — suite has 0 rows in our feed (item 2a); the retirement split (item 9) cannot even be attempted until then |
 | Governance (GWAM registry pin + drift test) | 🟡 **Seeded** — 17 candidate entries at v0.4.0; binding pin still open (G5) |
 
-**Bottom line.** We have a clear, recorded scope ask and a precise map of what it collides with — but
-GWAM is **not** in the position CoverMe reached on 2026-07-27. CoverMe's blockers were labels on data
-we already had; **GWAM's are the data itself**: three of four report suites are unlocated, and the two
-sign-in metrics require reversing a standing business rule. The critical path is therefore *not* our
-engineering — it is (1) running the probe, which is a day's work and closes ten questions, and (2)
-three business rulings, of which the D8 conflict is by far the largest. Nothing in the pipeline should
-change until those land; the pieces that are safe to build in the meantime are G2 and G6.
+**Bottom line.** ↺ The pre-probe verdict said "GWAM's blockers are the data itself." **That was too
+pessimistic by three-quarters.** Three of the four suites are in our feed with 880+ days of history on
+the two large ones; Errors and Sign-in Errors turned out to be *buildable* rather than absent; and the
+scope cutover is ~4% on the Public Website rather than the leap it looked like. What survives is
+sharper and smaller: **one business ruling (D8), one access request (`manucustomer.prod`), and one
+definition we cannot infer (sign-in completion).** The critical path is no longer discovery — it is
+those three, plus G2/G3/G6, which are all now unblocked and independent of any ruling.
 
 ---
 
 ## 7. Verification / how to confirm this is done
 
-1. **Probe runs clean.** `run_manifest.skipped == {}` and all 11 sections present. A non-empty
-   `skipped` map means the run is *not* complete coverage, regardless of how much output appeared.
-2. **Every ⏳ in §2 and §4 is resolved** — either flipped to a fact with the emitting section cited
-   (e.g. "C3: 41.2% of `manulifeglobalprod` carries `ca-retirement`"), or moved to §4 with the reason
-   it could not be settled from data.
+1. ✅ **Probe ran clean.** `run_manifest.skipped == {}`, `complete: true`, all 11 sections present and
+   parsing as JSON. A non-empty `skipped` map would have meant the run is *not* complete coverage,
+   regardless of how much output appeared.
+2. ✅ **Every ⏳ in §2 and §4 is resolved** — flipped to a fact with the emitting section cited, or
+   left in §4 with the reason no query could settle it (items 1, 2a, 4, 6, 10, 12).
+
+   **To re-verify any figure in this document from the export** — the notebook lives in one
+   base64 line, so never read it with line-oriented shell tools:
+   `__DATABRICKS_NOTEBOOK_MODEL = '<b64>'` → base64-decode → URI-decode → `JSON.parse` → walk
+   `commands[].results` harvesting string leaves → strip ANSI → match
+   `===== BEGIN/END SHAREABLE: {id} =====` (concatenating any `----- part i of n -----` chunks).
 3. **D8 is still in force in code.** `git diff databricks/conf/settings.py` is empty; `SCOPE_LOGIN_HOST_EXCLUDE`
    is unchanged. This document flags the conflict; it does not resolve it.
 4. **Registry seeded, tests green.** `pytest tests/ -q` passes, including `test_gwam_channel_seed_counts`

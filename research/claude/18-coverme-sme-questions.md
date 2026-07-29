@@ -30,6 +30,9 @@ Using only **Enabled** variables, we've locked in:
 - **The quote → application funnel** (your five Anomaly-Detection-flagged events):
   **Quote Start** (event29) → **Quote Complete** (event30) → **Save Quote**
   (event33) → **App Start** (event70) → **App Confirm** (event41).
+  *(For our engineers: interface event N appears in the raw feed's `post_event_list` as
+  N+199 — event29→228, event30→229, event33→232, event70→269, event41→240 — which is why
+  docs 17 and the metric registry cite the 200-range ids for the same five events.)*
 - **The variables you flagged for Anomaly Detection:** Product Category (eVar4),
   Product ID (eVar5), Sponsor/Distributor (eVar6), Quote Session ID (eVar11),
   Transaction ID (eVar16), Current Page (eVar52), Experience Cloud ID (eVar111),

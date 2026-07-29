@@ -64,6 +64,7 @@
 
 import json
 import math
+import hashlib
 import datetime
 import traceback
 
@@ -265,7 +266,9 @@ def like_any(col, patterns):
     expr = F.lit(False)
     for p in patterns:
         expr = expr | col.like(p.lower())
-    return expr
+    # NULL col makes col.like(...) NULL and False|NULL stays NULL; coalesce to False
+    # so ~like_any(...) is well-defined for rows with no URL (e.g. mobile-app hits).
+    return F.coalesce(expr, F.lit(False))
 
 
 # ---- window frame -------------------------------------------------------------
@@ -432,7 +435,7 @@ def c3_evar105_census():
     is_gwam = F.lower(col).contains("gwam")
     url_cols = [n for n in (pick("page_url"), pick("post_page_url")) if n]
     if url_cols:
-        urlc = F.lower(F.coalesce(*[F.when(nonblank(n), qcol(n)) for n in url_cols]))
+        urlc = F.lower(F.coalesce(*[F.when(nonblank(n), qcol(n)) for n in url_cols], F.lit("")))
         in_url_scope = like_any(urlc, URL_SCOPE_BROAD) & ~like_any(urlc, URL_SCOPE_EXCLUDE)
     else:
         in_url_scope = F.lit(False)
@@ -456,7 +459,7 @@ def c3_evar105_census():
         "column": EVAR105, "window": [START_DATE, MAX_DATE],
         "sme_claimed_value": "ca-retirement :  : GWAM",
         "delimiter_probe": delim_probe, "chosen_delimiter": best,
-        "top_values": top_values(WIN, EVAR105),
+        "top_values_all_suites": top_values(WIN, EVAR105),
         "top_triples": [{"rsid": r["rsid"], "brand": r["brand"], "lob": r["lob"],
                          "segment": r["segment"], "count": int(r["count"])} for r in triples],
         "per_rsid": [{"rsid": r["rsid"], "rows": int(r["rows"]),
@@ -505,7 +508,7 @@ def c4_platform_census():
                    .orderBy(F.desc("rows")).limit(TOP_N).collect())
         out[label] = {
             "present": True, "column": name,
-            "top_values": top_values(WIN, name),
+            "top_values_all_suites": top_values(WIN, name),
             "per_rsid": [{"rsid": r["rsid"], "rows": int(r["rows"]),
                           "populated": float(r["populated"] or 0.0),
                           "mps_rate": float(r["mps_rate"] or 0.0)} for r in rows],
@@ -530,7 +533,7 @@ def c5_error_fields():
     cols = [(k, v) for k, v in ERROR_EVARS.items()]
     out = {"window": [START_DATE, MAX_DATE], "columns": ERROR_EVARS,
            "per_rsid_population": per_rsid_rates(WIN, cols),
-           "top_values": {k: top_values(WIN, v) for k, v in ERROR_EVARS.items() if v}}
+           "top_values_all_suites": {k: top_values(WIN, v) for k, v in ERROR_EVARS.items() if v}}
     if have("post_event_list"):
         ev = F.col("post_event_list").cast("string")
         has173 = (ev == F.lit("173")) | ev.startswith("173,") | ev.contains(",173,") | ev.endswith(",173")
@@ -712,7 +715,7 @@ def c10_marketing_fields():
         "window": [START_DATE, MAX_DATE],
         "columns": {k: v for k, v in cols},
         "per_rsid_population": per_rsid_rates(WIN, cols),
-        "top_values": {k: top_values(WIN, v) for k, v in cols if v},
+        "top_values_all_suites": {k: top_values(WIN, v) for k, v in cols if v},
         "note": ("Campaign-tagged share is the most likely operational definition of 'marketing', "
                  "with ref_type as the fallback. The SME picks; this just bounds the options."),
     })
@@ -731,7 +734,12 @@ run_section("marketing_fields", c10_marketing_fields)
 # COMMAND ----------
 
 def c_run_manifest():
-    sections = sorted(RESULTS.keys())
+    # Byte length + sha1 of every shareable section, from the exact JSON that was
+    # printed — the truncation guard the header warns about (doc-16 §0.5).
+    sections = {}
+    for sid, payload in RESULTS.items():
+        body = json.dumps(payload, separators=(",", ":"), default=str)
+        sections[sid] = {"bytes": len(body), "sha1": hashlib.sha1(body.encode("utf-8")).hexdigest()}
     emit("run_manifest", {
         "notebook": "gwam_channel_discovery",
         "generated_at": datetime.datetime.now().isoformat(timespec="seconds"),

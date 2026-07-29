@@ -33,7 +33,7 @@ scheduled daily **06:00 America/Toronto**, created **PAUSED**.
 | `src/cm_silver_lib.py` | CoverMe pure transforms: page_url-first coalesce, URL scope, domain language, hit eligibility |
 | `src/cm_00_freshness_guard.py` … `cm_03_gold_kpis.py` | The four CoverMe job notebooks (no detect task yet) |
 | `jobs/coverme_pulse_daily.json` | CoverMe Databricks Jobs definition |
-| `../detect/cm_registry.py` | CoverMe series registry, pinned to `research/claude/metric-registry.yaml` v0.3.0 |
+| `../detect/cm_registry.py` | CoverMe series registry, pinned to `research/claude/metric-registry.yaml` v0.4.0 (CoverMe entries SME-confirmed at v0.3.0) |
 
 ## Prerequisites
 - A writable Unity Catalog you can create schemas in (`<catalog>.gmai_pulse_bronze|silver|gold`).
@@ -138,7 +138,7 @@ The gold KPI build is unit-tested for exact parity with the pandas detector, and
 series kinds (visit-distinct counts, ratios, evar4 cube) have their own hand-computed suite:
 ```bash
 pip install pyspark==3.5.1            # dev-only; needs a JDK (11/17)
-python -m pytest tests/test_gold_parity.py tests/test_cm_gold.py tests/test_cm_silver.py -q
+python -m pytest tests/test_gold_parity.py tests/test_cm_gold.py tests/test_cm_silver.py tests/test_registry_yaml.py -q
 ```
 On Windows set `PYSPARK_PYTHON`/`PYSPARK_DRIVER_PYTHON` to your venv python and
 `SPARK_LOCAL_IP=127.0.0.1` (the test fixture does this automatically). The existing

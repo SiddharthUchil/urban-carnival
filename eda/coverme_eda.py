@@ -22,10 +22,10 @@
 # MAGIC retired `%insttrip.manulife.com%` host (dead after 2024-03-11) joins the scope only when
 # MAGIC `include_retired_baseline` is true. `url_scope_exclude` drops UAT / AEM / staging noise.
 # MAGIC
-# MAGIC **URL coalesce is INVERTED vs GWAM — `page_url` FIRST.** On this table `page_url` is
-# MAGIC 0.0005% blank while `post_page_url` is 58.9% blank (the exact opposite of GWAM). The D4
-# MAGIC blank-guarded coalesce order is `page_url, visit_start_page_url, first_hit_page_url,
-# MAGIC post_page_url`. Adobe writes empty strings, not NULLs, so blanks map to NULL first.
+# MAGIC **URL coalesce is `page_url`-first — same order as GWAM since its D4 correction.** On this
+# MAGIC table `page_url` is 0.0005% blank while `post_page_url` is 58.9% blank. The CoverMe delta is
+# MAGIC the 4-column candidate list — `page_url, visit_start_page_url, first_hit_page_url,
+# MAGIC post_page_url` — vs GWAM's 2. Adobe writes empty strings, not NULLs, so blanks map to NULL first.
 # MAGIC
 # MAGIC **Language is split by DOMAIN, not path** (~50/50): coverme.com = EN, pourmeproteger = FR
 # MAGIC (SME interim ruling 2026-07-27 — eVar8/eVar149/prop5 are NOT language of record until the
@@ -142,6 +142,8 @@ print("\n" + "=" * 78 + "\n" + PII_EXPORT_WARNING + "\n" + "=" * 78 + "\n")
 # Built from CoverMeDataMap.xlsx — the Enabled rows of the post_eVar / post_prop / post_event_list
 # tabs. Keyed by variable number; applies to both `evarN` and `post_evarN`. Business flagged
 # eVars 4,5,6,11,16,52,111,148 and the quote/app funnel events for Anomaly Detection.
+# NOTE: eVar111 has no Instance event in the feed, so AD_FLAGGED_EVENT_IDS carries 7
+# instance-event eVars (4,5,6,11,16,52,148) + 5 funnel events = 12 IDs, matching the registry.
 EVAR_LABELS = {
     1: "Time Stamp", 2: "New/Repeat Visitors", 3: "Visit Number", 4: "Product Category",
     5: "Product ID", 6: "Sponsor/Distributor/Association", 7: "Sub-Line of Business",
@@ -344,7 +346,8 @@ def resolve_ts_expr(df):
     raise ValueError("No usable timestamp column (date_time / hit_time_gmt) found")
 
 # --- CoverMe scope: URL-only (single-suite). Resolved once against the schema. ------------------
-# D4 coalesce order is INVERTED vs GWAM — page_url FIRST (0.0005% blank vs 58.9% for post_page_url).
+# D4 coalesce order: page_url FIRST (0.0005% blank vs 58.9% for post_page_url) — same order as
+# GWAM post-D4; the CoverMe delta is the 4-column candidate list vs GWAM's 2.
 URL_CANDIDATES = ("page_url", "visit_start_page_url", "first_hit_page_url", "post_page_url")
 URL_COLS = None       # present URL candidates, in coalesce order
 URL_COL  = None       # lead URL column
@@ -1042,7 +1045,9 @@ def decode_event(eid):
         return f"Instance of eVar{vn}" + (f" ({lbl})" if lbl else "")
     return "unknown — resolve via CoverMe event dictionary"
 
-TOP_EVENT_IDS = []
+# Seeded with the flagged set so an S6 failure can't silently empty S8's flagged-event
+# series (the doc-17 E1 failure mode); s6_event_decode overwrites on success.
+TOP_EVENT_IDS = list(AD_FLAGGED_EVENT_IDS)
 
 def s6_event_decode():
     global TOP_EVENT_IDS
