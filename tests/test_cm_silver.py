@@ -25,7 +25,7 @@ import pyarrow.parquet as pq  # noqa: E402
 import cm_silver_lib as cml  # noqa: E402
 from conf.coverme_settings import (  # noqa: E402
     URL_SCOPE_INCLUDE, URL_SCOPE_EXCLUDE, ELIGIBLE_HIT_SOURCE_EXCLUDE,
-    URL_SCOPE_BASELINE_INCLUDE, BASELINE_INCLUDE_END,
+    URL_SCOPE_BASELINE_INCLUDE, BASELINE_INCLUDE_END, URL_COALESCE_COLS,
 )
 
 
@@ -73,6 +73,12 @@ def test_url_expr_page_url_first_blank_guarded(spark, tmp_path):
                    "https://fallback.two/b",      # blank lead -> 2nd candidate
                    "https://fallback.three/c",    # blank 1+2 -> 3rd candidate
                    ""]                            # all blank/NULL -> '' (never NULL)
+
+
+def test_url_candidates_pinned_to_settings():
+    # cm_silver_lib.URL_CANDIDATES is a deliberate duplicate of
+    # conf.coverme_settings.URL_COALESCE_COLS; pin them equal so they can't drift.
+    assert list(cml.URL_CANDIDATES) == list(URL_COALESCE_COLS)
 
 
 def test_scope_expr_include_minus_exclude(spark, tmp_path):

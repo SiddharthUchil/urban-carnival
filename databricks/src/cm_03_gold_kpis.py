@@ -2,7 +2,8 @@
 # MAGIC %md
 # MAGIC # GMAI-Pulse CoverMe — Task 3/3: Gold KPI build
 # MAGIC Registry-driven daily KPI series from detect/cm_registry (pinned to
-# MAGIC metric-registry.yaml v0.3.0). Full rebuild from silver each run — the matrix is tiny
+# MAGIC metric-registry.yaml v0.4.0; CoverMe entries SME-confirmed at v0.3.0). Full rebuild
+# MAGIC from silver each run — the matrix is tiny
 # MAGIC (~1,200 days x 53 series). Metric semantics per Adobe datafeeds-calculate + the SME
 # MAGIC rulings of 2026-07-27: 4-part visit key, visid-pair visitors, VISIT-DISTINCT event
 # MAGIC counts, 0-safe funnel ratios, funnel x Product Category cube. Stored long:
@@ -19,7 +20,7 @@ from conf.coverme_settings import resolve
 import gold_lib
 from cm_registry import (
     SERIES, EVENT_IDS, NEEDED_COLS, DATE_COL, VISIT_KEY_COLS, VISITOR_KEY_COLS,
-    EVENT_BASIS, NULL_SAFE_KEYS, FUNNEL_EVENT_IDS, EVENT_METRICS,
+    EVENT_BASIS, NULL_SAFE_KEYS, FUNNEL_EVENT_IDS, EVENT_METRICS, TOP_LANGUAGES, slug,
 )
 
 s = resolve(dbutils)
@@ -54,7 +55,9 @@ print(f"gold {s.gold_kpi}: {n_days} days x {n_series} series = {long.count()} lo
 if s.mode == "backfill":
     from pyspark.sql import functions as F
     funnel_metrics = [EVENT_METRICS[eid][0] for eid in FUNNEL_EVENT_IDS]
-    lang_metrics = ["language_share_en", "language_share_fr"]
+    # Derived from the registry like the funnel ids above; "unknown" excluded — a
+    # zero-total unknown bucket is healthy, not a dead series.
+    lang_metrics = [f"language_share_{slug(v)}" for v in TOP_LANGUAGES if v != "unknown"]
     totals = {r["metric_id"]: r["total"]
               for r in (long.where(F.col("metric_id").isin(funnel_metrics + lang_metrics))
                         .groupBy("metric_id").agg(F.sum("value").alias("total")).collect())}
