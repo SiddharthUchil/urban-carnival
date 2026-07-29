@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GMAI-Pulse — Global Anomaly Detection Console (Concept)</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6' fill='%2300a758'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%2322D3EE'/%3E%3Cstop offset='1' stop-color='%2334D399'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='8' cy='8' r='6' fill='url(%23g)'/%3E%3C/svg%3E">
 <!--
   GMAI-Pulse concept frontend — single self-contained file, zero external requests.
   Synthetic data only (seeded PRNG, deterministic). Shapes mirror the real platform:
@@ -13,12 +13,20 @@
   view honors the SME rulings of 2026-07-27 (visit-level, non-monotonic, Save Quote
   optional) — population bars, never a funnel taper.
 
-  Color system: dataviz reference palette (validated). Categorical series use the fixed
-  slot order; Manulife brand green #00A758 is chrome/identity + single-series only, never
-  a slot in a multi-series chart. Severity ladder (status palette, validated for CVD
-  ΔE 11.3 worst-pair): warn/minor/major/critical ALWAYS render with a text label or
-  labeled count — never color alone (normal-vision worst pair 13.6 + light-mode contrast
-  relief rule both demand it).
+  Color system (2026-07-29 redesign): single-source tokens via light-dark() — every
+  color is one declaration; theme switching is color-scheme only (dark is the designed
+  default; the ◐ toggle stamps data-theme + localStorage). Surfaces are deep navy
+  (#0A1020 plane / #111B31 card); the brand accent is a cyan→green gradient pair
+  (dark #22D3EE→#34D399, light #0E7490→#047857 — raw cyan fails contrast on white).
+  The gradient is CHROME + single-series only, never a categorical slot; --brand-ink
+  carries text on accent fills. Categorical series keep the validated fixed slot order
+  (re-validated on both new card surfaces: CVD ΔE 9.1/8.4, normal-vision 19.6/19.3).
+  Severity ladder (status palette, CVD ΔE 11.3 worst-pair): warn/minor/major/critical
+  ALWAYS render with a text label or labeled count — never color alone (normal-vision
+  worst pair 13.6 + light-mode contrast relief rule both demand it); dark-mode critical
+  is a light red with dark ink (#8F1010 fails 3:1 on navy). Browser baseline is
+  deliberate: light-dark() + color-mix() (2023–24), no fallbacks — matches the file's
+  pre-existing color-mix stance.
 
   Business-user layer (2026-07-28 redesign): plain-language L3 takeaways everywhere —
   computed verdict line + severity-ranked insight feed (templated NLG bound to the same
@@ -27,79 +35,81 @@
   (multiples of 7 keep DOW-balanced means), click-to-filter KPI tiles, clickable deviation
   cells, Y-cap at 1.5×max(hi) with ▲ markers. Exactly TWO disclosure levels: all
   engineering provenance lives in ⓘ popovers, never in card subs.
+
+  Visual layer (2026-07-29 rebuild): signature element is the hero Pulse strip on the
+  overview — a glowing 30-day network-total line (totalTraffic(), additive over cached
+  live-property series, deterministic) with severity-ringed numbered halo buttons that
+  reuse the calendar's data-cal-day drill-down. Shared SVG gradient defs live in a 0x0
+  svg directly after <body> (NOT display:none, NOT inside #app — teardown would wipe it).
+  Glow (CSS drop-shadow) is limited to the hero line/halos; band charts stay filter-free
+  so crosshair mousemove never re-rasterizes. Entry animations are double-gated:
+  prefers-reduced-motion AND .view-fresh (router toggles it on route CHANGES only, so
+  filter re-renders never replay). Chart geometry has one source of truth (CHART_W into
+  BAND_REGISTRY; hover math reads reg.w). Templates carry no static inline styles —
+  only data-driven custom properties (--val, --cell, --cs/--cm, --sw, halo left/top).
 -->
 <style>
 /* ============================== tokens ==================================== */
+/* Single-source theme: every color token is a light-dark() pair; switching is
+   color-scheme only. Dark is the designed default (concept direction). */
+:root { color-scheme: dark; }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"]  { color-scheme: dark; }
 :root {
-  color-scheme: light;
-  --plane: #f9f9f7;            /* page background */
-  --surface: #fcfcfb;          /* cards / chart surface */
-  --surface-2: #f2f1ed;        /* inset wells, chips */
-  --ink: #0b0b0b;
-  --ink-2: #52514e;
-  --muted: #898781;
-  --grid: #e1e0d9;
-  --axis: #c3c2b7;
-  --hair: rgba(11,11,11,.10);
-  --brand: #00a758;            /* Manulife green — chrome + single-series */
-  --brand-text: #00753e;       /* green as small text (>=4.5:1 on surface) */
-  --brand-soft: rgba(0,167,88,.12);
-  --good-text: #006300;
+  --plane:     light-dark(#f4f7fb, #0a1020);  /* page background */
+  --surface:   light-dark(#ffffff, #111b31);  /* cards / chart surface */
+  --raised:    light-dark(#e9eef6, #16233e);  /* inset wells, chips */
+  --surface-2: var(--raised);
+  --ink:   light-dark(#0b1120, #f4f7ff);
+  --ink-2: light-dark(#4a5468, #a7b1c6);
+  --muted: light-dark(#667089, #7c87a0);
+  --grid:  light-dark(#e3e8f0, #1e2a44);
+  --axis:  light-dark(#c6cedc, #2a3a5c);
+  --hair:  light-dark(rgba(13,25,48,.10), rgba(255,255,255,.09));
+  /* brand accent — cyan->green gradient pair; chrome + single-series only */
+  --accent-a: light-dark(#0e7490, #22d3ee);   /* gradient start (cyan) */
+  --accent-b: light-dark(#047857, #34d399);   /* gradient end (green) */
+  --brand: var(--accent-a);                    /* solid accent: borders, focus, dot */
+  --brand-ink: light-dark(#ffffff, #062a38);   /* ink ON accent fills */
+  --brand-text: light-dark(#0e7490, #5eead4);  /* accent as small text (>=4.5:1) */
+  --brand-soft: light-dark(rgba(14,116,144,.10), rgba(34,211,238,.12));
+  --good-text: light-dark(#006300, #0ca30c);
   /* categorical slots — reference palette, fixed order, never cycled */
-  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100;
-  --s5:#e87ba4; --s6:#008300; --s7:#4a3aa7; --s8:#e34948;
-  /* severity (status palette — label/icon always accompanies color) */
-  --sev-warn: #fab219; --sev-minor: #ec835a;
-  --sev-major: #d03b3b; --sev-critical: #8f1010;
-  --sev-critical-ink: #ffffff; /* text on critical fill */
-  /* diverging (z-scores): blue <- gray -> red */
-  --div-neg: #2a78d6; --div-mid: #f0efec; --div-pos: #e34948;
-  --band-fill: rgba(0,167,88,.10);
-  --shadow: 0 1px 2px rgba(11,11,11,.05), 0 4px 16px rgba(11,11,11,.05);
+  --s1: light-dark(#2a78d6, #3987e5); --s2: light-dark(#eb6834, #d95926);
+  --s3: light-dark(#1baf7a, #199e70); --s4: light-dark(#eda100, #c98500);
+  --s5: light-dark(#e87ba4, #d55181); --s6: #008300;
+  --s7: light-dark(#4a3aa7, #9085e9); --s8: light-dark(#e34948, #e66767);
+  /* severity ladder (status palette — label/icon always accompanies color) */
+  --sev-warn: #fab219; --sev-minor: #ec835a; --sev-major: #d03b3b;
+  --sev-major-ink: #ffffff;
+  --sev-critical: light-dark(#8f1010, #ff7a7a);
+  --sev-critical-ink: light-dark(#ffffff, #0a1020);
+  /* diverging (z-scores): blue <- neutral -> red */
+  --div-neg: light-dark(#2a78d6, #3987e5);
+  --div-mid: light-dark(#eef1f6, #1e2a44);
+  --div-pos: light-dark(#e34948, #e66767);
+  --band-fill: light-dark(rgba(14,116,144,.08), rgba(34,211,238,.10));
+  /* elevation + glow (composed from color sub-tokens; light-dark() is color-only) */
+  --shadow-c1: light-dark(rgba(13,25,48,.07), rgba(0,0,0,.50));
+  --shadow-c2: light-dark(rgba(13,25,48,.05), rgba(2,8,20,.45));
+  --shadow: 0 1px 2px var(--shadow-c1), 0 6px 20px var(--shadow-c2);
+  --glow-c: light-dark(rgba(14,116,144,.30), rgba(34,211,238,.40));
+  /* spacing / radius / type scales */
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px; --sp-6:32px;
+  --r-1:6px; --r-2:10px; --r-3:14px; --r-4:20px; --r-pill:999px;
+  --fs-0:11px; --fs-1:12px; --fs-2:13px; --fs-3:14px;
+  --fs-4:16px; --fs-5:20px; --fs-6:28px; --fs-7:40px;
+  --heat-cell: 13px;
   --mono: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
-  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
-}
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --plane: #0d0d0d;
-  --surface: #1a1a19;
-  --surface-2: #232322;
-  --ink: #ffffff;
-  --ink-2: #c3c2b7;
-  --muted: #898781;
-  --grid: #2c2c2a;
-  --axis: #383835;
-  --hair: rgba(255,255,255,.10);
-  --brand-text: #1fc072;
-  --good-text: #0ca30c;
-  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
-  --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
-  --sev-critical: #ff7a7a;
-  --sev-critical-ink: #1a1a19;
-  --div-neg: #3987e5; --div-mid: #383835; --div-pos: #e66767;
-  --band-fill: rgba(0,167,88,.14);
-  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.35);
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]):not([data-theme="dark"]) {
-    color-scheme: dark;
-    --plane:#0d0d0d; --surface:#1a1a19; --surface-2:#232322;
-    --ink:#ffffff; --ink-2:#c3c2b7; --grid:#2c2c2a; --axis:#383835;
-    --hair:rgba(255,255,255,.10); --brand-text:#1fc072; --good-text:#0ca30c;
-    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
-    --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
-    --sev-critical:#ff7a7a; --sev-critical-ink:#1a1a19;
-    --div-neg:#3987e5; --div-mid:#383835; --div-pos:#e66767;
-    --band-fill:rgba(0,167,88,.14);
-    --shadow:0 1px 2px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.35);
-  }
+  --sans: "Segoe UI Variable Text", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --display: "Segoe UI Variable Display", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 /* ============================== base ====================================== */
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 body {
   background: var(--plane); color: var(--ink);
-  font: 14px/1.45 var(--sans);
+  font: var(--fs-3)/1.5 var(--sans);
   -webkit-font-smoothing: antialiased;
 }
 a { color: var(--brand-text); }
@@ -115,71 +125,120 @@ button { font: inherit; color: inherit; cursor: pointer; }
 /* ============================== app bar =================================== */
 .appbar {
   position: sticky; top: 0; z-index: 40;
-  display: flex; align-items: center; gap: 20px;
-  height: 56px; padding: 0 20px;
-  background: var(--surface);
+  display: flex; align-items: center; gap: var(--sp-5);
+  height: 60px; padding: 0 var(--sp-5);
+  background: color-mix(in srgb, var(--plane) 80%, transparent);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--hair);
 }
 .wordmark { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
-.wordmark .name { font-weight: 700; font-size: 16px; letter-spacing: -.01em; }
-.wordmark .name .pulse-sep { color: var(--brand); }
-.wordmark .tag { font-size: 11px; color: var(--muted); }
+.wordmark .name { font-family: var(--display); font-weight: 700; font-size: var(--fs-4); letter-spacing: -.01em; }
+.wordmark .name .pulse-sep {
+  background: linear-gradient(120deg, var(--accent-a), var(--accent-b));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.wordmark .tag { font-size: var(--fs-0); color: var(--muted); }
 .pulse-dot {
   display: inline-block; width: 9px; height: 9px; border-radius: 50%;
-  background: var(--brand); margin-right: 7px; position: relative; top: -1px;
+  background: linear-gradient(135deg, var(--accent-a), var(--accent-b));
+  margin-right: 7px; position: relative; top: -1px;
 }
 @keyframes pulse-ring {
-  0% { box-shadow: 0 0 0 0 rgba(0,167,88,.45); }
-  70% { box-shadow: 0 0 0 8px rgba(0,167,88,0); }
-  100% { box-shadow: 0 0 0 0 rgba(0,167,88,0); }
+  0% { box-shadow: 0 0 0 0 var(--glow-c); }
+  70% { box-shadow: 0 0 0 8px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
 }
 .pulse-dot { animation: pulse-ring 2.4s ease-out infinite; }
-.tabs { display: flex; gap: 2px; flex: 1; min-width: 0; overflow-x: auto; }
+.tabs { display: flex; gap: var(--sp-1); flex: 1; min-width: 0; overflow-x: auto; padding: 3px; }
 .tab {
-  border: 0; background: none; padding: 8px 12px; border-radius: 8px;
-  color: var(--ink-2); font-weight: 500; white-space: nowrap;
+  border: 1px solid transparent; background: none; padding: 7px 14px; border-radius: var(--r-pill);
+  color: var(--ink-2); font-weight: 500; white-space: nowrap; font-size: var(--fs-2);
 }
-.tab:hover { background: var(--surface-2); }
-.tab[aria-current="page"] { color: var(--ink); background: var(--brand-soft); font-weight: 600; }
-.tab[aria-current="page"] .tab-n { color: var(--brand-text); }
+.tab:hover { background: var(--raised); }
+.tab[aria-current="page"] {
+  color: var(--brand-ink); font-weight: 650; border-color: transparent;
+  background: linear-gradient(120deg, var(--accent-a), var(--accent-b));
+}
+.tab[aria-current="page"] .tab-n { color: inherit; opacity: .8; }
 .appbar .right { display: flex; align-items: center; gap: 10px; }
 .env-chip {
-  font-size: 11px; color: var(--muted); border: 1px solid var(--hair);
-  padding: 3px 8px; border-radius: 999px; white-space: nowrap;
+  font-size: var(--fs-0); color: var(--muted); border: 1px solid var(--hair);
+  padding: 3px 10px; border-radius: var(--r-pill); white-space: nowrap;
 }
 .theme-btn {
   border: 1px solid var(--hair); background: var(--surface);
-  border-radius: 8px; padding: 6px 10px; font-size: 13px; color: var(--ink-2);
+  border-radius: var(--r-pill); padding: 6px 12px; font-size: var(--fs-2); color: var(--ink-2);
 }
-.theme-btn:hover { background: var(--surface-2); }
+.theme-btn:hover { background: var(--raised); border-color: var(--brand); }
 /* ============================== layout ==================================== */
-main { max-width: 1400px; margin: 0 auto; padding: 20px; }
-.view-head { margin: 4px 0 16px; }
-.view-head h1 { font-size: 20px; margin: 0 0 2px; letter-spacing: -.01em; }
+main { max-width: 1400px; margin: 0 auto; padding: var(--sp-5) var(--sp-5) var(--sp-6); }
+.view-head { margin: var(--sp-1) 0 var(--sp-4); }
+.view-head h1 { font-family: var(--display); font-size: var(--fs-5); margin: 0 0 2px; letter-spacing: -.015em; }
 .view-head p { margin: 0; color: var(--ink-2); max-width: 72ch; }
-.grid { display: grid; gap: 16px; }
+.grid { display: grid; gap: var(--sp-4); }
 .cols-overview { grid-template-columns: 360px 1fr; align-items: start; }
 .cols-2 { grid-template-columns: 1fr 1fr; align-items: start; }
 .cols-anomaly { grid-template-columns: 1.2fr .8fr; align-items: start; }
-@media (max-width: 1020px) {
-  .cols-overview, .cols-2, .cols-anomaly { grid-template-columns: 1fr; }
-}
 .card {
   background: var(--surface); border: 1px solid var(--hair);
-  border-radius: 12px; padding: 16px; box-shadow: var(--shadow);
+  border-radius: var(--r-3); padding: var(--sp-4); box-shadow: var(--shadow);
 }
-.card h2 { font-size: 14px; margin: 0 0 2px; }
-.card .sub { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
-.stack > * + * { margin-top: 16px; }
+.card--glass {
+  position: relative; overflow: hidden;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent-a) 6%, var(--surface)), var(--surface) 55%);
+}
+.card--glass::before {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 2px;
+  background: linear-gradient(90deg, var(--accent-a), var(--accent-b), transparent 82%);
+  opacity: .85;
+}
+.card h2 { font-size: var(--fs-3); margin: 0 0 2px; }
+.card .sub { color: var(--muted); font-size: var(--fs-1); margin: 0 0 12px; }
+.stack > * + * { margin-top: var(--sp-4); }
 /* ============================== stat tiles ================================ */
 .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
 .stat {
-  background: var(--surface); border: 1px solid var(--hair); border-radius: 12px;
-  padding: 12px 14px; box-shadow: var(--shadow);
+  background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-3);
+  padding: var(--sp-3) var(--sp-4); box-shadow: var(--shadow);
 }
-.stat .v { font-size: 24px; font-weight: 700; letter-spacing: -.02em; margin: 2px 0; }
-.stat .d { font-size: 12px; color: var(--ink-2); }
+.stat .v { font-family: var(--display); font-size: var(--fs-6); font-weight: 700; letter-spacing: -.02em; margin: 4px 0; }
+.stat .d { font-size: var(--fs-1); color: var(--ink-2); }
 .stat .d b { color: var(--ink); }
+.ok-note { color: var(--brand-text); font-weight: 600; }
+.delta-chip {
+  display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-0); font-weight: 700;
+  padding: 2px 8px; border-radius: var(--r-pill); white-space: nowrap;
+}
+.delta-chip--up { color: var(--good-text); background: color-mix(in srgb, var(--good-text) 12%, transparent); }
+.delta-chip--down { color: var(--sev-major); background: color-mix(in srgb, var(--sev-major) 12%, transparent); }
+/* ==== hero pulse strip (signature element) ==== */
+.hero-pulse { padding: var(--sp-4) var(--sp-5); margin-bottom: var(--sp-4); }
+.hero-meta { display: flex; align-items: flex-end; gap: var(--sp-4); flex-wrap: wrap; margin-bottom: var(--sp-2); }
+.hero-num { font-family: var(--display); font-size: var(--fs-7); font-weight: 700; letter-spacing: -.02em; line-height: 1.05; }
+.hero-cap { color: var(--ink-2); font-size: var(--fs-1); display: inline-flex; align-items: center; gap: 8px; padding-bottom: 6px; }
+.hero-strip { position: relative; height: 150px; margin: var(--sp-2) 0 var(--sp-2); }
+.hero-strip svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.hero-line {
+  fill: none; stroke: url(#brand-grad); stroke-width: 2.5; stroke-linejoin: round;
+  filter: drop-shadow(0 0 6px var(--glow-c));
+}
+.hero-halo {
+  position: absolute; transform: translate(-50%, -50%); z-index: 2;
+  width: 22px; height: 22px; border-radius: 50%; padding: 0;
+  font: 700 10px/1 var(--sans); color: var(--ink);
+  background: var(--surface); border: 2px solid var(--sev-warn); cursor: pointer;
+}
+.hero-halo.sev-warn { border-color: var(--sev-warn); box-shadow: 0 0 10px color-mix(in srgb, var(--sev-warn) 50%, transparent); }
+.hero-halo.sev-minor { border-color: var(--sev-minor); box-shadow: 0 0 10px color-mix(in srgb, var(--sev-minor) 50%, transparent); }
+.hero-halo.sev-major { border-color: var(--sev-major); box-shadow: 0 0 10px color-mix(in srgb, var(--sev-major) 55%, transparent); }
+.hero-halo.sev-critical { border-color: var(--sev-critical); box-shadow: 0 0 12px color-mix(in srgb, var(--sev-critical) 60%, transparent); }
+.hero-halo:hover { outline: 1.5px solid var(--brand); outline-offset: 1px; }
+@media (prefers-reduced-motion: no-preference) {
+  .view-fresh .hero-line { stroke-dasharray: 3000; stroke-dashoffset: 3000; animation: hero-draw 1.1s ease-out forwards; }
+  .view-fresh .hero-halo { animation: halo-in .5s ease-out backwards; animation-delay: .95s; }
+}
+@keyframes hero-draw { to { stroke-dashoffset: 0; } }
+@keyframes halo-in { from { opacity: 0; transform: translate(-50%, -50%) scale(.4); } }
 /* ============================== severity ================================== */
 .sev { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; }
 .sev .swatch { width: 8px; height: 8px; border-radius: 2px; flex: none; }
@@ -187,13 +246,15 @@ main { max-width: 1400px; margin: 0 auto; padding: 20px; }
 .sev-minor .swatch { background: var(--sev-minor); }
 .sev-major .swatch { background: var(--sev-major); }
 .sev-critical .swatch { background: var(--sev-critical); }
+.sev.sev-healthy { color: var(--brand-text); }
+.sev-healthy .swatch { background: var(--brand); }
 .sev-pill {
   display: inline-flex; align-items: center; gap: 5px;
   font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px;
   border: 1px solid var(--hair); background: var(--surface-2); color: var(--ink-2);
 }
 .sev-pill.sev-critical { background: var(--sev-critical); color: var(--sev-critical-ink); border-color: transparent; }
-.sev-pill.sev-major { background: var(--sev-major); color: #fff; border-color: transparent; }
+.sev-pill.sev-major { background: var(--sev-major); color: var(--sev-major-ink); border-color: transparent; }
 .sev-pill.sev-minor { border-color: var(--sev-minor); color: var(--ink); }
 .sev-pill.sev-warn { border-color: var(--sev-warn); color: var(--ink); }
 /* ============================== anomaly feed ============================== */
@@ -231,17 +292,17 @@ main { max-width: 1400px; margin: 0 auto; padding: 20px; }
 .pg-tile .nm { font-size: 12px; font-weight: 600; line-height: 1.25; padding-right: 36px; }
 .pg-tile .rs { font-family: var(--mono); font-size: 10px; color: var(--muted); overflow-wrap: anywhere; }
 .pg-tile .st { margin-top: 5px; font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 5px; }
-.pg-tile .st .swatch { width: 8px; height: 8px; border-radius: 2px; }
-.pg-tile.t-healthy { border-color: rgba(0,167,88,.5); }
+.pg-tile .st .swatch { width: 8px; height: 8px; border-radius: 2px; background: var(--sw, var(--brand)); }
+.pg-tile.t-healthy { border-color: color-mix(in srgb, var(--brand) 55%, transparent); }
 .pg-tile.t-healthy .st { color: var(--brand-text); }
 .pg-tile.t-warn .st, .pg-tile.t-minor .st, .pg-tile.t-major .st { color: var(--ink); }
 .pg-tile.t-major { border-color: var(--sev-major); }
 .pg-tile.t-critical { border-color: var(--sev-critical); }
 .pg-tile.t-critical .st { color: var(--ink); font-weight: 700; }
 @keyframes tile-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(208,59,59,.35); }
-  70% { box-shadow: 0 0 0 10px rgba(208,59,59,0); }
-  100% { box-shadow: 0 0 0 0 rgba(208,59,59,0); }
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--sev-major) 35%, transparent); }
+  70% { box-shadow: 0 0 0 10px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
 }
 .pg-tile.t-critical { animation: tile-pulse 2s ease-out infinite; }
 .pg-tile.t-onboarding { border-style: dashed; opacity: .62; background: none; }
@@ -268,12 +329,15 @@ main { max-width: 1400px; margin: 0 auto; padding: 20px; }
 .legend .li { display: inline-flex; align-items: center; gap: 6px; }
 .legend .sw { width: 10px; height: 10px; border-radius: 3px; }
 .legend .ln { width: 14px; height: 0; border-top: 2px solid; border-radius: 1px; }
-.legend .ln.dashed { border-top-style: dashed; }
+.legend .ln--obs { border: 0; height: 2px; background: linear-gradient(90deg, var(--accent-a), var(--accent-b)); }
+.legend .ln--exp { border-top: 2px dashed var(--muted); }
+.legend .sw--band { background: var(--band-fill); border: 1px solid var(--hair); }
+.legend .sw--anom { background: var(--sev-major); }
 /* svg core marks — colors via CSS vars so themes swap without regenerating */
 .svg-grid line { stroke: var(--grid); stroke-width: 1; }
 .svg-axis text { fill: var(--muted); font: 10.5px var(--sans); }
 .svg-axis .tick-num { font-family: var(--mono); font-size: 10px; }
-.obs-line { fill: none; stroke: var(--brand); stroke-width: 2; stroke-linejoin: round; }
+.obs-line { fill: none; stroke: url(#brand-grad); stroke-width: 2; stroke-linejoin: round; }
 .exp-line { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 5 4; }
 .band { fill: var(--band-fill); }
 .anom-dot { stroke: var(--surface); stroke-width: 2; }
@@ -282,10 +346,8 @@ main { max-width: 1400px; margin: 0 auto; padding: 20px; }
 .anom-dot.sev-major { fill: var(--sev-major); }
 .anom-dot.sev-critical { fill: var(--sev-critical); }
 .crosshair { stroke: var(--axis); stroke-width: 1; stroke-dasharray: 3 3; }
-.hbar-track { fill: var(--surface-2); }
 .hbar-label { fill: var(--ink); font: 12px var(--sans); }
 .hbar-val { fill: var(--ink); font: 600 11px var(--mono); }
-.heat-cell { stroke: var(--surface); stroke-width: 2; }
 /* ============================== tables ==================================== */
 .tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .tbl th {
@@ -305,7 +367,9 @@ main { max-width: 1400px; margin: 0 auto; padding: 20px; }
 .hyp .h-top { display: flex; align-items: center; gap: 8px; }
 .hyp .cause { font-weight: 600; }
 .conf-track { flex: 1; max-width: 140px; height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
-.conf-fill { height: 100%; border-radius: 3px; background: var(--brand); }
+.conf-track--wide { max-width: 180px; }
+.conf-fill { height: 100%; border-radius: 3px; width: var(--val, 0%);
+  background: linear-gradient(90deg, var(--accent-a), var(--accent-b)); }
 .conf-num { font-family: var(--mono); font-size: 11px; color: var(--ink-2); }
 .hyp .evid { font-size: 12px; color: var(--ink-2); margin-top: 2px; }
 .action { display: flex; gap: 8px; margin: 8px 0; font-size: 13px; }
@@ -316,7 +380,7 @@ main { max-width: 1400px; margin: 0 auto; padding: 20px; }
   padding: 7px 14px; font-weight: 600; font-size: 13px; color: var(--ink-2);
 }
 .tbtn:hover { background: var(--surface-2); }
-.tbtn[aria-pressed="true"] { background: var(--brand); color: #fff; border-color: var(--brand); }
+.tbtn[aria-pressed="true"] { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); }
 .flag-review {
   display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;
   color: var(--ink); background: var(--surface-2); border: 1px solid var(--sev-warn);
@@ -348,7 +412,7 @@ main { max-width: 1400px; margin: 0 auto; padding: 20px; }
 .ladder .thresh { font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
 .ladder .route { color: var(--ink-2); }
 .gauge { height: 10px; border-radius: 5px; background: var(--surface-2); overflow: hidden; margin: 6px 0 4px; }
-.gauge .fill { height: 100%; background: var(--brand); border-radius: 5px; }
+.gauge .fill { height: 100%; background: linear-gradient(90deg, var(--accent-a), var(--accent-b)); border-radius: 5px; width: var(--val, 0%); }
 /* ============================== misc ====================================== */
 details.cube > summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink-2); padding: 6px 0; }
 details.cube > summary:hover { color: var(--ink); }
@@ -429,13 +493,40 @@ button.stat:hover { outline: 1.5px solid var(--brand); outline-offset: -1.5px; }
   display: inline-flex; align-items: center; justify-content: center; }
 .cal-blank { background: transparent; }
 button.cal-cell { cursor: pointer; border: 1.5px solid transparent; }
+.cal-hit { background: color-mix(in srgb, var(--cs) var(--cm, 20%), var(--surface-2)); border-color: var(--cs); }
 .cal-hit:hover { outline: 1.5px solid var(--brand); outline-offset: 1px; }
 .cal-closed { opacity: .55; border-style: dashed; }
 .cal-legend { margin-top: 8px; }
-/* ==== clickable deviation cells ==== */
-.heat-btn { width: 13px; height: 13px; border-radius: 3px; padding: 0; cursor: pointer;
-  border: 1.5px solid var(--ink-2); }
+/* ==== deviation map (structural classes; per-cell color rides --cell) ==== */
+.heat-grid { display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; align-items: center; }
+.heat-lbl { font-size: 10.5px; color: var(--ink-2); }
+.heat-strip { display: flex; gap: 2px; }
+.heat-c { width: var(--heat-cell); height: var(--heat-cell); border-radius: 3px; background: var(--cell, var(--div-mid)); }
+.heat-btn { width: var(--heat-cell); height: var(--heat-cell); border-radius: 3px; padding: 0; cursor: pointer;
+  background: var(--cell, var(--div-mid)); border: 1.5px solid var(--ink-2); }
 .heat-btn:hover { outline: 1.5px solid var(--brand); outline-offset: 1px; }
+.heat-legend { margin-top: 10px; }
+.legend .sw--neg { background: var(--div-neg); }
+.legend .sw--mid { background: var(--div-mid); border: 1px solid var(--hair); }
+.legend .sw--pos { background: var(--div-pos); }
+/* ==== spacing / alignment utilities (data-driven templates) ==== */
+.u-m0 { margin: 0; }
+.u-mt-1 { margin-top: var(--sp-1); }
+.u-mt-2 { margin-top: var(--sp-2); }
+.u-mt-3 { margin-top: var(--sp-3); }
+.u-mt-4 { margin-top: var(--sp-4); }
+.u-mb-2 { margin-bottom: var(--sp-2); }
+.u-mb-3 { margin-bottom: var(--sp-3); }
+.self-center { align-self: center; }
+.group-eyebrow { margin: 14px 0 8px; }
+.lead { margin: 0 0 12px; }
+.note-2 { margin: 0; font-size: var(--fs-2); color: var(--ink-2); }
+.li-line { font-size: var(--fs-2); margin-top: var(--sp-1); }
+.grid--tight { gap: var(--sp-3); }
+.u-fs-10 { font-size: 10px; }
+.stat .v.v--s { font-size: 15px; }
+.legend .sw--s1 { background: var(--s1); }
+.legend .sw--s2 { background: var(--s2); }
 /* ==== journey map ==== */
 .journey { display: flex; align-items: stretch; gap: 10px; margin-top: 4px; }
 .j-node { flex: 1 1 0; min-width: 0; background: var(--surface-2); border: 1px solid var(--hair);
@@ -449,7 +540,7 @@ button.cal-cell { cursor: pointer; border: 1.5px solid transparent; }
 .j-unit { font-size: 11px; color: var(--muted); font-weight: 500; margin-left: 2px; }
 .j-bar { display: block; height: 6px; border-radius: 3px; background: var(--surface);
   border: 1px solid var(--hair); overflow: hidden; }
-.j-fill { display: block; height: 100%; background: var(--brand); }
+.j-fill { display: block; height: 100%; background: linear-gradient(90deg, var(--accent-a), var(--accent-b)); }
 .j-badge { font-size: 11px; }
 .j-link { flex: 0 0 auto; width: 104px; display: flex; flex-direction: column; align-items: center;
   justify-content: center; gap: 2px; text-align: center; }
@@ -462,7 +553,15 @@ button.cal-cell { cursor: pointer; border: 1.5px solid transparent; }
 .j-branchwrap .j-node { flex: 0 1 190px; }
 .j-elbow { color: var(--muted); font-size: 16px; margin-left: 40px; }
 .j-branch-note { max-width: 340px; }
+@media (max-width: 720px) {
+  /* the appbar's nowrap chips can't shrink — wrap to two rows on phones */
+  .appbar { height: auto; flex-wrap: wrap; padding: var(--sp-2) var(--sp-3); gap: var(--sp-2) var(--sp-3); }
+  .wordmark .tag { display: none; }
+  .appbar .right { margin-left: auto; }
+  .tabs { order: 3; flex-basis: 100%; padding: 0 0 3px; }
+}
 @media (max-width: 1020px) {
+  .cols-overview, .cols-2, .cols-anomaly { grid-template-columns: 1fr; }
   .journey { flex-direction: column; }
   .j-link { width: auto; flex-direction: row; gap: 8px; justify-content: flex-start; padding-left: 12px; }
   .j-arrow { transform: rotate(90deg); }
@@ -472,6 +571,20 @@ button.cal-cell { cursor: pointer; border: 1.5px solid transparent; }
 </style>
 </head>
 <body>
+<!-- shared gradient defs: 0x0 but NOT display:none (hidden defs don't render);
+     lives outside #app so full-teardown renders never wipe it -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="brand-grad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="var(--accent-a)"></stop>
+      <stop offset="1" stop-color="var(--accent-b)"></stop>
+    </linearGradient>
+    <linearGradient id="brand-grad-fade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="var(--accent-a)" stop-opacity=".28"></stop>
+      <stop offset="1" stop-color="var(--accent-b)" stop-opacity="0"></stop>
+    </linearGradient>
+  </defs>
+</svg>
 <header class="appbar">
   <span class="wordmark">
     <span class="pulse-dot" aria-hidden="true"></span>
@@ -944,16 +1057,18 @@ function sparkSvg(vals, anoms) {
   }
   const last = vals.length - 1;
   return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
-    <polyline points="${pts}" fill="none" stroke="var(--brand)" stroke-width="1.8"></polyline>
-    <circle cx="${x(last).toFixed(1)}" cy="${y(vals[last]).toFixed(1)}" r="2.6" fill="var(--brand)"></circle>${dots}</svg>`;
+    <polygon points="${x(0).toFixed(1)},${h} ${pts} ${x(last).toFixed(1)},${h}" fill="url(#brand-grad-fade)"></polygon>
+    <polyline points="${pts}" fill="none" stroke="url(#brand-grad)" stroke-width="1.8"></polyline>
+    <circle cx="${x(last).toFixed(1)}" cy="${y(vals[last]).toFixed(1)}" r="2.6" fill="var(--accent-b)"></circle>${dots}</svg>`;
 }
 
 let BAND_REGISTRY = {};
 let bandSeq = 0;
+const CHART_W = 860, CHART_H = 280; // one source of truth — hover math reads w from the registry
 function bandChart(series, opts) {
   opts = opts || {};
   const id = "bc" + (++bandSeq);
-  const w = 860, h = 280, mL = 54, mR = 14, mT = 14, mB = 30;
+  const w = CHART_W, h = CHART_H, mL = 54, mR = 14, mT = 14, mB = 30;
   const iw = w - mL - mR, ih = h - mT - mB;
   const n = series.vals.length;
   const isRatio = !!opts.ratio;
@@ -1000,13 +1115,13 @@ function bandChart(series, opts) {
     refline = `<line x1="${mL}" x2="${w - mR}" y1="${ry}" y2="${ry}" stroke="var(--sev-major)" stroke-width="1" stroke-dasharray="2 4"></line>
       <text x="${w - mR}" y="${+ry - 4}" text-anchor="end" fill="var(--sev-major)" font-size="10" font-weight="600">${opts.reflineLabel || opts.refline}</text>`;
   }
-  BAND_REGISTRY[id] = { series, anoms: opts.anoms || [], mL, iw, n, ratio: isRatio, dates: dts, cap };
+  BAND_REGISTRY[id] = { series, anoms: opts.anoms || [], mL, iw, n, ratio: isRatio, dates: dts, cap, w };
   return `<div class="chart-wrap bandchart" data-band="${id}">
     <div class="legend">
-      <span class="li"><span class="ln" style="border-color:var(--brand)"></span>observed</span>
-      <span class="li"><span class="ln dashed" style="border-color:var(--muted)"></span>expected (DOW median)</span>
-      <span class="li"><span class="sw" style="background:var(--band-fill);border:1px solid var(--hair)"></span>normal band (±3.5σ)</span>
-      ${(opts.anoms || []).length ? '<span class="li"><span class="sw" style="background:var(--sev-major)"></span>anomaly (sized by severity, labeled on hover)</span>' : ""}
+      <span class="li"><span class="ln ln--obs"></span>observed</span>
+      <span class="li"><span class="ln ln--exp"></span>expected (DOW median)</span>
+      <span class="li"><span class="sw sw--band"></span>normal band (±3.5σ)</span>
+      ${(opts.anoms || []).length ? '<span class="li"><span class="sw sw--anom"></span>anomaly (sized by severity, labeled on hover)</span>' : ""}
       ${clipped.length ? `<span class="li">▲ ${clipped.length} point${clipped.length === 1 ? "" : "s"} above the chart cap — hover for the true value</span>` : ""}
     </div>
     <svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(opts.label || "time series with expected band")}">
@@ -1028,7 +1143,7 @@ function wireBandCharts(root) {
     const ch = svg.querySelector("#x-" + id);
     r.addEventListener("mousemove", ev => {
       const b = svg.getBoundingClientRect();
-      const px = (ev.clientX - b.left) / b.width * 860;
+      const px = (ev.clientX - b.left) / b.width * reg.w;
       const i = Math.max(0, Math.min(reg.n - 1, Math.round((px - reg.mL) / reg.iw * (reg.n - 1))));
       const sx = reg.mL + reg.iw * i / (reg.n - 1);
       ch.setAttribute("x1", sx); ch.setAttribute("x2", sx);
@@ -1057,7 +1172,7 @@ function hbars(rows, opts) {
     const rr = Math.min(4, bw / 2);
     const path = `M${labW} ${yy} h${(bw - rr).toFixed(1)} a${rr} ${rr} 0 0 1 ${rr} ${rr} v${rh - 2 * rr} a${rr} ${rr} 0 0 1 ${-rr} ${rr} h${-(bw - rr).toFixed(1)} Z`;
     out += `<text class="hbar-label" x="${labW - 10}" y="${yy + rh / 2 + 4}" text-anchor="end">${esc(r.label)}</text>`;
-    out += `<path d="${path}" fill="${r.color || "var(--brand)"}"${r.tip ? ` data-tip="${esc(r.tip)}"` : ""}></path>`;
+    out += `<path d="${path}" fill="${r.color || "url(#brand-grad)"}"${r.tip ? ` data-tip="${esc(r.tip)}"` : ""}></path>`;
     out += `<text class="hbar-val" x="${labW + bw + 8}" y="${yy + rh / 2 + 4}">${esc(r.valText != null ? r.valText : fmtN(r.value))}</text>`;
     if (r.after) out += `<text class="hbar-val" x="${labW + bw + 8 + (r.valText || "").length * 7 + 12}" y="${yy + rh / 2 + 4}" fill="var(--muted)">${esc(r.after)}</text>`;
   });
@@ -1083,6 +1198,65 @@ const RANGE_LABELS = { 7: "Last week", 28: "Last 4 weeks", 90: "Full history" };
 function rangeChips(route) { // 7/28/90 — multiples of 7 keep DOW-balanced means
   return `<div class="chip-row">` + [7, 28, 90].map(d =>
     `<button class="chip" data-range="${d}" aria-pressed="${RANGE_STATE[route] === d}">${RANGE_LABELS[d]}</button>`).join("") + `</div>`;
+}
+function chips(list) { // uniform filter-chip emitter: {attr, val, label, pressed}
+  return list.map(c => `<button class="chip" ${c.attr}="${esc(c.val)}" aria-pressed="${c.pressed}">${c.label}</button>`).join("");
+}
+function totalTraffic() {
+  // additive per-day sum of every live property's hits_total — each component
+  // series is seeded + cached, so the aggregate is deterministic and boot-cheap
+  const vals = new Array(N_DAYS).fill(0);
+  for (const p of PROPERTIES.filter(p => p.status === "live")) {
+    const s = metricSeries(p.id, "hits_total").vals;
+    for (let i = 0; i < N_DAYS; i++) vals[i] += s[i];
+  }
+  return vals;
+}
+function pulseStrip() { // signature hero: 30-day network pulse + anomaly halos
+  const days = 30;
+  const vals = totalTraffic().slice(-days);
+  const dts = DATES.slice(-days);
+  const w = 1200, h = 150, p = 10;
+  const mn = Math.min(...vals), mx = Math.max(...vals);
+  const x = i => p + (w - 2 * p) * i / (days - 1);
+  const y = v => p + (h - 2 * p) * (1 - (v - mn) / (mx - mn || 1));
+  const pts = vals.map((v, i) => x(i).toFixed(1) + "," + y(v).toFixed(1)).join(" ");
+  const byDay = new Map(); // same worst-severity fold as the calendar
+  for (const a of ANOMALIES) {
+    const i = dts.indexOf(a.date);
+    if (i < 0) continue;
+    const e = byDay.get(a.date) || { n: 0, worst: null, i };
+    e.n++;
+    if (!e.worst || SEV_ORDER[a.severity] < SEV_ORDER[e.worst]) e.worst = a.severity;
+    byDay.set(a.date, e);
+  }
+  let halos = "";
+  for (const [date, e] of byDay) {
+    const heads = ANOMALIES.filter(a => a.date === date)
+      .map(a => `${esc(metricLabel(a.metric_id))} — ${a.severity}${a.status === "closed" ? " (closed)" : ""}`).join("<br>");
+    halos += `<button type="button" class="hero-halo sev-${e.worst}" data-cal-day="${date}"
+      style="left:${(x(e.i) / w * 100).toFixed(2)}%;top:${(y(vals[e.i]) / h * 100).toFixed(2)}%"
+      aria-label="${esc(fmtDay(date))}: ${e.n} anomal${e.n === 1 ? "y" : "ies"}, worst ${e.worst}"
+      data-tip="<b>${esc(fmtDay(date))}</b><br>${heads}">${e.n}</button>`;
+  }
+  const last = vals[days - 1], prev = vals[days - 8];
+  const wow = prev ? (last - prev) / prev : 0;
+  return `<section class="card card--glass hero-pulse" aria-label="Network pulse — total page views across live properties, last 30 days">
+    <div class="hero-meta">
+      <div><div class="eyebrow">Network pulse · all live properties</div>
+        <div class="hero-num num">${fmtN(last)}</div></div>
+      <div class="hero-cap"><span class="delta-chip ${wow >= 0 ? "delta-chip--up" : "delta-chip--down"} num">${wow >= 0 ? "▲" : "▼"} ${fmtPct(Math.abs(wow), 1)} WoW</span>
+        <span>page views yesterday · 30-day pulse below</span></div>
+    </div>
+    <div class="hero-strip">
+      <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
+        <polygon points="${x(0).toFixed(1)},${h} ${pts} ${x(days - 1).toFixed(1)},${h}" fill="url(#brand-grad-fade)"></polygon>
+        <polyline class="hero-line" points="${pts}"></polyline>
+      </svg>
+      ${halos}
+    </div>
+    <div class="hint">a numbered halo is a day with flagged anomalies (worst severity named in its label) — click one to investigate</div>
+  </section>`;
 }
 
 /* ============================== overview view ============================= */
@@ -1132,7 +1306,7 @@ function pulseGrid() {
         <span class="pg-share num">${p.share}%</span>
         <div class="nm">${esc(p.name)}</div>
         <div class="rs">${esc(p.rsid)}</div>
-        <div class="st"><span class="swatch" style="background:${sev ? `var(--sev-${sev})` : "var(--brand)"}"></span>${stTxt}${nOpen ? ` · ${nOpen}` : ""}</div>
+        <div class="st"><span class="swatch" style="--sw:${sev ? `var(--sev-${sev})` : "var(--brand)"}"></span>${stTxt}${nOpen ? ` · ${nOpen}` : ""}</div>
       </button>`;
     }
     html += `</div></div>`;
@@ -1159,9 +1333,9 @@ function overviewSparks() {
       data-tip="<b>${esc(p.name)}</b><br>hits_total, last 90 days · yesterday ${fmtN(last)}<br>WoW ${wow >= 0 ? "+" : ""}${fmtPct(wow, 1)}">
       <div class="nm">${esc(p.name)}</div>
       <div class="row"><span class="v num">${fmtN(last)}</span>
-        <span class="hint num">${wow >= 0 ? "▲" : "▼"} ${fmtPct(Math.abs(wow), 1)} WoW</span></div>
+        <span class="delta-chip ${wow >= 0 ? "delta-chip--up" : "delta-chip--down"} num">${wow >= 0 ? "▲" : "▼"} ${fmtPct(Math.abs(wow), 1)} WoW</span></div>
       ${sparkSvg(s.vals.slice(-60), anoms.map(a => ({ i: a.i - 30, sev: a.sev })).filter(a => a.i >= 0))}
-      <div class="badges">${sev ? sevBadge(sev) : `<span class="sev" style="color:var(--brand-text)"><span class="swatch" style="background:var(--brand)"></span>healthy</span>`}</div>
+      <div class="badges">${sev ? sevBadge(sev) : `<span class="sev sev-healthy"><span class="swatch"></span>healthy</span>`}</div>
     </button>`;
   }
   return html + "</div>";
@@ -1188,7 +1362,7 @@ function calHeatmap() {
       .map(a => `${esc(metricLabel(a.metric_id))} — ${a.severity}${a.status === "closed" ? " (closed)" : ""}`).join("<br>");
     const mix = 20 + Math.min(e.n, 3) * 8;
     cells += `<button type="button" class="cal-cell cal-hit${e.allClosed ? " cal-closed" : ""}" data-cal-day="${date}"
-      style="background:color-mix(in srgb, var(--sev-${e.worst}) ${mix}%, var(--surface-2));border-color:var(--sev-${e.worst})"
+      style="--cs:var(--sev-${e.worst});--cm:${mix}%"
       aria-label="${esc(fmtDay(date))}: ${e.n} anomal${e.n === 1 ? "y" : "ies"}, worst ${e.worst}${e.allClosed ? ", all closed" : ""}"
       data-tip="<b>${esc(fmtDay(date))}</b><br>${heads}">${e.n}</button>`;
   }
@@ -1226,23 +1400,17 @@ function viewOverview() {
     verdict = verdictLine(items);
   }
   const worst = ranked.length ? ranked[0].severity : null;
-  const sevChips = ["all", "critical", "major", "minor", "warn"].map(s =>
-    `<button class="chip" data-feed-sev="${s}" aria-pressed="${FEED_STATE.sev === s}">${s === "all" ? "All severities" : s + (s === "all" ? "" : " (" + (c[s] || 0) + ")")}</button>`).join("");
-  const stChips = ["open", "triaged", "all"].map(s =>
-    `<button class="chip" data-feed-status="${s}" aria-pressed="${FEED_STATE.status === s}">${s}</button>`).join("");
+  const sevChips = chips(["all", "critical", "major", "minor", "warn"].map(s =>
+    ({ attr: "data-feed-sev", val: s, pressed: FEED_STATE.sev === s,
+       label: s === "all" ? "All severities" : s + " (" + (c[s] || 0) + ")" })));
+  const stChips = chips(["open", "triaged", "all"].map(s =>
+    ({ attr: "data-feed-status", val: s, pressed: FEED_STATE.status === s, label: s })));
   const dayChip = FEED_STATE.day
     ? `<button class="chip" data-clear-day="1" aria-pressed="true">on ${fmtDay(FEED_STATE.day)} ✕</button>` : "";
   return `
   <div class="view-head"><h1>Global overview</h1>
     <p>Is every Manulife web property behaving as expected today?</p></div>
-  <div class="card verdict-card${worst ? " vw-" + worst : ""}">
-    <div class="verdict-row"><p class="verdict">${esc(verdict)}</p>
-      ${popover("pop-verdict", "About this console",
-        `<p>One scoring run checks all ${SERIES_MONITORED} monitored series every morning at 06:00 ET; anything outside its expected range lands in the list below.</p>
-         <p>Concept prototype on synthetic data — shapes mirror <code>gold.anomalies</code> and <code>gold.kpi_daily</code> (ADR-0008 serving contract).</p>`)}
-    </div>
-    <div class="verdict-sub"><span><span style="color:var(--brand-text);font-weight:600">✓ fresh</span> · last scored 06:00 ET · <span class="mono">${RUN_META.run_id}</span></span></div>
-  </div>
+  ${pulseStrip()}
   <div class="stat-row">
     <div class="stat"><div class="eyebrow">Open anomalies</div>
       <button class="kpi-num" data-kpi-sev="all" aria-pressed="${FEED_STATE.sev === "all" && FEED_STATE.status === "open" && !FEED_STATE.day}"><span class="v num">${open}</span></button>
@@ -1259,7 +1427,15 @@ function viewOverview() {
       <div class="v num">94.3%</div>
       <div class="d">bots excluded before scoring</div></div>
     <button class="stat stat-link" data-route="ops"><div class="eyebrow">Last scoring run</div><div class="v num">06:00 ET</div>
-      <div class="d"><span style="color:var(--brand-text);font-weight:600">✓ fresh</span> · pipeline detail →</div></button>
+      <div class="d"><span class="ok-note">✓ fresh</span> · pipeline detail →</div></button>
+  </div>
+  <div class="card card--glass verdict-card${worst ? " vw-" + worst : ""}">
+    <div class="verdict-row"><p class="verdict">${esc(verdict)}</p>
+      ${popover("pop-verdict", "About this console",
+        `<p>One scoring run checks all ${SERIES_MONITORED} monitored series every morning at 06:00 ET; anything outside its expected range lands in the list below.</p>
+         <p>Concept prototype on synthetic data — shapes mirror <code>gold.anomalies</code> and <code>gold.kpi_daily</code> (ADR-0008 serving contract).</p>`)}
+    </div>
+    <div class="verdict-sub"><span><span class="ok-note">✓ fresh</span> · last scored 06:00 ET · <span class="mono">${RUN_META.run_id}</span></span></div>
   </div>
   <div class="grid cols-overview">
     <div class="card">
@@ -1323,10 +1499,10 @@ function propHeatmap(propId, nD) {
   const off = N_DAYS - nD;
   const anomBy = new Map();
   for (const a of ANOMALIES) if (a.domain === propId) anomBy.set(a.metric_id + "|" + a.date, a.anomaly_id);
-  let html = `<div style="display:grid;grid-template-columns:max-content 1fr;gap:2px 10px;align-items:center">`;
+  let html = `<div class="heat-grid">`;
   for (const m of top) {
     const s = metricSeries(propId, m);
-    html += `<div style="font-size:10.5px;color:var(--ink-2)" data-tip="<span class='t-mono'>${esc(m)}</span>">${esc(metricLabel(m))}</div><div style="display:flex;gap:2px">`;
+    html += `<div class="heat-lbl" data-tip="<span class='t-mono'>${esc(m)}</span>">${esc(metricLabel(m))}</div><div class="heat-strip">`;
     for (let i = off; i < N_DAYS; i++) {
       const sig = (s.hi[i] - s.expected[i]) / 3.5 || 1;
       const z = (s.vals[i] - s.expected[i]) / sig;
@@ -1335,19 +1511,19 @@ function propHeatmap(propId, nD) {
         html += `<button type="button" class="heat-btn" data-anomaly="${esc(aid)}"
           aria-label="${esc(metricLabel(m))} ${esc(fmtDay(DATES[i]))}: z ${z.toFixed(1)} — open anomaly detail"
           data-tip="<span class='t-mono'>${esc(m)}</span><br>${DATES[i]} · z = ${z.toFixed(1)}<br><b>click to open this anomaly</b>"
-          style="background:${zColor(z)}"></button>`;
+          style="--cell:${zColor(z)}"></button>`;
       } else {
-        html += `<div data-tip="<span class='t-mono'>${esc(m)}</span><br>${DATES[i]} · z = ${z.toFixed(1)}"
-          style="width:13px;height:13px;border-radius:3px;background:${zColor(z)}"></div>`;
+        html += `<div class="heat-c" data-tip="<span class='t-mono'>${esc(m)}</span><br>${DATES[i]} · z = ${z.toFixed(1)}"
+          style="--cell:${zColor(z)}"></div>`;
       }
     }
     html += `</div>`;
   }
   html += `</div>
-  <div class="legend" style="margin-top:10px">
-    <span class="li"><span class="sw" style="background:var(--div-neg)"></span>drop (z ≤ −5)</span>
-    <span class="li"><span class="sw" style="background:var(--div-mid);border:1px solid var(--hair)"></span>normal (|z| &lt; 1.75)</span>
-    <span class="li"><span class="sw" style="background:var(--div-pos)"></span>spike (z ≥ +5)</span>
+  <div class="legend heat-legend">
+    <span class="li"><span class="sw sw--neg"></span>drop (z ≤ −5)</span>
+    <span class="li"><span class="sw sw--mid"></span>normal (|z| &lt; 1.75)</span>
+    <span class="li"><span class="sw sw--pos"></span>spike (z ≥ +5)</span>
     <span class="li hint">hover for exact values · ringed cells are flagged anomalies — click to open</span>
   </div>`;
   return html;
@@ -1380,18 +1556,18 @@ function viewProperty() {
       </button>`;
     }).join("");
     groupsHtml += g.cube
-      ? `<details class="cube"><summary>${esc(g.label)} — expand</summary><div class="spark-grid" style="margin-top:8px">${cells}</div></details>`
-      : `<div><div class="eyebrow" style="margin:14px 0 8px">${esc(g.label)}</div><div class="spark-grid">${cells}</div></div>`;
+      ? `<details class="cube"><summary>${esc(g.label)} — expand</summary><div class="spark-grid u-mt-2">${cells}</div></details>`
+      : `<div><div class="eyebrow group-eyebrow">${esc(g.label)}</div><div class="spark-grid">${cells}</div></div>`;
   }
   return `
   <div class="view-head"><h1>Property drill — ${esc(p.name)}</h1>
     <p>How is every measured series on this property behaving? <span class="mono">${esc(p.rsid)}</span> · segment ${esc(p.segment)}</p></div>
   <div class="chip-row">
     ${["coverme", "gwam-ca"].map(id => `<button class="chip" data-pick-prop="${id}" aria-pressed="${pid === id}">${esc(propById[id].name)}</button>`).join("")}
-    <span class="hint" style="align-self:center">other properties expose headline series only in this concept</span>
+    <span class="hint self-center">other properties expose headline series only in this concept</span>
   </div>
   ${rangeChips("property")}
-  <div class="card">
+  <div class="card card--glass">
     <div class="card-head"><h2>${esc(tw.title)}</h2>
       ${popover("pop-band", "How to read this chart",
         `<p>The solid line is what actually happened. The dashed line is what we expected for that day of the week, and the shaded band is the normal range around it.</p>
@@ -1402,7 +1578,7 @@ function viewProperty() {
     </p>
     ${bandChart(win.series, { anoms, ratio: isRatio, label: PROP_STATE.metric, dates: win.dates })}
   </div>
-  <div class="grid cols-2" style="margin-top:16px">
+  <div class="grid cols-2 u-mt-4">
     <div class="card"><div class="card-head"><h2>Deviation map — last ${heatDays} days × top series</h2>
       ${popover("pop-heat", "Reading the deviation map",
         `<p>One row per series, one cell per day. Blue = below expected, red = above; faint cells are normal days (the scale stays neutral below |z| = 1.75 so noise doesn't ink).</p>
@@ -1447,8 +1623,8 @@ function viewAnomaly() {
         `<p>Generated by the investigation agent when an anomaly reaches <b>major</b> severity or above (schema per doc-04 §3). Hypotheses are ranked by confidence; every claim cites its evidence.</p>
          <p>It is a starting point for a human, not a verdict — hence the review flag at the bottom.</p>`)}
       </div>
-      <p style="margin:0 0 12px">${esc(rca.summary)}</p>
-      <div class="rec-grid" style="margin-bottom:12px">
+      <p class="lead">${esc(rca.summary)}</p>
+      <div class="rec-grid u-mb-3">
         <div class="f"><div class="k">What</div><div class="v">${esc(rca.what)}</div></div>
         <div class="f"><div class="k">Where</div><div class="v">${esc(rca.where)}</div></div>
         <div class="f"><div class="k">When</div><div class="v">${esc(rca.when)}</div></div>
@@ -1456,20 +1632,20 @@ function viewAnomaly() {
       <div class="eyebrow">Ranked hypotheses</div>
       ${rca.ranked_hypotheses.map(h => `<div class="hyp">
         <div class="h-top"><span class="cause">${esc(h.cause)}</span>
-          <span class="conf-track"><span class="conf-fill" style="width:${Math.round(h.confidence * 100)}%"></span></span>
+          <span class="conf-track"><span class="conf-fill" style="--val:${Math.round(h.confidence * 100)}%"></span></span>
           <span class="conf-num">${Math.round(h.confidence * 100)}%</span></div>
         <div class="evid">${esc(h.evidence)}</div></div>`).join("")}
-      <div class="eyebrow" style="margin-top:14px">Recommended actions</div>
+      <div class="eyebrow group-eyebrow">Recommended actions</div>
       ${rca.recommended_actions.map(x => `<div class="action"><span>→ ${esc(x.action)}</span><span class="who">${esc(x.owner_hint)}</span></div>`).join("")}
-      <div class="grid cols-2" style="margin-top:12px;gap:12px">
+      <div class="grid cols-2 grid--tight u-mt-3">
         <div><div class="eyebrow">Correlated changes</div>
-          ${rca.correlated_changes.map(x => `<div style="font-size:13px;margin-top:4px">• ${esc(x)}</div>`).join("")}</div>
+          ${rca.correlated_changes.map(x => `<div class="li-line">• ${esc(x)}</div>`).join("")}</div>
         <div><div class="eyebrow">Similar incidents</div>
-          ${rca.similar_incidents.map(x => `<div style="font-size:13px;margin-top:4px">• ${esc(x)}</div>`).join("")}</div>
+          ${rca.similar_incidents.map(x => `<div class="li-line">• ${esc(x)}</div>`).join("")}</div>
       </div>
-      <div class="triage-row" style="margin-top:14px">
+      <div class="triage-row u-mt-3">
         <span class="eyebrow">Overall confidence</span>
-        <span class="conf-track" style="max-width:180px"><span class="conf-fill" style="width:${Math.round(rca.confidence_overall * 100)}%"></span></span>
+        <span class="conf-track conf-track--wide"><span class="conf-fill" style="--val:${Math.round(rca.confidence_overall * 100)}%"></span></span>
         <span class="conf-num">${Math.round(rca.confidence_overall * 100)}%</span>
         ${rca.needs_human_review ? `<span class="flag-review">⚠ needs human review</span>` : ""}
       </div>
@@ -1479,8 +1655,8 @@ function viewAnomaly() {
       ${popover("pop-rca", "When analysis runs",
         `<p>The automated root-cause analysis runs for <b>major</b> and <b>critical</b> anomalies only (doc-03 §6 routing) — this one is below that bar.</p>`)}
       </div>
-      <p style="margin:0 0 8px">No automated root-cause analysis for this anomaly — it runs for major and critical severities only.</p>
-      <p class="hint" style="margin:0">${esc(a.note || "")}</p></div>`;
+      <p class="lead">No automated root-cause analysis for this anomaly — it runs for major and critical severities only.</p>
+      <p class="hint u-m0">${esc(a.note || "")}</p></div>`;
   }
   let contribHtml = "";
   if (rca && rca.contribution) {
@@ -1506,14 +1682,14 @@ function viewAnomaly() {
          <p>Long blue bars are the drivers of a drop; red bars moved the other way.</p>`)}
       </div>
       <p class="sub">which slice of traffic actually moved</p>
-      <div class="eyebrow" style="margin-bottom:6px">Dimension ranking (Cramér's V)</div>
+      <div class="eyebrow u-mb-2">Dimension ranking (Cramér's V)</div>
       <div class="chart-wrap">${hbars(cw.dims.map(([d, v]) => ({
         label: d, value: v, valText: v.toFixed(2), color: "var(--s1)",
         tip: `<b>${esc(d)}</b><br>Cramér's V ${v.toFixed(2)}` })), { labW: 150, label: "dimension relevance" })}</div>
-      <div class="eyebrow" style="margin:14px 0 6px">Residuals within <span class="mono">${esc(cw.residuals.dim)}</span></div>
+      <div class="eyebrow group-eyebrow">Residuals within <span class="mono">${esc(cw.residuals.dim)}</span></div>
       <div class="chart-wrap">${rsvg}</div>
-      <div class="legend"><span class="li"><span class="sw" style="background:var(--div-neg)"></span>below expected (drop driver)</span>
-        <span class="li"><span class="sw" style="background:var(--div-pos)"></span>above expected</span></div>
+      <div class="legend"><span class="li"><span class="sw sw--neg"></span>below expected (drop driver)</span>
+        <span class="li"><span class="sw sw--pos"></span>above expected</span></div>
     </div>`;
   }
   const statuses = ["open", "triaged", "closed"];
@@ -1528,22 +1704,22 @@ function viewAnomaly() {
   <div class="chip-row">${ANOMALIES.filter(x => x.status !== "closed" || x.anomaly_id === a.anomaly_id).map(x =>
     `<button class="chip" data-anomaly="${esc(x.anomaly_id)}" aria-pressed="${x.anomaly_id === a.anomaly_id}"
       data-tip="<span class='t-mono'>${esc(x.metric_id)}</span>">${sevBadge(x.severity)}&nbsp;${esc(propById[x.domain].name)} · ${esc(metricLabel(x.metric_id))}</button>`).join("")}</div>
-  <div class="card verdict-card vw-${a.severity}">
+  <div class="card card--glass verdict-card vw-${a.severity}">
     <div class="verdict-row"><p class="verdict">${esc(insight.headline)}</p>
       ${popover("pop-anom", "About this record",
         `<p>Everything on this page comes from one detection record in <code>gold.anomalies</code>. Analyst actions — status and reconciled — write back through the BFF to the governed feedback table (ADR-0008).</p>
          <p>Record id: <code>${esc(a.anomaly_id)}</code></p>`)}
     </div>
     <div class="verdict-sub">${sevBadge(a.severity)}<span>${esc(p.name)}</span><span>${fmtDay(a.date)}</span>${insight.detail ? `<span>${esc(insight.detail)}</span>` : ""}</div>
-    ${a.note ? `<p style="margin:0;font-size:13px;color:var(--ink-2)">${esc(a.note)}</p>` : ""}
-    <div class="triage-row" style="margin-top:2px">
+    ${a.note ? `<p class="note-2">${esc(a.note)}</p>` : ""}
+    <div class="triage-row u-mt-1">
       <span class="eyebrow">Triage</span>
       ${statuses.map(st => `<button class="tbtn" data-triage="${st}" aria-pressed="${a.status === st}">${st === "open" ? "Reopen" : st === "triaged" ? "Mark triaged" : "Close"}</button>`).join("")}
       <button class="tbtn" data-reconcile aria-pressed="${a.reconciled}">${a.reconciled ? "✓ Reconciled" : "Mark reconciled"}</button>
       <span class="hint">writes status/reconciled back through the BFF (mocked here)</span>
     </div>
     <details class="cube"><summary>Full detection record (gold.anomalies)</summary>
-      <div class="rec-grid" style="margin-top:10px">${rec.map(([k, v]) => `<div class="f"><div class="k">${k}</div><div class="v">${esc(v)}</div></div>`).join("")}</div>
+      <div class="rec-grid u-mt-2">${rec.map(([k, v]) => `<div class="f"><div class="k">${k}</div><div class="v">${esc(v)}</div></div>`).join("")}</div>
     </details>
   </div>
   ${rangeChips("anomaly")}
@@ -1554,10 +1730,10 @@ function viewAnomaly() {
          <p><b>If no dots are shown, everything is within its expected range.</b></p>`)}
     </div>
     <p class="sub"><span class="mono">${esc(a.metric_id)}</span> · last ${effRange} days</p>
-    ${effRange !== range ? `<p class="hint" style="margin:0 0 6px">This anomaly (${esc(fmtDay(a.date))}) is outside the ${range}-day window — showing the full history instead.</p>` : ""}
+    ${effRange !== range ? `<p class="hint u-m0 u-mb-2">This anomaly (${esc(fmtDay(a.date))}) is outside the ${range}-day window — showing the full history instead.</p>` : ""}
     ${bandChart(win.series, { anoms: chartAnoms, ratio: isRatio, label: a.metric_id, dates: win.dates })}
   </div>
-  <div class="grid cols-anomaly" style="margin-top:16px">${rcaHtml}${contribHtml}</div>`;
+  <div class="grid cols-anomaly u-mt-4">${rcaHtml}${contribHtml}</div>`;
 }
 
 /* ============================== funnel view =============================== */
@@ -1643,7 +1819,7 @@ function viewFunnel() {
   <div class="view-head"><h1>CoverMe quote → application funnel</h1>
     <p>Where in the quote-to-application journey are customers, and is any step off its normal level?</p></div>
   ${rangeChips("funnel")}
-  <div class="card">
+  <div class="card card--glass">
     <div class="card-head"><h2>The journey — visits/day, ${days}-day mean</h2>
       ${popover("pop-journey", "Why not a funnel shape?",
         `<p>These are visit-level stage populations, exactly as the SME ruled them (2026-07-27): <b>non-monotonic</b> across visits, Save Quote optional, ratios are population proxies — so this page draws magnitude bars, never a funnel taper.</p>
@@ -1653,7 +1829,7 @@ function viewFunnel() {
     <p class="sub">equal-width stages, bar = relative volume · a badge marks a stage with an open anomaly · click a stage to chart it</p>
     ${journeyMap(days)}
   </div>
-  <div class="grid cols-2" style="margin-top:16px">
+  <div class="grid cols-2 u-mt-4">
     <div class="card">
       <div class="card-head"><h2>${esc(rTw.title)}</h2>
         ${popover("pop-ratio", "Reading the ratio chart",
@@ -1666,10 +1842,10 @@ function viewFunnel() {
           <span class="rv num">${r.avg.toFixed(2)}</span>${esc(r.label)}
           <div class="hint num">peak ${r.max.toFixed(2)}${r.max > 1 ? " ▲" : ""}</div></span>`).join("")}
       </div>
-      <div style="margin-top:14px">
+      <div class="u-mt-3">
       ${bandChart(rWin.series, { ratio: true, anoms: rAnoms, refline: 1.0, reflineLabel: "1.0", label: "app start over quote start daily ratio", dates: rWin.dates })}
       </div>
-      <p class="hint" style="margin:6px 0 0">Sat Jul 25 crosses 1.0: quote starts were suppressed by the mobile-Safari incident while
+      <p class="hint u-m0 u-mt-2">Sat Jul 25 crosses 1.0: quote starts were suppressed by the mobile-Safari incident while
         saved-quote resumes continued — the ratio is working as designed; the <em>level</em> anomaly is on
         <span class="mono">pel_228_quote_start</span>.</p>
     </div>
@@ -1680,8 +1856,8 @@ function viewFunnel() {
            <p>Bots are excluded before counting (<code>exclude_hit&gt;0</code>, SME-confirmed).</p>`)}
       </div>
       <p class="sub">${days}-day mean visits/day per stage and language</p>
-      <div class="legend"><span class="li"><span class="sw" style="background:var(--s1)"></span>EN — coverme.com</span>
-        <span class="li"><span class="sw" style="background:var(--s2)"></span>FR — pourmeproteger.com</span></div>
+      <div class="legend"><span class="li"><span class="sw sw--s1"></span>EN — coverme.com</span>
+        <span class="li"><span class="sw sw--s2"></span>FR — pourmeproteger.com</span></div>
       <div class="chart-wrap">${hbars(enfrRows, { labW: 150, label: "funnel stages by language" })}</div>
     </div>
   </div>`;
@@ -1700,9 +1876,9 @@ function viewOps() {
     <p>Pipeline healthy — last run passed its freshness check; 3.2 alerts/day, 71% actionable.
        The run behind the numbers: <span class="mono">gold.run_meta</span>, the six detectors, and the severity routing ladder.</p></div>
   <div class="stat-row">
-    <div class="stat"><div class="eyebrow">Run</div><div class="v num" style="font-size:15px" title="${esc(RUN_META.run_id)}">${esc(RUN_META.run_id)}</div>
+    <div class="stat"><div class="eyebrow">Run</div><div class="v num v--s" title="${esc(RUN_META.run_id)}">${esc(RUN_META.run_id)}</div>
       <div class="d">${esc(RUN_META.started)} · ${esc(RUN_META.duration)}</div></div>
-    <div class="stat"><div class="eyebrow">Freshness guard</div><div class="v" style="color:var(--brand-text)">PASS</div>
+    <div class="stat"><div class="eyebrow">Freshness guard</div><div class="v ok-note">PASS</div>
       <div class="d">${esc(RUN_META.freshness_guard)}</div></div>
     <div class="stat"><div class="eyebrow">Alerts / day (7-day avg)</div><div class="v num">3.2</div>
       <div class="d"><b>71%</b> actionable · deduped per metric × domain × segment</div></div>
@@ -1716,11 +1892,11 @@ function viewOps() {
       <div class="tbl-scroll"><table class="tbl"><tbody>
         ${RUN_META.rows.map(([k, v]) => `<tr><td class="k mono">${esc(k)}</td><td class="num">${esc(v)}</td></tr>`).join("")}
       </tbody></table></div>
-      <div class="eyebrow" style="margin:16px 0 4px">Eligible traffic (bot rule)</div>
-      <div class="gauge"><div class="fill" style="width:94.3%"></div></div>
+      <div class="eyebrow group-eyebrow">Eligible traffic (bot rule)</div>
+      <div class="gauge"><div class="fill" style="--val:94.3%"></div></div>
       <div class="hint">94.3% of scoped hits keep <span class="mono">exclude_hit = 0</span> (SME rule 2026-07-27);
         eVar116/eVar148 are corroboration signals only.</div>
-      <div class="eyebrow" style="margin:16px 0 4px">Known data caveats</div>
+      <div class="eyebrow group-eyebrow">Known data caveats</div>
       <div class="hint">• ~30 missing source days are zero-filled on the gap-free calendar — masked before
         baseline training (deferred: imputation policy).<br>
         • Events 510–514 (~43.5% of hits) pending SME naming — excluded from the registry.<br>
@@ -1733,10 +1909,10 @@ function viewOps() {
         <div class="tbl-scroll"><table class="tbl">
           <thead><tr><th>detector</th><th>class</th><th>method</th><th>threshold</th></tr></thead>
           <tbody>${DETECTORS.map(([d, c, uri, m, t]) => `<tr>
-            <td class="mono">${esc(d)}<div class="hint mono" style="font-size:10px">${esc(uri)}</div></td>
+            <td class="mono">${esc(d)}<div class="hint mono u-fs-10">${esc(uri)}</div></td>
             <td>${esc(c)}</td><td>${esc(m)}</td><td class="mono">${esc(t)}</td></tr>`).join("")}</tbody>
         </table></div>
-        <p class="hint" style="margin:8px 0 0">Calibration floor: the DOW-median baseline cannot see level
+        <p class="hint u-m0 u-mt-2">Calibration floor: the DOW-median baseline cannot see level
           shifts below ×1.9 at an acceptable FP rate — ×1.35 sits inside the 14-day noise envelope by design.</p>
       </div>
       <div class="card">
@@ -1819,6 +1995,8 @@ function render() {
   const route = currentRoute();
   BAND_REGISTRY = {}; bandSeq = 0;   // per-render — stale entries would leak
   openPop = null;                    // panel DOM is about to be replaced
+  // entry animations (hero draw-in) fire on route changes only — never on filter re-renders
+  app.classList.toggle("view-fresh", route !== lastRoute);
   app.innerHTML = VIEWS[route]();
   wireBandCharts(app);
   document.querySelectorAll(".tab").forEach(t =>
@@ -1887,8 +2065,7 @@ document.addEventListener("click", ev => {
     render(); return;
   }
   if ((b = el("#theme-btn"))) {
-    const cur = document.documentElement.getAttribute("data-theme") ||
-      (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    const cur = document.documentElement.getAttribute("data-theme") || "dark";
     const next = cur === "dark" ? "light" : "dark";
     document.documentElement.setAttribute("data-theme", next);
     try { localStorage.setItem("gmai-theme", next); } catch (e) { /* file:// may block */ }
