@@ -16,7 +16,8 @@
 # MAGIC `include_retired_baseline` is true. Rows with `exclude_hit > 0` are dropped when
 # MAGIC `exclude_bots` is true (default — the SME eligibility rule). `url_scope_exclude` drops
 # MAGIC UAT / AEM / staging noise. URL matching uses the D4 blank-guarded coalesce with
-# MAGIC **`page_url` FIRST** (0.0005% blank vs 58.9% for post_page_url — inverted vs GWAM). Same
+# MAGIC **`page_url` FIRST** (0.0005% blank vs 58.9% for post_page_url — same order as GWAM
+# MAGIC post-D4; the CoverMe delta is the 4-column candidate list vs GWAM's 2). Same
 # MAGIC contract as the EDA notebook.
 # MAGIC
 # MAGIC ### What's CoverMe-specific
