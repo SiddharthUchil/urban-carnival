@@ -3,6 +3,8 @@
 
 **Status:** Authoritative guidance — written 2026-07-19 for execution by Claude Opus 4.8 (or any successor agent).
 **Revised 2026-07-20** — URL scope inventory landed (D3 closed, D8 added, D4/D5 rewritten, cutover claim corrected, EDA consolidated to two notebooks).
+**Revised 2026-07-28/29** — D9/D10 proposed (SME four-channel table + segment-scope re-baseline rule); channel-discovery probe results folded in (C1–C10, G1 closed).
+**Revised 2026-07-29 (decision audit)** — eVar166/169 URL-type claim retired (adopting 15 §5.5); D1 restated as the GWAM profiling pair; D2's "ADR-0007 retired" corrected to *amended*; P0 masking gate marked done; C3 `segment_only` figure flagged suspect pending re-run.
 **Audience:** An implementation agent working in this repo. Read §0 before touching anything.
 **Scope:** All phases — data exploration, EDA, eVars, Databricks medallion pipeline, jobs/orchestration, detection, AKS serving.
 
@@ -26,8 +28,8 @@
 
 | ID | Decision | Detail |
 |----|----------|--------|
-| **D1** | **Exactly 2 EDA files** | `eda/gwam_canada_retirement_eda.py` (profiler) + `eda/gwam_canada_retirement_charts.py` (interactive charts) — **`.py` only, no paired `.ipynb`, no README**. Both cover **both rsids** (`manugrs` + `manulifeglobalprod`) and the full URL scope, via `rsid_list` / `url_scope_*` widgets. Run instructions live in each file's header cell. Everything else is retired to git history (§0.6). |
-| **D2** | **No masking — full data visibility** | All masking/redaction is removed: `mask()`, `RAW_OK_DIMS` gating, sha1 self-redaction, identity suppression. Analysts and agents see data as-is, at all times, to get a complete picture. ADR-0007 is being retired by a separate agent; do **not** re-introduce masking helpers. Exports that leave the company still follow corporate data-handling policy. |
+| **D1** | **Exactly 2 GWAM profiling notebooks** ↺ *restated 2026-07-29 (was "Exactly 2 EDA files" — `eda/` has since legitimately grown)* | `eda/gwam_canada_retirement_eda.py` (profiler) + `eda/gwam_canada_retirement_charts.py` (interactive charts) — **`.py` only, no paired `.ipynb`, no README**. Both cover **both rsids** (`manugrs` + `manulifeglobalprod`) and the full URL scope, via `rsid_list` / `url_scope_*` widgets. Run instructions live in each file's header cell. D1 governs the **GWAM Canada-Retirement profiling pair only**: `eda/` also carries the CoverMe pair (`coverme_eda.py` / `coverme_charts.py`, doc 17) and the channel probe (`gwam_channel_discovery.py`, doc 19), each governed by its own doc. Retired GWAM notebooks stay in git history (§0.6). |
+| **D2** | **No masking — full data visibility** | All masking/redaction is removed: `mask()`, `RAW_OK_DIMS` gating, sha1 self-redaction, identity suppression. Analysts and agents see data as-is, at all times, to get a complete picture. ↺ *corrected 2026-07-29:* ADR-0007 was **amended, not retired** (status Accepted; §5 revised to full-raw 2026-07-23); do **not** re-introduce masking helpers. Exports that leave the company still follow corporate data-handling policy. |
 | **D3** | **URL scope is data-driven and widget-editable** ✅ **closed 2026-07-20** | The dual-rsid full-history inventory ran 2026-07-20 (output at `408de5a`). Seeded `url_scope_list` default = `%/group-retirement%`, `%/group-plans%`, `%/regimes-collectifs%` — already language-agnostic, so **no FR-specific patterns are needed**: it covers `manulifeim.com/group-retirement/ca/fr/*` and `/ca/fr/particuliers/regimes-collectifs/retraite-collective`. From here scope changes are made **only via widgets**, never by editing code. Key figures in §2. |
 | **D4** | **Coalesce everywhere — `post_page_url` alone is not a scope column** | *Rewritten 2026-07-20; the previous D4 was incoherent — it avoided `post_page_url` for breakdowns because it is blank, then filtered rows on it.* Row filtering **and** breakdowns both use `coalesce(page_url, post_page_url)`. The inventory measured `post_page_url` blank at **36.41%** (manulifeglobalprod) / **45.75%** (manugrs) vs **≤0.013%** for `page_url`. One shared helper (§4.5), used everywhere. **Last tracked violation:** [01_bronze_ingest.py:69](../../databricks/src/01_bronze_ingest.py) still does `F.col("post_page_url").like(SCOPE_URL_LIKE)` in `en_only` mode. See §5.2 for the measurement gate before changing it. |
 | **D5** | **One scope vocabulary; defaults may stage** | The EDA widget contract (§4.2) and `databricks/conf/settings.py` must share the same **mode names, pattern lists, and resolution logic** (include patterns OR-ed, minus `SCOPE_URL_LIKE_EXCLUDE`, minus D8 login hosts). Their *default values* may diverge while a rollout is staged, but only when the divergence and its exit criterion are stated here. **Current sanctioned divergence:** EDA defaults to `broad` (analysts should see everything); the pipeline stays `en_only` until the P2 re-profile lands and `%/group-plans%` gets product sign-off (§5.2). |
@@ -52,16 +54,16 @@
 - ~1,198 columns in the raw census; ~96 live eVars in manugrs.
 - Event decoding is incomplete: custom events (10000+ range) resolve to "unknown" in `ADOBE_STD_EVENTS`; the `event.tsv` lookup (`new_data/event.tsv`) was never wired into the notebooks — see §8 backlog.
 - French-language traffic is material (manugrs ~40.5% vs ~30.1% current suite) — URL scope must not silently drop `/fr/` paths. The inventory confirmed this is the **single largest scope gap**; `LEGACY_SCOPE_URL_LIKE` now carries the FR legacy root alongside EN.
-- ⚠️ Earlier profiling assumed `eVar166`/`eVar169` are URL-type fields; the EDDL spec **contradicts this** (§3.4). Reconcile before building eVar-based rules.
+- ↺ *retired 2026-07-29 (adopting [15 §5.5](15-consolidated-eda-report.md)):* the claim that earlier profiling tagged `eVar166`/`eVar169` as URL-type **has no traceable source in this repo** and is on doc 15's do-not-reintroduce list. The EDDL spec stands (§3.4: eVar166 = Product ID). The per-rsid EDDL-vs-live-census reconciliation (backlog #7) remains open on its own merits.
 
 **Repo layout (what exists today):**
 
 | Path | Purpose |
 |------|---------|
-| `eda/` | Profiling + charts notebooks and `.py` exports; stakeholder README; consolidated HTML report |
+| `eda/` | GWAM profiling pair (D1) + CoverMe pair + `gwam_channel_discovery.py` probe — `.py` Databricks source format only |
 | `databricks/` | Production medallion pipeline: `conf/settings.py`, `src/00_freshness_guard → 01_bronze_ingest → 02_silver_conform → 03_gold_kpis → 04_detect`, `jobs/gmai_pulse_daily.json` |
 | `detect/` | Local detection library: `rules.py`, `univariate.py`, `multivariate.py`, `kpis.py`, `registry.py`, `evaluate.py`, `run.py` |
-| `research/claude/` | Docs 01–16 + ADR-0001…0008 + `metric-registry.yaml` |
+| `research/claude/` | Docs 01–20 + ADR-0001…0008 + `metric-registry.yaml` |
 | `data/` | `EDDL_datalayer.xlsx`, synth clean/injected parquet + `known_events.json`, detect outputs |
 | `new_data/` | `data_profile_summary.json`, profiling reports, `event.tsv` |
 | `forresearchpurposes/` | Adobe data-dictionary / field-profile references |
@@ -124,7 +126,7 @@ prop51 Page Title · prop52 Page-URL parts (pairs eVar107) · prop53 Bot Detecto
 
 ### 3.4 URL fields — correction to prior project assumption
 
-Per this spec the URL-bearing variables are **eVar107 (+prop52)** full page URL parts, **eVar194** click href, **eVar127** download URL, **eVar121** domain. **eVar166 = Product ID (not a URL) and eVar169 does not exist** (event169 = Video Complete). Earlier production profiling tagged eVar166/169 as URL-type in `manugrs` — so either the deployed suites use a different variable map than this planning workbook, or the profiling mislabeled. **Backlog item #4 (§8): reconcile spec vs S7 live-eVar census per rsid before any eVar-based detection rule ships.** Note the workbook contains **no rsid names at all** (DKPIs' "Report Suite Mapping" column is blank) — it cannot arbitrate which suite implements which map.
+Per this spec the URL-bearing variables are **eVar107 (+prop52)** full page URL parts, **eVar194** click href, **eVar127** download URL, **eVar121** domain. **eVar166 = Product ID (not a URL).** ↺ *corrected 2026-07-29, adopting [15 §5.5](15-consolidated-eda-report.md):* the earlier statement here that "eVar169 does not exist (event169 = Video Complete)" was **too strong** — the Adobe eVar169 slot exists and has an instance event (`10068`); what it lacks is an EDDL meaning, and event169 is a different ID space from instance-of-eVar169. The claim that "earlier production profiling tagged eVar166/169 as URL-type in `manugrs`" **has no traceable source in this repo** and is retired (doc 15 lists it as do-not-reintroduce). **Backlog item #7 (§8): reconcile spec vs S7 live-eVar census per rsid before any eVar-based detection rule ships** — still open on its own merits. Note the workbook contains **no rsid names at all** (DKPIs' "Report Suite Mapping" column is blank) — it cannot arbitrate which suite implements which map.
 
 ### 3.5 Canada-Retirement applicability & conflicts
 
@@ -152,7 +154,7 @@ eda/
 header cell, so the instructions travel with the file you import. Recover any of them from
 git history (§0.6).
 
-**Reached 2026-07-20** — `eda/` now holds exactly two runnable notebooks. There is **no `archive/` directory**: retired notebooks were removed at `8ac2551` and git history is the archive (§0.6). Every future analysis need is met by adding a widget value or a section — never a new notebook.
+**Reached 2026-07-20** — `eda/` then held exactly two runnable notebooks. ↺ *restated 2026-07-29 (with D1):* the two-file invariant applies to the **GWAM profiling pair**; `eda/` has since legitimately gained the CoverMe pair (doc 17) and the channel probe (doc 19). There is **no `archive/` directory**: retired notebooks were removed at `8ac2551` and git history is the archive (§0.6). Every future **GWAM profiling** need is met by adding a widget value or a section — never a new notebook.
 
 ### 4.2 Widget contract (both notebooks share it verbatim)
 
@@ -208,7 +210,7 @@ Steps 0, 1, 3, 5, 6 and 7 are **done** (2026-07-20); 2 and 4 remain.
 5. ~~Seed `url_scope_list` from the inventory~~ — **done** (D3, §4.2).
 6. ~~Apply the same widget contract to the charts notebook~~ — **done.** Also fixed a previously untracked D4 violation there: it preferred `post_page_url` over `page_url` (blank 36-46% vs ≤0.013%), now the blank-guarded coalesce.
 7. ~~Retire the extra notebooks~~ — **done** (`8ac2551`, extended 2026-07-20). `git rm`, not an `archive/` folder; history is the archive.
-8. **Verify:** both notebooks run end-to-end on Databricks with defaults (both rsids); manifest completeness check passes; `window_frame.filter.rsid_breakdown` shows a **non-zero row count for each** of `manugrs` and `manulifeglobalprod`; `grep -rn "mask(\|RAW_OK_DIMS" eda/*.py` returns nothing; `git ls-files eda/` returns **exactly 2 files, both `.py`**.
+8. **Verify:** both notebooks run end-to-end on Databricks with defaults (both rsids); manifest completeness check passes; `window_frame.filter.rsid_breakdown` shows a **non-zero row count for each** of `manugrs` and `manulifeglobalprod`; `grep -rn "mask(\|RAW_OK_DIMS" eda/*.py` returns nothing; `git ls-files eda/ | grep gwam_canada` returns **exactly 2 files, both `.py`** (↺ 2026-07-29: scoped to the GWAM pair per restated D1 — `eda/` also carries the CoverMe pair and the channel probe).
 
 ---
 
@@ -289,7 +291,7 @@ Build order & best practices:
 8. Asset bundle adoption (§6.2).
 9. ~~Consume URL-scope inventory output → seed `url_scope_list`~~ — **done 2026-07-20** (D3).
 10. 🚩 **Get the D8 ruling (D9/D10 conflict).** The SME's four-channel table needs the sign-in traffic D8 excludes. Blocks the entire multi-channel build, and moves more data than anything else on this list. [20](20-gwam-sme-questions.md) Q1.
-11. ~~**Run `eda/gwam_channel_discovery.py`**~~ — **done 2026-07-29** (gate G1). Ran clean: 11 sections, `skipped == {}`, export [`gwam_channel_discovery.html`](../../gwam_channel_discovery.html). Settled rsid existence/history, web-vs-app per suite, the eVar105 value + **delimiter (`":"`, not `" : "`)** + segment-vs-URL scope sizing (the D10 decision input: **+1,436 / −60,594**, ~96% overlap), **eVar185-vs-eVar110 → eVar185** (closes backlog #7's Platform half), error/sign-in field population, per-suite event ids. Results folded into [19](19-gwam-channel-readiness.md) §0/§2/§4 and [20](20-gwam-sme-questions.md).
+11. ~~**Run `eda/gwam_channel_discovery.py`**~~ — **done 2026-07-29** (gate G1). Ran clean: 11 sections, `skipped == {}`, export [`gwam_channel_discovery.html`](../../gwam_channel_discovery.html). Settled rsid existence/history, web-vs-app per suite, the eVar105 value + **delimiter (`":"`, not `" : "`)** + segment-vs-URL scope sizing (the D10 decision input: **+1,436 / −60,594**, ~96% overlap), **eVar185-vs-eVar110 → eVar185** (closes backlog #7's Platform half), error/sign-in field population, per-suite event ids. Results folded into [19](19-gwam-channel-readiness.md) §0/§2/§4 and [20](20-gwam-sme-questions.md). ↺ *corrected (2026-07-29 audit): C3's null-guard bug undercounted `segment_only` for NULL-URL rows, so the **+1,436 GAIN figure is suspect** (−60,594 and in-both unaffected). Code fixed; **C3 re-run pending** on Databricks — see [19 §2.1](19-gwam-channel-readiness.md).*
 12. 🚩 **Request access to `manucustomer.prod`** — ↺ *was* "locate GRS+ and manucustomer.prod". C1/C4 located **`manugrs`** as GRS+ (its populated eVar185 is 100% `MPS Member`) and confirmed `manufingbrsmobileapp.prod` (68.9% of the table). `manucustomer.prod` has **0 rows** in our feed — a data-access request, not a build task, and the longest-lead item on this list. [20](20-gwam-sme-questions.md) Q2, Q10.
 13. **Port `numerator`/`denominator` + governance fields from `CmSeriesSpec` to GWAM's `SeriesSpec`** ([registry.py:68-83](../../detect/registry.py)). `gold_lib` already resolves `ratio` series by sibling `metric_id` — no engine change needed. Blocks "Sign in % rate completion". Safe to do now; depends on no ruling. [19 §3](19-gwam-channel-readiness.md) G2.
 14. **Add scope-predicate unit tests for `conf/settings.py`.** `SCOPE_RSID` / `SCOPE_URL_MODE` / `SCOPE_SUITE_MODE` / `SCOPE_LOGIN_HOST_EXCLUDE` are entirely untested, while CoverMe's equivalent is (`tests/test_cm_silver.py`). The highest-consequence config in the repo is unguarded — fix before touching scope. [19 §3](19-gwam-channel-readiness.md) G6.
@@ -301,9 +303,9 @@ Build order & best practices:
 
 | # | Phase | Deliverable | Verify |
 |---|-------|-------------|--------|
-| P0 | Scope freeze | ⏳ **in progress** — URL scope list seeded ✅ (D3), login-host rule landed ✅ (D8), notebooks consolidated ✅; masking removal still partial | scope list checked into widget defaults ✅; `grep -rn "mask(\|RAW_OK_DIMS" eda/*.py` returns nothing ❌ (backlog #2) |
-| P1 | eVar dictionary | §3 cross-checked vs S7 census per rsid | every live eVar has a name or an explicit "unmapped" flag; eVar166/169 contradiction resolved |
-| P2 | EDA consolidation | Exactly 2 widget-driven dual-rsid notebooks (§4.6) | §4.6 step 8 checklist |
+| P0 | Scope freeze | ⏳ **in progress** — URL scope list seeded ✅ (D3), login-host rule landed ✅ (D8), notebooks consolidated ✅, masking removal done ✅ (↺ 2026-07-29, was marked partial; backlog #2 closed it 2026-07-23) | scope list checked into widget defaults ✅; `grep -rn "mask(\|RAW_OK_DIMS" eda/*.py` returns nothing ✅ |
+| P1 | eVar dictionary | §3 cross-checked vs S7 census per rsid | every live eVar has a name or an explicit "unmapped" flag; ↺ eVar166/169 URL-type claim retired (doc 15 §5.5) — the per-rsid census reconciliation itself is the gate |
+| P2 | EDA consolidation | Exactly 2 widget-driven dual-rsid GWAM notebooks (§4.6, restated D1) | §4.6 step 8 checklist |
 | P3 | Pipeline unification | `resolve()` param-driven scope; `SCOPE_SUITE_MODE=both`; dtype-aware `process_date` predicates | end-to-end run green on both rsids; partition pruning confirmed in query plan |
 | P4 | Detection tuning | Detectors calibrated on both-rsid gold; synth eval refreshed | precision/recall reported vs `known_events.json`; ≥×1.9 level-shift floor documented in results |
 | P5 | Job productionization | Asset bundle; job un-paused per §6.2 criteria | 7 green scheduled runs; alerts fire on induced failure |
@@ -312,4 +314,4 @@ Build order & best practices:
 
 ---
 
-*Doc 16 · created 2026-07-19 · revised 2026-07-20 (URL scope inventory landed) · supersedes scattered guidance in docs 02/12/14/15 where they conflict — including their 2026-02-01 cutover framing (D7) and any reference to the retired EDA notebooks.*
+*Doc 16 · created 2026-07-19 · revised 2026-07-20 (URL scope inventory landed) · revised 2026-07-28/29 (D9/D10 + probe folds) · revised 2026-07-29 (decision audit — see header) · supersedes scattered guidance in docs 02/12/14/15 where they conflict — including their 2026-02-01 cutover framing (D7) and any reference to the retired EDA notebooks. Exception recorded 2026-07-29: on eVar166/169 this doc adopts the better-evidenced finding of 15 §5.5.*
