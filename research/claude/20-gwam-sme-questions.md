@@ -123,6 +123,12 @@ Your way is better, and it matches our own data dictionary — that tag is docum
 > we thought it would fix a French-language gap. It doesn't; our address list already covers the
 > French pages, so on this channel the tag is marginally *narrower*.
 >
+> *↺ corrected (2026-07-29 audit): the "We'd gain 1,436" figure is an undercount — the measurement
+> had a defect that dropped records with no page address (the app-traffic shape) from that bucket.
+> The "We'd lose" and "Both agree" figures are unaffected. We will re-run the measurement; the
+> conclusion (near-no-op on the website, the case for switching is the other three channels) is
+> unlikely to change, but the exact gain number will move.*
+>
 > **That doesn't change our recommendation — it changes the reason for it.** The case for switching
 > isn't "more traffic on the website." It's that **the other three channels can't be expressed by
 > web-page addresses at all** — the mobile app has no page addresses whatsoever, so no address rule

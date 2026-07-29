@@ -157,6 +157,13 @@ Two caveats before reading that as an argument against switching: `URL_SCOPE_BRO
 described; and the probe's URL predicate deliberately does **not** apply D8's
 `SCOPE_LOGIN_HOST_EXCLUDE`, so the shipped scope is somewhat smaller than the 1,418,435 shown.
 
+> **↺ corrected (2026-07-29 audit):** probe C3 had a null-guard bug — the URL coalesce lacked the
+> trailing `F.lit("")` fallback and `like_any` lacked its NULL guard, so rows with NULL `page_url`
+> AND NULL `post_page_url` (the mobile-app-hit shape) evaluated `in_url_scope = NULL` and fell out
+> of the `segment_only` bucket. **The +1,436 GAIN figure is an undercount (suspect).** The −60,594
+> and in-both figures are unaffected, so the ~96% overlap may shift slightly downward. The code is
+> fixed; the figures above stand pending a probe re-run on Databricks.
+
 **So the case for segment scope changes shape.** It is *not* "segment scope is bigger and fixes
 French." It is: on the Public Website the two are near-equivalent, so the **re-baseline cost there is
 low** — and the real reason to adopt the segment model is that **the other three channels cannot be
@@ -380,8 +387,9 @@ the ManulifeID channel can start until it lands.
 
 **C. Engineering, in dependency order.** G2 (SeriesSpec ratio + governance) and G6 (scope tests) are
 safe to do immediately — neither depends on a ruling. **G3 is now also unblocked**: C5/C6 determined
-exactly which columns to carry (eVar181/182/183/184 in, eVar122/135 out), and it is the cheapest of
-the three. G4 follows item 1. G5 follows the GWAM registry entries being promoted past `candidate`.
+exactly which columns to carry (eVar181/182/184 in; **eVar183 OUT** — John Hancock field per the G3
+gate above and §2.4; eVar122/135 out — ↺ corrected 2026-07-29, this line previously listed eVar183
+as in), and it is the cheapest of the three. G4 follows item 1. G5 follows the GWAM registry entries being promoted past `candidate`.
 
 **D. Then the pipeline.** Per-channel bronze scope → `channel` carried through silver → gold series per
 (metric × channel) → detector wiring. A full `mode=backfill` with gold truncated, per §2.2. Sequenced
@@ -400,7 +408,7 @@ blocker text and the Synapse-era claims in docs 01/02/03/10/11 remain open.
 | SME scope table received & recorded | ✅ **Complete** — §1, and `meta.gwam_sme_inputs` in the registry |
 | Discovery probe | ✅ **Run clean 2026-07-29** (G1 closed) — 11 sections, `skipped == {}` |
 | Report suites identified | 🟢 **3 of 4 located** — `manulifeglobalprod`, `manugrs` (data-confirmed), `manufingbrsmobileapp.prod`; `manucustomer.prod` **absent from our feed** |
-| Scope model (URL → segment) | 🟡 **Sized, awaiting sign-off** — SME item 3; ~96% overlap on the Public Website (+1,436 / −60,594), so a cheap cutover; still a full re-baseline |
+| Scope model (URL → segment) | 🟡 **Sized, awaiting sign-off** — SME item 3; ~96% overlap on the Public Website (+1,436 / −60,594; the +1,436 is an undercount — see the §2.1 C3 correction, re-run pending), so a cheap cutover; still a full re-baseline |
 | D8 / login-traffic conflict | 🔴 **Blocked on SME** — item 1, still the biggest single question; now narrowed to the **Web Member** channel |
 | Page Views / Visits / Visitors | ✅ **Engine ready** — exist today; only the page-views definition is open (item 6) |
 | Errors | 🟢 **Buildable** — eVar181/182/184 at 12.2M/16.4M/14.4M rows on `manugrs`, eVar184 at 37.6M on mobile; needs G3 + field-of-record ruling (item 7) + one per-suite value query |

@@ -1,6 +1,6 @@
 # GMAI-Pulse Phase-1 Metric Registry
 # ------------------------------------------------------------------
-# version: 0.4.0 (2026-07-28)
+# version: 0.4.0 (2026-07-29)
 # generated_from: new_data/data_profile_summary.json (profiler v0.1.0, run 2026-07-02)
 # seed_source: CoverMe data dictionary rows where Notes == "Anomaly Detection"
 #              -> confirmed counts: 9 (data_feed_columns) + 8 (post_eVar) + 12 (post_event_list) = 29
@@ -11,7 +11,8 @@
 # v0.4.0 are NOT -- they are a verbatim transcription of a scope table that has not yet been
 # ruled on, and every one of them is `status: candidate` with `owner: TBD`. Nothing in
 # `gwam_channel_metrics` may be promoted to `active` before (a) the discovery probe runs
-# (eda/gwam_channel_discovery.py) and (b) the three blocking questions in doc 20 are answered
+# (eda/gwam_channel_discovery.py — done 2026-07-29, C3 re-run pending) and (b) the three
+# blocking questions in doc 20 are answered
 # -- above all Q1, which asks whether this table supersedes the 2026-07-20 login-exclusion
 # rule (doc-16 D8). See meta.gwam_sme_inputs.
 #
@@ -32,7 +33,7 @@
 
 meta:
   version: 0.4.0
-  updated: 2026-07-28
+  updated: 2026-07-29
   default_grain: daily          # hourly reserved — enable only after >=30-day feed confirms volume
   domains: [coverme, gwam_retirement]
   sme_confirmations:            # rulings from Kerrian (Business SME), email 2026-07-27
@@ -115,7 +116,9 @@ meta:
       BLOCKING: Q1 sign-in vs D8 (now narrowed to web_member — manulifeid is moot until access);
       Q2 ACCESS to manucustomer.prod (escalated from "which rsid" — probe C9 found 0 rows; the
       GRS+/mobile halves of Q2 downgraded to ratification); Q3 segment-scope sign-off (probe C3
-      priced it: +1,436 / -60,594 rows, ~96% overlap on the public website). Plus Q4 the 1/0
+      priced it: +1,436 / -60,594 rows, ~96% overlap on the public website; corrected 2026-07-29 —
+      a C3 null-guard bug undercounted the +1,436 GAIN figure for NULL-URL rows, code fixed,
+      re-run pending, -60,594 unaffected). Plus Q4 the 1/0
       reading, Q5 "non-marketing" (C10: only bites on public_website — campaign is 57% there vs
       0.5%/0.02% on web_member/mobile), Q6 page-views-vs-hits, Q7 error field + grain (C5: the
       fields ARE populated — eVar181/182/184 at 52/70/61% on manugrs), Q8 sign-in ratio
@@ -124,7 +127,10 @@ meta:
       "Manulife Financial" instance, Q11 the App Pages v2 segment definition (C8 reconstruction
       offered), Q12 thresholds and owners. Full text: research/claude/20-gwam-sme-questions.md.
     pending_with_us: >
-      NONE — eda/gwam_channel_discovery.py (sections C1-C10) RAN CLEAN 2026-07-29 (doc 19 G1
+      ONE — re-run probe C3 on Databricks: the 2026-07-29 audit found a null-guard bug that
+      undercounted segment_only (the +1,436 GAIN figure) for rows with no URL; code fixed in
+      eda/gwam_channel_discovery.py, figures stand pending the re-run.
+      Otherwise eda/gwam_channel_discovery.py (sections C1-C10) RAN CLEAN 2026-07-29 (doc 19 G1
       closed): 11 sections, run_manifest.skipped == {}, complete: true, 90-day window
       2026-04-29..2026-07-28. Export: gwam_channel_discovery.html. It settled rsid existence and
       history, web-vs-app per suite, the eVar105 value and delimiter, segment-vs-URL scope
