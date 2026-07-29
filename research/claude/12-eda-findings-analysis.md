@@ -11,6 +11,18 @@
 > **Data run:** production, `gwam_prod_catalog` (confirmed 2026‑07‑10).
 > **Grain of record:** daily. **Privacy regime:** ADR‑0007 (shape‑only for sensitive columns).
 > **Companion:** interactive charts in [`eda/gwam_canada_retirement_charts.py`](../../eda/gwam_canada_retirement_charts.py).
+>
+> **↺ Correction banner (2026-07-29 audit).** Two regimes changed after this doc was written; body
+> text is kept as the historical record of the 2026-07-10 run:
+> 1. **Privacy — full-raw since 2026-07-23** (ADR-0007 amended §5; doc-16 D2): `mask()`,
+>    `is_sensitive()`/`DIRECT_IDENTIFIERS` and every shape-only branch were deleted. "Masked" /
+>    "shape-only" statements below describe the old run, not current behavior.
+> 2. **Cutover / window — the suites are CONCURRENT** (doc-16 D7): `manugrs` never collapsed at
+>    suite level. And the "158 days from 2026-02-01" window below is the *URL-scoped subset*;
+>    the suite-level first unfiltered day for `manulifeglobalprod` is **2026-03-10 → 138 days**
+>    per doc 19 §0 — the discrepancy is doc-16 backlog #4, still open. Model-selection conclusions
+>    drawn from the 158-day figure hold directionally (both figures are far too short for yearly
+>    seasonality) but cite the number with care.
 
 This document turns the notebook's raw `SHAREABLE` JSON blocks into a narrative with
 **objectives, method, findings, and implications** for the anomaly‑detection build. Every
@@ -72,12 +84,12 @@ notebook.
 **Method.** The one full‑table scan (narrow projection): daily counts of total vs CA rows over all history.
 
 **Findings.**
-- **CA Retirement exists only 2026‑02‑01 → 2026‑07‑08: 158 days present, 0 missing.** (The 13‑month profiling window is mostly empty for this subset. A trailing partial day — 2026‑07‑09, 6,421 hits — lands outside the day‑clipped series and explains the S1 window count 1,165,431 vs the S3 sum 1,159,010.)
+- **CA Retirement exists only 2026‑02‑01 → 2026‑07‑08: 158 days present, 0 missing** *(↺ URL-scoped subset — suite-level first day may be 2026-03-10 → 138 days; see banner / doc-16 backlog #4)*. (The 13‑month profiling window is mostly empty for this subset. A trailing partial day — 2026‑07‑09, 6,421 hits — lands outside the day‑clipped series and explains the S1 window count 1,165,431 vs the S3 sum 1,159,010.)
 - **Day‑of‑week means (Mon→Sun), CA hits:** `9751, 9141, 9115, 8602, 7681, 3523, 3441`. Weekdays cluster ~8–10 K; **weekends collapse to ~3.5 K (~40 %).**
 - **Monthly CA totals:** Feb 256,530 · Mar 311,632 · Apr 216,952 · May 152,433 · Jun 166,999 · Jul 54,464 (partial). **RRSP season (Feb–Mar) is the volume peak**, tapering into summer.
 - **Top day‑over‑day jumps** flagged as level‑shift candidates (see §6/§8).
 
-**Implications.** 158 days ≈ **22½ weeks** of history. That is enough to *see* weekly seasonality but **too little to fit long seasonal models** (e.g. yearly/holiday effects) robustly — favouring **short‑memory, DOW‑aware baselines** over heavy seasonal decomposition. Monthly RRSP seasonality means a naïve month‑over‑month comparison will false‑alarm every spring/summer.
+**Implications.** 158 days *(↺ or 138 — see banner)* ≈ **22½ weeks** of history. That is enough to *see* weekly seasonality but **too little to fit long seasonal models** (e.g. yearly/holiday effects) robustly — favouring **short‑memory, DOW‑aware baselines** over heavy seasonal decomposition. Monthly RRSP seasonality means a naïve month‑over‑month comparison will false‑alarm every spring/summer.
 
 ---
 
@@ -88,7 +100,7 @@ notebook.
 **Findings.**
 - **197 populated (158 of them "core", ≥99 % populated), 6 sparse, 995 dead** (~16 % carry data). High‑cardinality technical columns: `t_time_info` 54,945; `stats_server` 32,596; `user_agent` 1,324 (sensitive, shape‑only).
 - **Two eVar tiers (corrected, frozen‑sample census).** **20 logical eVars are live** (populated ≥0.1 % of the sample; 37 columns counting `evar`/`post_evar` variants), of which **15 are core** (≥99 % populated): evar101–109, 131, 137, 138, 144, 145, 200. Live but below core: evar121, 140, 162, 193, 194. Cardinality highlights: `evar105` (card 5), `evar106` (card 4), **`evar107` (card 734, free‑text, length up to 262 — likely a path/label field)**, `evar108` (card 1,326, free‑text), **`evar200` (card ~46.8 K — near visitor cardinality, identity‑like)**. Props: prop51–57 live (5 of them core). The 8 `post_eVar` registry slots and the synthetic generator draw from this set; the earlier "8 live eVars @ ~99.9 %" figure came from the pre‑fix census whose un‑persisted sample re‑drew between numerator and denominator.
-- **eVar *content* is masked in every profile (ADR-0007)** — no business meaning is derivable from the data. Sample tokens (`data_profiling_report.md`): `evar107` = `<internal>`, `evar108` = `<text:41>`, **`evar140` = `<hash>` (sensitive / join-key)**, the rest `<masked:…>`. The only name dictionary in `new_data/` is the **CoverMe** suite (`data_profile_summary.json` file[2] `post_eVar` = 93 rows; file[4] `post_event_list` = 156 rows) — a *different* report suite; its 8 transcribed eVar meanings live in `metric-registry.yaml` but are **not authoritative** for `manulifeglobalprod`, and the raw name strings are not in the repo.
+- **eVar *content* is masked in every profile (ADR-0007)** *(↺ historical — full-raw since 2026-07-23, see banner)* — no business meaning is derivable from the data. Sample tokens (`data_profiling_report.md`): `evar107` = `<internal>`, `evar108` = `<text:41>`, **`evar140` = `<hash>` (sensitive / join-key)**, the rest `<masked:…>`. The only name dictionary in `new_data/` is the **CoverMe** suite (`data_profile_summary.json` file[2] `post_eVar` = 93 rows; file[4] `post_event_list` = 156 rows) — a *different* report suite; its 8 transcribed eVar meanings live in `metric-registry.yaml` but are **not authoritative** for `manulifeglobalprod`, and the raw name strings are not in the repo.
 
 **Implications.** The usable feature space is ~197 columns, not 1,198 — the synthesis spec correctly prunes to 120. `evar107`'s free‑text/length profile flags it as a **PII‑review** candidate before it is ever surfaced raw. `evar140` (hash, `is_sensitive`) is an identity-like slot — keep it shape-only, and `evar200` (card ~46.8 K, near visitor cardinality) deserves the same treatment.
 
@@ -121,7 +133,7 @@ notebook.
 | `page_url` (shape) | 702 | (query‑stripped shapes) |
 | **`geo_country`** | 94 | **CAN 84.8 %, USA 11.5 %**, HKG 0.6 %, IND/PHL 0.5 % |
 | **`geo_region`** | 343 | **ON 46.7 %, AB 15.3 %, BC 11.5 %, QC 3.6 %** |
-| `geo_city` (masked) | 2,618 | shape‑only |
+| `geo_city` (masked *↺ historical — full-raw since 2026-07-23, see banner*) | 2,618 | shape‑only |
 | **`language`** | 68 | **45 ≈ EN 63.3 %, 39 ≈ FR 30.1 %** |
 | `connection_type` | 2 | 2 = 91.3 %, 4 = 8.7 % |
 | `ref_type` | 6 | 6 = 61.0 %, 2 = 22.3 %, 3 = 10.6 %, 1 = 6.0 % |
@@ -151,7 +163,7 @@ notebook.
 | Signal from EDA | Design consequence |
 |---|---|
 | Strong weekly seasonality (lag‑7 0.72), weekend ≈ 40 % of weekday | Baseline must be **day‑of‑week aware** (e.g. trailing same‑weekday median / seasonal‑naïve), not a flat rolling mean. |
-| Only 158 days of history | Prefer **short‑memory** methods; long seasonal decomposition / yearly effects are not yet fittable. |
+| Only 158 days of history *(↺ or 138 — see banner / doc-16 backlog #4)* | Prefer **short‑memory** methods; long seasonal decomposition / yearly effects are not yet fittable. |
 | Instrumentation on/off shifts (ev500/501–504) | Encode 2026‑02‑24, 2026‑03‑03 and the ev500 window (2026‑04‑02 → 2026‑06‑15) as **known change‑points**; exclude from training. |
 | Presence‑only events, no numeric values | KPIs are **counts/rates**, and coverage rules ("event fired on X % of hits") are the natural detectors. |
 | RRSP monthly seasonality | Month‑over‑month deltas will false‑alarm seasonally; anchor to same‑period‑last‑year is impossible (no history) → rely on within‑window DOW baselines. |
@@ -172,7 +184,7 @@ These conclusions are consistent with the `detect/` engine's observed behaviour 
 
 **Metric semantics**
 3. **eVar *content* semantics.** The event IDs themselves are already resolved by the standard Adobe `event.tsv` (20 = Campaign View; 500–504 = clickmap; `10000+k` = Instance of eVar(101+k)). What is *not* known is what each **eVar captures as a dimension** (e.g. eVar105 / eVar137) — that needs the eVar dictionary. Separately, if any **custom events (200–1000)** begin firing they *would* be suite-specific (the CoverMe business-KPI→custom-event mappings in `metric-registry.yaml` are for a different suite).
-4. **The GWAM eVar dictionary.** What does each live eVar capture (`evar105-200`)? Verified `new_data/` holds no answer — values are masked (ADR-0007) and the only dictionary present is the **CoverMe** suite (93 eVar rows), whose 8 transcribed meanings in `metric-registry.yaml` are **not authoritative** here. Priority flags: **`evar107` = `<internal>` free-text** (card 718, ≤255 chars — PII-safe to surface?) and **`evar140` = a sensitive hash/join-key**.
+4. **The GWAM eVar dictionary.** What does each live eVar capture (`evar105-200`)? Verified `new_data/` holds no answer — values are masked (ADR-0007) *(↺ historical — the profiles in `new_data/` predate the 2026-07-23 full-raw flip; a re-run now emits raw values, see banner)* and the only dictionary present is the **CoverMe** suite (93 eVar rows), whose 8 transcribed meanings in `metric-registry.yaml` are **not authoritative** here. Priority flags: **`evar107` = `<internal>` free-text** (card 718, ≤255 chars — PII-safe to surface?) and **`evar140` = a sensitive hash/join-key**.
 5. Which KPIs should actually trigger alerts (enrolment funnel? campaign views? page traffic? language mix?)? The EDA lists *candidates*; the business owns the *shortlist*.
 
 **Known changes vs anomalies**

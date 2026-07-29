@@ -46,16 +46,25 @@
 
 ## Executive summary
 
+> **↺ Correction banner (2026-07-20 / 2026-07-29, doc-16 D7 + backlog #4).** The "cutover" framing
+> below applies **only to the URL-filtered marketing population**: at suite level `manugrs` did NOT
+> end on 2026-02-01 (320 M+ hits through 2026-07-19, still 8–13 M/month) and the suites are
+> **concurrent**. Separately, the inventory puts `manulifeglobalprod`'s first unfiltered day at
+> **2026-03-10 (138 days)**, not 2026-02-01 (158 days) — the discrepancy is doc-16 backlog #4,
+> still open. Body text below is kept as the historical record.
+
 - **We profiled one giant Adobe Analytics table (3.18 billion rows, 1,198 columns, 357 GB) down to
   the small slice that is Canada-Retirement web traffic**, from two angles: the suite that is live
   today and the legacy suite it replaced.
 - **The live suite (`manulifeglobalprod`) has only 158 days of history** (2026-02-01 → 2026-07-08,
-  no gaps). That is enough to see the strong weekly rhythm (weekends ≈ 40 % of weekdays) but **too
+  no gaps). *(↺ see banner: suite-level first day may be 2026-03-10 → 138 days.)* That is enough to
+  see the strong weekly rhythm (weekends ≈ 40 % of weekdays) but **too
   short to fit yearly/holiday seasonal models.**
 - **The legacy suite (`manugrs`) recovers ~2.5 years of history** (2023-12-31 → 2026-07-07,
-  5.57 M rows) and shows a **clean, datable cutover on 2026-02-01** — legacy traffic collapses in
-  the exact month the new suite switches on. Splicing the two on suite-agnostic metrics lifts the
-  158-day ceiling.
+  5.57 M rows *scoped* — the suite itself is 320 M+) and shows a **clean, datable cutover on
+  2026-02-01** *in the URL-scoped marketing slice only (↺ see banner — the suites are concurrent)* —
+  legacy marketing traffic collapses in the exact month the new suite switches on. Splicing the two
+  on suite-agnostic metrics lifts the 158-day ceiling.
 - **The business's filter column is wrong.** Scope is currently defined on `post_page_url`, which is
   **~37 % blank** on the new suite (**~48 %** on the legacy suite). The same filter finds **2–3×
   more traffic on `page_url`**. Recommendation, reconfirmed on both suites independently:
@@ -169,7 +178,10 @@ lower(trim(rsid_col)) IN rsid_list
 Any widget left empty drops that condition; a missing schema column is dropped **and flagged** in
 the run metadata, so the notebook never silently profiles the wrong population. The
 `login_host_exclude` clause encodes the business rule that authenticated member-portal traffic
-(`portal.manulife.ca`, `id.manulife.ca`, `grsmembers.manulife.com`, `gsrs1.manulife.com`) is out of
+(`portal.manulife.ca`, `id.manulife.ca`, `grsmembers.manulife.com`, `gsrs1.manulife.com`,
+`viproom.manulife.com`, `portail.manuvie.ca` — ↺ corrected 2026-07-29 to the full six-host D8 list
+per [settings.py](../../databricks/conf/settings.py); this line previously omitted the last two,
+including the French host the list-not-pattern rule exists to protect) is out of
 scope — this is why suite-level `manugrs` volume (320 M hits) dwarfs the ~5.6 M in scope. Two
 consequences the audit sections (S4/S4b/S4c) quantify:
 
@@ -393,7 +405,8 @@ eVar set (each live eVar fires a presence flag). **Event IDs decode by the stand
 > eVar107*, `10065` = *Instance of eVar166*, `10068` = *Instance of eVar169*). Loading it would
 > resolve the labels; that wiring was scoped previously but never implemented.
 
-> **The eVar166 / eVar169 contradiction (doc-16 backlog #4) — narrowed.** EDDL says
+> **The eVar166 / eVar169 contradiction (doc-16 backlog #7) — narrowed.** *(↺ 2026-07-29: doc 16
+> adopted this finding — its §2/§3.4 now cite this section; cross-ref corrected from #4 to #7.)* EDDL says
 > **eVar166 = Product ID** and assigns **no meaning to eVar169**; doc-16 §3.4 records an earlier
 > claim that production profiling tagged both as *URL-type* in `manugrs`. On review that claim
 > **has no traceable source in this repo** — the only eVar166/169 references are the
@@ -473,7 +486,9 @@ Monthly CA hits around the handover show the migration end-to-end:
 
 The legacy suite ran healthy from **Jan 2024 → Jan 2026** (~100–520 K hits/month) and **collapsed in
 Feb 2026 exactly as the new suite switched on (2026-02-01)** — one population handed to another, not
-two overlapping feeds. Legacy is a **material suite in its own right** (3rd-largest rsid in the
+two overlapping feeds. *(↺ 2026-07-29: true of the URL-scoped marketing slice shown in this table
+only — at suite level the two rsids are CONCURRENT and `manugrs` never collapsed; see the §1 banner
+and doc-16 D7.)* Legacy is a **material suite in its own right** (3rd-largest rsid in the
 window at 7.8 %; the new suite is not even top-10). **The prize is history depth:** splicing the
 pre-Feb-2026 legacy series to the new suite yields **~2.5 years** instead of 158 days — enough to fit
 the seasonal/holiday models the new suite alone cannot support — *but only on suite-agnostic metrics*,
@@ -486,11 +501,11 @@ with **2026-02-01 encoded as a hard change-point**.
 | Finding | Design consequence |
 |---|---|
 | 158 days, strong weekly cycle, RRSP monthly peak | **Day-of-week-aware baseline** (trailing same-weekday median / seasonal-naïve); short-memory methods only; no yearly decomposition yet. |
-| Clean, datable cutover at 2026-02-01 + tag change-points (2026-02-24, 2026-03-03, ev500 window 2026-04-02→06-15) | Encode these as **known change-points, excluded from training**; never compare eVar KPIs across the suite cutover. |
+| Clean, datable cutover at 2026-02-01 *(↺ marketing-slice only — suites concurrent, doc-16 D7)* + tag change-points (2026-02-24, 2026-03-03, ev500 window 2026-04-02→06-15) | Encode these as **known change-points, excluded from training**; never compare eVar KPIs across the suite cutover. |
 | ~2.5 yr recoverable under `manugrs` | Splice **suite-agnostic KPIs** (hits, visits, geography, language) to lift the 158-day ceiling; keep old/new eVars as separate series. |
 | Only 12 shared eVars; **now named** via EDDL | eVar-derived KPIs are cross-suite-spliceable **only after a per-rsid census confirms the spec holds in each suite** — the workbook names no rsids. |
 | eVar107/194/127 are URL fields never audited for scope | **Widen S4c** before freezing scope; the coalesce is best-known, not proven complete. |
-| eVar131 (ECID) + eVar108 (User Agent) print raw under the new regime | Extend the sensitivity check to **eVar semantics**, not just literal column names, before the next run emits blocks. |
+| eVar131 (ECID) + eVar108 (User Agent) print raw under the new regime | *↺ superseded 2026-07-29:* `is_sensitive()`/`DIRECT_IDENTIFIERS` were **deleted 2026-07-23** (doc-16 D2, ADR-0007 §5 full-raw) — there is no sensitivity check to extend. Raw emission is now the sanctioned behavior; the governance control is corporate data-handling policy on exports, not code. |
 | eVar132–134 spec'd as Member Customer IDs | **Check population before the PIA.** If live, the feed carries direct customer identifiers and the privacy posture changes. |
 | No bot filtering; device-level identity only | Own the bot heuristics; treat visits/visitors as approximate. |
 | `post_page_url` ~37–48 % blank | Scope production on **`coalesce(page_url, post_page_url)`**. |
@@ -594,7 +609,10 @@ the business signs off scope**, because flipping either re-baselines every KPI.
 8. Freshness SLA / daily cutoff (writes are ~3-min batches; grain of record is daily).
 9. Is **weekend/holiday ≈ 40 %** expected, and should statutory holidays be modelled?
 15. Confirm the **authenticated-host exclusion** (`portal.manulife.ca`, `id.manulife.ca`,
-    `grsmembers.manulife.com`, `gsrs1.manulife.com`) is correct and complete. It removes the large
+    `grsmembers.manulife.com`, `gsrs1.manulife.com`, `viproom.manulife.com`, `portail.manuvie.ca` —
+    ↺ corrected 2026-07-29 to the full six-host D8 list; this question previously asked you to
+    ratify a four-host list that omitted the French `portail.manuvie.ca`, the exact host the
+    list-not-pattern rule exists to protect) is correct and complete. It removes the large
     majority of suite-level `manugrs` volume, so a wrong list silently changes every baseline.
 
 ---
@@ -609,8 +627,8 @@ the business signs off scope**, because flipping either re-baselines every KPI.
 | # | Item | Why it blocks | Done when |
 |---|---|---|---|
 | 1 | **Widen the S4c URL audit to `evar107`/`post_evar107`, `prop52`, `evar194`, `evar127`** | The "no retirement traffic beyond the coalesce" conclusion is unproven for the field EDDL calls the *primary* page URL (§5.3). Scope is the foundation every KPI sits on. | S4c reports retirement-hit counts for those columns and either confirms zero incremental rows or quantifies them. |
-| 2 | **Per-rsid live-eVar census cross-referenced against EDDL** | Resolves Q4 (same meaning per suite), doc-16 backlog #4 (eVar166/169), and the eVar200/eVar162 conflicts in one pass. The unified dual-rsid profiler already emits `live_custom_dims` per rsid — this is a join, not a new run. | A table of `rsid × eVar × EDDL meaning × populated % × cardinality`, with mismatches flagged. |
-| 3 | **Extend the sensitivity check to eVar semantics** | `is_sensitive()` matches 16 literal column names, so **eVar131 (ECID)** and **eVar108 (User Agent)** print raw today (§4), and eVar136/137 would too if live. Every SHAREABLE block copied out of the workspace carries this. | `DIRECT_IDENTIFIERS` (or an EDDL-derived map) covers identifier-bearing eVars; a re-run emits no raw ECID or user-agent values. |
+| 2 | **Per-rsid live-eVar census cross-referenced against EDDL** | Resolves Q4 (same meaning per suite), doc-16 backlog #7 (eVar166/169 — cross-ref ↺ corrected from #4), and the eVar200/eVar162 conflicts in one pass. The unified dual-rsid profiler already emits `live_custom_dims` per rsid — this is a join, not a new run. | A table of `rsid × eVar × EDDL meaning × populated % × cardinality`, with mismatches flagged. |
+| 3 | ~~**Extend the sensitivity check to eVar semantics**~~ *↺ superseded 2026-07-29* | `is_sensitive()`/`DIRECT_IDENTIFIERS` and the emit-time scrubber were **deleted 2026-07-23** (doc-16 D2; ADR-0007 §5 revised to full-raw) — this criterion demanded work on code that no longer exists. Raw emission is sanctioned; export handling is governed by corporate policy, and the CoverMe-side consent question lives in doc 17 item 9. | Retired — no longer a gate. The privacy gate is ADR-0007 §5 + doc 17 item 9 sign-off. |
 | 4 | **Check `evar132/133/134` population explicitly** | Determines whether person-level identity exists (§5.8). Drives the PIA scope and possibly the whole privacy regime. | Census reports populated % for all three in both suites. |
 | 5 | **Stakeholder sign-off on scope** (Q1, Q2, Q10, Q15) | `SCOPE_URL_MODE` / `SCOPE_SUITE_MODE` are held deliberately — flipping either **re-baselines every KPI**, so it must happen before baselines are fit, not after. | Written confirmation of suite union, French inclusion, eVar107 handling, and the login-host list. |
 
