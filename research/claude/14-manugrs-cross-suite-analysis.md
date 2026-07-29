@@ -110,6 +110,13 @@ end‑to‑end complementary.
 (26.6 %) — whereas `manulifeglobalprod` is not even top‑10. The business filtered on the *smaller*
 suite.
 
+> ↺ **Update (probe C1/C4, 2026‑07‑29).** Full‑history shares differ from this window's:
+> `manufingbrsmobileapp.prod` **68.9 %**, `jhfswamjhreupeprod` 14.6 %, `manugrs` **9.9 %** (322M rows,
+> 883 days). More importantly, `manugrs` is no longer just a cross‑suite curiosity — it is the SME's
+> **"GRS+" Web Member channel**: `post_evar185 = 'MPS Member'` covers 54.14 % of the suite and **100 %
+> of its populated eVar185**. Note it carries **no eVar105** (0.0001 % populated), so nothing in this
+> document's brand‑tag reasoning transfers to it. See [19 §0 and §2.1](19-gwam-channel-readiness.md).
+
 ---
 
 ## 2. Volume, coverage & seasonality — `manugrs` (S3)

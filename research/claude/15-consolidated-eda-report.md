@@ -525,12 +525,19 @@ the business signs off scope**, because flipping either re-baselines every KPI.
 >   explicit: Page Views, Visits, Visitors on all four channels; Errors on three; Sign-in completion
 >   rate and Sign-in errors on ManulifeID. 17 (metric × channel) pairs, seeded as `candidate` entries
 >   in [`metric-registry.yaml`](metric-registry.yaml) `gwam_channel_metrics`.
-> - **Q14 is narrowed.** The Platform eVar110↔185 conflict now has a business-side data point: the SME
->   writes "Platfrom - v185 = MPS Member", i.e. eVar185. Probe section C4 settles which column actually
->   carries the value.
-> - **Q1/Q2 (suite union, French inclusion) are reframed, not closed.** A segment-scoped definition is
->   language-agnostic, so it would resolve the French question as a side effect — but only if the
->   business signs off on the re-baseline (doc-16 **D10**).
+> - **Q14 is CLOSED (probe C4, 2026-07-29).** The Platform eVar110↔185 conflict is resolved in favour
+>   of **eVar185**: `'MPS Member'` is a literal value with 49.1M hits, covering 100% of `manugrs`'s
+>   populated eVar185. **eVar110 is not Platform at all** — it carries SHA-256-style hashed
+>   identifiers and its `MPS` rate is 0.0000 on every rsid. The SME's "Platfrom - v185 = MPS Member"
+>   was correct.
+> - **Q1/Q2 (suite union, French inclusion) are reframed, and ↺ one premise is corrected.** The
+>   expectation that a segment-scoped definition would "resolve the French question as a side effect"
+>   is **not supported by C3**: measured on `manulifeglobalprod` over 90 days, segment scope would
+>   *gain* 1,436 rows and *lose* 60,594 versus today's URL scope — ~96% overlap, and marginally
+>   narrower, because `URL_SCOPE_BROAD` already carries `%/regimes-collectifs%`. The case for the
+>   segment model rests on the **other three channels**, which URL cannot express at all (mobile's
+>   coalesced URL rate is exactly 0.000), not on French coverage. Still gated on the business signing
+>   off on the re-baseline (doc-16 **D10**) — which C3 now prices as cheap.
 > - 🚩 **A new blocker outranks everything here:** the ManulifeID and Web Member channels require the
 >   individual-login traffic that **D8** excludes. See [20](20-gwam-sme-questions.md) Q1.
 >

@@ -82,15 +82,21 @@ meta:
         segment: "Brand (evar105) = 'ca-retirement :  : GWAM'"
       web_member:
         instance: Manulife
-        report_suite_label: GRS+                       # UNRESOLVED — no matching rsid in repo or census
-        segment: "Platform - v185 = 'MPS Member'"      # v185 = eVar185; conflicts with eVar110 (doc-16 §3)
+        report_suite_label: GRS+                       # RESOLVED (probe C1/C4) -> rsid manugrs; SME to ratify the string (doc 20 Q2)
+        segment: "Platform - v185 = 'MPS Member'"      # v185 = eVar185 — CONFIRMED field of record (probe C4);
+                                                       # 100% of manugrs's populated eVar185, 54.14% of the suite.
+                                                       # NOT suite-unique: also 18.16% of manufingbrsmobileapp.prod,
+                                                       # so the predicate must be suite AND segment.
       mobile:
-        instance: Manulife Financial                   # NOTE: different Adobe login company
-        report_suite_label: GBRS Mobile App - Production   # probably manufingbrsmobileapp.prod (56.9% of source table)
-        segment: Canada Retirement App Pages v2        # an Adobe segment NAME; definition not supplied
+        instance: Manulife Financial                   # NOTE: different Adobe login company (doc 20 Q10)
+        report_suite_label: GBRS Mobile App - Production   # = manufingbrsmobileapp.prod (probe C1: 68.9% of source table, 881 days)
+        segment: Canada Retirement App Pages v2        # an Adobe segment NAME; definition still not supplied (doc 20 Q11).
+                                                       # Probe C8 reconstruction: post_pagename LIKE 'MPS %'
+                                                       # (vs 'GB ' = Group Benefits, 'MM ' = app shell, 'CIAM Sign In').
       manulifeid:
         instance: Manulife
-        report_suite_label: manucustomer.prod          # UNRESOLVED — not present in the top-10 rsid census
+        report_suite_label: manucustomer.prod          # ABSENT from our feed — probe C9: 0 rows, not in the 16-rsid census.
+                                                       # Data-ACCESS request, not a modelling gap (doc 20 Q2).
         segment: null                                  # SME: "Not sure how to seperate Retirement from other ManulifeID signins"
     metric_matrix: >
       Page Views / Visits / Visitors = all four channels (qualified "ideally non-marketing",
@@ -106,17 +112,28 @@ meta:
       (3) A URL-based scope cannot express the mobile channel at all — app hits carry no page
       URL, and every scope predicate in the repo is a SQL LIKE on a URL column.
     pending_with_sme: >
-      Q1 sign-in vs D8, Q2 the GRS+/manucustomer.prod rsids, Q3 segment-scope sign-off (all
-      blocking); plus Q4 the 1/0 reading, Q5 "non-marketing", Q6 page-views-vs-hits, Q7 error
-      field + grain, Q8 sign-in ratio definition, Q9 the ManulifeID retirement split, Q10 the
-      "Manulife Financial" instance, Q11 the App Pages v2 segment definition, Q12 thresholds
-      and owners. Full text: research/claude/20-gwam-sme-questions.md.
+      BLOCKING: Q1 sign-in vs D8 (now narrowed to web_member — manulifeid is moot until access);
+      Q2 ACCESS to manucustomer.prod (escalated from "which rsid" — probe C9 found 0 rows; the
+      GRS+/mobile halves of Q2 downgraded to ratification); Q3 segment-scope sign-off (probe C3
+      priced it: +1,436 / -60,594 rows, ~96% overlap on the public website). Plus Q4 the 1/0
+      reading, Q5 "non-marketing" (C10: only bites on public_website — campaign is 57% there vs
+      0.5%/0.02% on web_member/mobile), Q6 page-views-vs-hits, Q7 error field + grain (C5: the
+      fields ARE populated — eVar181/182/184 at 52/70/61% on manugrs), Q8 sign-in ratio
+      definition (C6: eVar122/135 are 0% on the Canada suites — pagename funnel is the only
+      path), Q9 the ManulifeID retirement split (C9: unanswerable until access), Q10 the
+      "Manulife Financial" instance, Q11 the App Pages v2 segment definition (C8 reconstruction
+      offered), Q12 thresholds and owners. Full text: research/claude/20-gwam-sme-questions.md.
     pending_with_us: >
-      eda/gwam_channel_discovery.py (sections C1-C10) answers the data-answerable half without
-      SME involvement: rsid existence and history, web-vs-app per suite, the eVar105 value and
-      delimiter plus segment-vs-URL scope sizing, eVar185-vs-eVar110, error/sign-in field
-      population, per-suite event ids, app pagenames, ManulifeID discriminators, and marketing
-      candidates. Not yet run (doc 19 G1).
+      NONE — eda/gwam_channel_discovery.py (sections C1-C10) RAN CLEAN 2026-07-29 (doc 19 G1
+      closed): 11 sections, run_manifest.skipped == {}, complete: true, 90-day window
+      2026-04-29..2026-07-28. Export: gwam_channel_discovery.html. It settled rsid existence and
+      history, web-vs-app per suite, the eVar105 value and delimiter, segment-vs-URL scope
+      sizing, eVar185-vs-eVar110, error/sign-in field population, per-suite event ids, app
+      pagenames, ManulifeID discriminators, and marketing candidates. Three pre-probe claims
+      were CORRECTED: the delimiter is ":" not " : "; mobile is 68.9% of the table not 56.9%;
+      and segment scope is marginally NARROWER than URL scope on the public website, not wider
+      (so it does not close a French gap — the case for it rests on the other three channels).
+      Results folded into docs 19, 20, 16 and 15.
 
 # ------------------------------------------------------------------
 # 1) data_feed_columns — 9 tagged rows (traffic / behavioral columns)
@@ -452,12 +469,16 @@ post_event_list:     # exactly 12 entries (seed count 12)
 gwam_channel_metrics:   # exactly 17 entries (3 traffic x 4 channels + 3 errors + 2 sign-in)
 
   # ---- Public Website — rsid manulifeglobalprod; scope = eVar105 brand tag ----
+  # Probe C1: 9.1M rows but only 138 days of history (from 2026-03-10) — thinnest baseline margin
+  # of the three located suites. C3: the SME's literal value exists (776,860 hits); a second form
+  # "Manulife : GWAM : group-plans:ca-retirement" (526,357) means the predicate must match on the
+  # PARTS (ca-retirement + GWAM), not equal the one quoted string. Delimiter is ":" not " : ".
   - metric_id: gwam_pw_page_views
     name: Page Views — Public Website
     domain: gwam_retirement
     channel: public_website
     report_suite_label: Manulife Global Prod
-    scope_predicate: "evar105 = 'ca-retirement :  : GWAM'"   # unverified — doc 20 Q3
+    scope_predicate: "evar105 = 'ca-retirement :  : GWAM'"   # value VERIFIED (probe C3); scope-model switch still needs sign-off (doc 20 Q3)
     source_sheet: sme_scope_table
     source_ref: Page Views (count)
     decode_rule: hit-count          # ⚠ we count hits; SME may mean Adobe page views (doc 20 Q6)
@@ -492,13 +513,17 @@ gwam_channel_metrics:   # exactly 17 entries (3 traffic x 4 channels + 3 errors 
     owner: TBD
     status: candidate
 
-  # ---- Web Member — rsid UNRESOLVED ("GRS+"); scope = eVar185 platform tag ----
+  # ---- Web Member — rsid manugrs ("GRS+", data-confirmed; SME to ratify); scope = eVar185 platform tag ----
+  # Probe C1/C4: 322M rows, 883 days. eVar185='MPS Member' = 54.14% of the suite and 100% of its
+  # populated eVar185. NOTE eVar105 is populated on 0.0001% of rows here — effectively absent, so the
+  # brand tag does NOT work on this suite; eVar185 is the only segment handle. Predicate must be
+  # rsid AND segment ('MPS Member' also covers 18.16% of the mobile suite).
   - metric_id: gwam_wm_page_views
     name: Page Views — Web Member
     domain: gwam_retirement
     channel: web_member
-    report_suite_label: GRS+        # UNRESOLVED rsid (doc 20 Q2)
-    scope_predicate: "evar185 = 'MPS Member'"   # eVar185 vs eVar110 unresolved (probe C4)
+    report_suite_label: GRS+        # = rsid manugrs (probe C1/C4, data-confirmed; SME to ratify — doc 20 Q2)
+    scope_predicate: "evar185 = 'MPS Member'"   # eVar185 CONFIRMED as Platform (probe C4); eVar110 is a hashed id, not Platform
     source_sheet: sme_scope_table
     source_ref: Page Views (count)
     decode_rule: hit-count
@@ -540,19 +565,30 @@ gwam_channel_metrics:   # exactly 17 entries (3 traffic x 4 channels + 3 errors 
     scope_predicate: "evar185 = 'MPS Member'"
     source_sheet: sme_scope_table
     source_ref: Errors (count)
-    decode_rule: error-count        # field of record unknown: eVar181-184 or event173 (probe C5, doc 20 Q7)
+    decode_rule: error-count        # probe C5: eVar181/182/184 populated 52/70/61% on manugrs (12.2M/16.4M/14.4M rows);
+                                    # eVar184 17.9% on mobile (37.6M rows). RULED OUT: event173 (John Hancock event,
+                                    # 0.000001 on manugrs) and eVar183 (0.00% manugrs / 0.14% mobile). Leaning eVar182 —
+                                    # ~72% of manugrs's populated eVar181 is the literal string "N/A". Field + grain: doc 20 Q7.
+                                    # CAVEAT: C5 top_values are cross-suite; per-rsid error values need a follow-up query.
     grain: daily
     direction: higher_is_bad
     owner: TBD
     status: candidate
 
-  # ---- Mobile — probably rsid manufingbrsmobileapp.prod; scope = an Adobe segment NAME ----
+  # ---- Mobile — rsid manufingbrsmobileapp.prod (confirmed present); scope = an Adobe segment NAME ----
+  # Probe C1: 2.24B rows = 68.9% of the source table, 881 days, entirely unmodelled.
+  # C2: coalesced URL rate is EXACTLY 0.000 — no URL LIKE predicate can ever express this channel
+  # (and mobileappid is 0.000 populated on every suite, so it is not the discriminator either).
+  # C8 reconstruction of the segment: post_pagename LIKE 'MPS %' (retirement platform), vs
+  # 'GB ' = Group Benefits, 'MM ' = app shell, 'CIAM Sign In' = sign-in. Optionally AND
+  # evar185='MPS Member' (18.16%). NOTE eVar105 here is 93.6% populated but its dominant value is
+  # 'GWAM:US Retirement:Mobile' — US, not Canada; the brand tag selects the wrong country.
   - metric_id: gwam_mob_page_views
     name: Page Views — Mobile App
     domain: gwam_retirement
     channel: mobile
     report_suite_label: GBRS Mobile App - Production
-    scope_predicate: "segment 'Canada Retirement App Pages v2' — definition not supplied (doc 20 Q11)"
+    scope_predicate: "segment 'Canada Retirement App Pages v2' — definition not supplied; probe C8 candidate = post_pagename LIKE 'MPS %' (doc 20 Q11)"
     source_sheet: sme_scope_table
     source_ref: Page Views (count)
     decode_rule: hit-count          # ⚠ app hits carry no page URL — unscopeable by the current predicate (doc 19 G4)
@@ -600,12 +636,18 @@ gwam_channel_metrics:   # exactly 17 entries (3 traffic x 4 channels + 3 errors 
     owner: TBD
     status: candidate
 
-  # ---- ManulifeID — rsid UNRESOLVED (manucustomer.prod); NO retirement discriminator known ----
+  # ---- ManulifeID — rsid manucustomer.prod ABSENT FROM OUR FEED; NO retirement discriminator known ----
+  # Probe C9: 0 rows in the window; not among the 16 rsids in the full-history census. These five
+  # entries are unbuildable until a DATA-ACCESS request lands (doc 20 Q2) — not merely ungoverned.
+  # The retirement-split question (Q9) could not even be attempted: there were no rows to profile.
+  # Partial consolation (C8): the sign-in flow is partly visible inside manugrs as pagenames
+  # 'mfid:sign-in' (1,160,058) and 'grs:id-flow:member:account-selection' (2,312,927) — which is
+  # exactly the traffic D8 excludes, so it is gated on the Q1 ruling, not a workaround.
   - metric_id: gwam_mid_page_views
     name: Page Views — ManulifeID
     domain: gwam_retirement
     channel: manulifeid
-    report_suite_label: manucustomer.prod   # UNRESOLVED rsid (doc 20 Q2)
+    report_suite_label: manucustomer.prod   # ABSENT from our feed — 0 rows (probe C9); blocked on data access (doc 20 Q2)
     scope_predicate: null           # SME's own open item: cannot separate retirement sign-ins (doc 20 Q9)
     source_sheet: sme_scope_table
     source_ref: Page Views (count)
@@ -665,7 +707,10 @@ gwam_channel_metrics:   # exactly 17 entries (3 traffic x 4 channels + 3 errors 
     grain: daily
     direction: higher_is_good
     owner: TBD
-    status: candidate               # ⚠ blocked twice over: D8 (Q1) and no attempt/success marker (probe C6)
+    status: candidate               # ⚠ blocked three ways: D8 (Q1), no data access (C9), and the assumed inputs
+                                    # are EMPTY — probe C6 found eVar122/eVar135 0% populated on the Canada suites
+                                    # (eVar122 is John-Hancock-only and duplicates eVar182 there). Remaining path is
+                                    # the C8 pagename funnel; needs an SME definition (Q8) and G2 to declare a ratio.
   - metric_id: gwam_mid_signin_errors
     name: Sign-in Errors — ManulifeID
     domain: gwam_retirement
