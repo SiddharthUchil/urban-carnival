@@ -770,6 +770,9 @@ def s4_frames():
 
     emit("window_frame", {
         "window_start": str(WINDOW_START), "window_end": str(WINDOW_END),
+        # Scoped-marketing cutover (doc-16 D7): regime break inside any window spanning it —
+        # baseline consumers must not fit across this date as if the series were homogeneous.
+        "known_change_points": ["2026-02-01"],
         "window_rows_ca": window_rows,
         "s3_crosscheck_sum_ca": s3_window_sum,
         "crosscheck_ok": (s3_window_sum == window_rows) if s3_window_sum is not None else None,
@@ -1499,7 +1502,8 @@ def s10_dq_baseline():
     key_nulls = {c: round(100.0 - CENSUS.get(c, {}).get("pop_pct", 0.0), 3) if c in CENSUS
                  else 100.0 for c in key_cols}
 
-    # exclude_hit x hit_source (bot filtering rules)
+    # exclude_hit x hit_source (bot filtering rules) — profiled only, deliberately NOT
+    # filtered: the eligibility rule is a CoverMe-only SME ruling (2026-07-27).
     dist = []
     if pick_col(DF_S, "exclude_hit") and pick_col(DF_S, "hit_source"):
         dist = [{"exclude_hit": str(r["exclude_hit"]), "hit_source": str(r["hit_source"]),
@@ -1669,9 +1673,15 @@ def s12_synthesis_spec():
                       "login_host_exclude": LOGIN_EXCLUDE or None,
                       "rsid_col": (scope_meta or {}).get("rsid_col"),
                       "url_col": (scope_meta or {}).get("url_col"),
-                      "ca_share_pct": dv.get("ca_share_pct")},
+                      "ca_share_pct": dv.get("ca_share_pct"),
+                      "exclude_hit_note": ("GWAM deliberately does NOT filter exclude_hit: the "
+                                           "eligibility rule (exclude_hit/hit_source) is a "
+                                           "CoverMe-only SME ruling (metric-registry "
+                                           "meta.sme_confirmations, 2026-07-27). Cross-suite "
+                                           "divergence vs CoverMe gold is expected.")},
             "window": {"start": str(WINDOW_START), "end": str(WINDOW_END),
-                       "months": WINDOW_MONTHS},
+                       "months": WINDOW_MONTHS,
+                       "known_change_points": ["2026-02-01"]},
             "sample_fraction": SAMPLE_FRACTION, "sample_rows": SAMPLE_ROWS,
             "sections_missing": missing, "sections_skipped": SKIPPED,
         },
