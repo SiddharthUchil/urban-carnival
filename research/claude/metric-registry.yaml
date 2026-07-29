@@ -1,11 +1,21 @@
 # GMAI-Pulse Phase-1 Metric Registry
 # ------------------------------------------------------------------
-# version: 0.3.0 (2026-07-27)
+# version: 0.4.0 (2026-07-28)
 # generated_from: new_data/data_profile_summary.json (profiler v0.1.0, run 2026-07-02)
 # seed_source: CoverMe data dictionary rows where Notes == "Anomaly Detection"
 #              -> confirmed counts: 9 (data_feed_columns) + 8 (post_eVar) + 12 (post_event_list) = 29
+#              GWAM: the SME four-channel scope table received 2026-07-28
+#              -> 17 (metric x channel) pairs in `gwam_channel_metrics`
 #
-# STATUS: SME-CONFIRMED. v0.3.0 records the business rulings received 2026-07-27
+# STATUS: MIXED. The CoverMe entries are SME-CONFIRMED (v0.3.0). The GWAM entries added in
+# v0.4.0 are NOT -- they are a verbatim transcription of a scope table that has not yet been
+# ruled on, and every one of them is `status: candidate` with `owner: TBD`. Nothing in
+# `gwam_channel_metrics` may be promoted to `active` before (a) the discovery probe runs
+# (eda/gwam_channel_discovery.py) and (b) the three blocking questions in doc 20 are answered
+# -- above all Q1, which asks whether this table supersedes the 2026-07-20 login-exclusion
+# rule (doc-16 D8). See meta.gwam_sme_inputs.
+#
+# v0.3.0 records the business rulings received 2026-07-27
 # (Kerrian, SME): target set confirmed complete/current; the 5 transactional funnel
 # events promoted to `active` (her stated priority) with owner assigned. See
 # meta.sme_confirmations. v0.2.0 filled all 29 placeholders from the business-confirmed
@@ -21,8 +31,8 @@
 # ------------------------------------------------------------------
 
 meta:
-  version: 0.3.0
-  updated: 2026-07-27
+  version: 0.4.0
+  updated: 2026-07-28
   default_grain: daily          # hourly reserved — enable only after >=30-day feed confirms volume
   domains: [coverme, gwam_retirement]
   sme_confirmations:            # rulings from Kerrian (Business SME), email 2026-07-27
@@ -59,6 +69,54 @@ meta:
     mappings. The GWAM manulifeglobalprod suite exposes different IDs (EDA S6
     observed 10000-10099, 500-504, 20 — all unresolved); GWAM needs its own
     dictionary / event-lookup extraction before these definitions transfer.
+  gwam_sme_inputs:              # four-channel scope table from the Business SME, 2026-07-28
+    status: >
+      DRAFT INPUT — NOT YET RULED. Recorded verbatim as the scope spec of record and mapped
+      cell-by-cell in doc 19; every cell is still a claim to verify. Contrast with
+      meta.sme_confirmations above, which records actual rulings. No standing decision has
+      been reversed on the strength of this table.
+    channels:                   # Instance / Report Suite / Segment exactly as supplied
+      public_website:
+        instance: Manulife
+        report_suite_label: Manulife Global Prod       # resolves to rsid manulifeglobalprod
+        segment: "Brand (evar105) = 'ca-retirement :  : GWAM'"
+      web_member:
+        instance: Manulife
+        report_suite_label: GRS+                       # UNRESOLVED — no matching rsid in repo or census
+        segment: "Platform - v185 = 'MPS Member'"      # v185 = eVar185; conflicts with eVar110 (doc-16 §3)
+      mobile:
+        instance: Manulife Financial                   # NOTE: different Adobe login company
+        report_suite_label: GBRS Mobile App - Production   # probably manufingbrsmobileapp.prod (56.9% of source table)
+        segment: Canada Retirement App Pages v2        # an Adobe segment NAME; definition not supplied
+      manulifeid:
+        instance: Manulife
+        report_suite_label: manucustomer.prod          # UNRESOLVED — not present in the top-10 rsid census
+        segment: null                                  # SME: "Not sure how to seperate Retirement from other ManulifeID signins"
+    metric_matrix: >
+      Page Views / Visits / Visitors = all four channels (qualified "ideally non-marketing",
+      undefined). Errors = web_member, mobile, manulifeid (NOT public_website). Sign in %
+      rate completion and Sign in Error = manulifeid only. Read as 1 = in scope, 0 = out of
+      scope -> 17 (metric x channel) pairs; that reading is itself unconfirmed (doc 20 Q4).
+    conflicts_raised: >
+      (1) BLOCKING — the manulifeid and web_member channels require exactly the individual-login
+      traffic that doc-16 D8 (business rule, 2026-07-20) excludes in every mode via
+      SCOPE_LOGIN_HOST_EXCLUDE. Two business rules point opposite ways; D8 stands until the
+      authority that issued it rules otherwise (doc 20 Q1). (2) Scoping by segment instead of
+      URL is a re-baseline event (conf/settings.py:25-31) and cannot be done incrementally.
+      (3) A URL-based scope cannot express the mobile channel at all — app hits carry no page
+      URL, and every scope predicate in the repo is a SQL LIKE on a URL column.
+    pending_with_sme: >
+      Q1 sign-in vs D8, Q2 the GRS+/manucustomer.prod rsids, Q3 segment-scope sign-off (all
+      blocking); plus Q4 the 1/0 reading, Q5 "non-marketing", Q6 page-views-vs-hits, Q7 error
+      field + grain, Q8 sign-in ratio definition, Q9 the ManulifeID retirement split, Q10 the
+      "Manulife Financial" instance, Q11 the App Pages v2 segment definition, Q12 thresholds
+      and owners. Full text: research/claude/20-gwam-sme-questions.md.
+    pending_with_us: >
+      eda/gwam_channel_discovery.py (sections C1-C10) answers the data-answerable half without
+      SME involvement: rsid existence and history, web-vs-app per suite, the eVar105 value and
+      delimiter plus segment-vs-URL scope sizing, eVar185-vs-eVar110, error/sign-in field
+      population, per-suite event ids, app pagenames, ManulifeID discriminators, and marketing
+      candidates. Not yet run (doc 19 G1).
 
 # ------------------------------------------------------------------
 # 1) data_feed_columns — 9 tagged rows (traffic / behavioral columns)
@@ -370,3 +428,254 @@ post_event_list:     # exactly 12 entries (seed count 12)
     direction: higher_is_good
     owner: Kerrian (Business SME)
     status: active                  # SME priority: pair with eVar breakdowns (esp. post_evar4)
+
+# ------------------------------------------------------------------
+# 4) gwam_channel_metrics — 17 (metric x channel) pairs transcribed from the
+#    SME four-channel scope table of 2026-07-28 (see meta.gwam_sme_inputs).
+#
+#    SEPARATE TOP-LEVEL SECTION, not a fourth "sheet": these do not come from a
+#    dictionary workbook, they come from a scope table, and they carry two extra
+#    fields (channel, report_suite_label) that the CoverMe sheets do not have.
+#
+#    EVERY entry is `status: candidate` / `owner: TBD` and must stay that way until
+#    the probe runs AND doc 20 Q1-Q3 are answered. Promoting any of these to `active`
+#    while doc-16 D8 still excludes login traffic would ship a metric whose scope
+#    contradicts a standing business rule. Enforced by tests/test_registry_yaml.py
+#    (test_gwam_channel_seed_counts).
+#
+#    decode_rule values here extend the CoverMe vocabulary: hit-count, visit-distinct,
+#    visitor-distinct, error-count, completion-ratio. The first three map onto existing
+#    gold_lib sources (hits/visits/visitors); completion-ratio maps onto the existing
+#    `ratio` kind (gold_lib.py:168-175) but cannot yet be DECLARED, because GWAM's
+#    SeriesSpec has no numerator/denominator fields (doc 19 G2).
+# ------------------------------------------------------------------
+gwam_channel_metrics:   # exactly 17 entries (3 traffic x 4 channels + 3 errors + 2 sign-in)
+
+  # ---- Public Website — rsid manulifeglobalprod; scope = eVar105 brand tag ----
+  - metric_id: gwam_pw_page_views
+    name: Page Views — Public Website
+    domain: gwam_retirement
+    channel: public_website
+    report_suite_label: Manulife Global Prod
+    scope_predicate: "evar105 = 'ca-retirement :  : GWAM'"   # unverified — doc 20 Q3
+    source_sheet: sme_scope_table
+    source_ref: Page Views (count)
+    decode_rule: hit-count          # ⚠ we count hits; SME may mean Adobe page views (doc 20 Q6)
+    grain: daily
+    direction: context_dependent
+    owner: TBD
+    status: candidate               # "ideally non-marketing" — undefined (doc 20 Q5)
+  - metric_id: gwam_pw_visits
+    name: Visits — Public Website
+    domain: gwam_retirement
+    channel: public_website
+    report_suite_label: Manulife Global Prod
+    scope_predicate: "evar105 = 'ca-retirement :  : GWAM'"
+    source_sheet: sme_scope_table
+    source_ref: Visits (count)
+    decode_rule: visit-distinct
+    grain: daily
+    direction: context_dependent
+    owner: TBD
+    status: candidate
+  - metric_id: gwam_pw_visitors
+    name: Visitors — Public Website
+    domain: gwam_retirement
+    channel: public_website
+    report_suite_label: Manulife Global Prod
+    scope_predicate: "evar105 = 'ca-retirement :  : GWAM'"
+    source_sheet: sme_scope_table
+    source_ref: Visitors (count)
+    decode_rule: visitor-distinct
+    grain: daily
+    direction: context_dependent
+    owner: TBD
+    status: candidate
+
+  # ---- Web Member — rsid UNRESOLVED ("GRS+"); scope = eVar185 platform tag ----
+  - metric_id: gwam_wm_page_views
+    name: Page Views — Web Member
+    domain: gwam_retirement
+    channel: web_member
+    report_suite_label: GRS+        # UNRESOLVED rsid (doc 20 Q2)
+    scope_predicate: "evar185 = 'MPS Member'"   # eVar185 vs eVar110 unresolved (probe C4)
+    source_sheet: sme_scope_table
+    source_ref: Page Views (count)
+    decode_rule: hit-count
+    grain: daily
+    direction: context_dependent
+    owner: TBD
+    status: candidate               # ⚠ signed-in traffic — conflicts with doc-16 D8 (doc 20 Q1)
+  - metric_id: gwam_wm_visits
+    name: Visits — Web Member
+    domain: gwam_retirement
+    channel: web_member
+    report_suite_label: GRS+
+    scope_predicate: "evar185 = 'MPS Member'"
+    source_sheet: sme_scope_table
+    source_ref: Visits (count)
+    decode_rule: visit-distinct
+    grain: daily
+    direction: context_dependent
+    owner: TBD
+    status: candidate
+  - metric_id: gwam_wm_visitors
+    name: Visitors — Web Member
+    domain: gwam_retirement
+    channel: web_member
+    report_suite_label: GRS+
+    scope_predicate: "evar185 = 'MPS Member'"
+    source_sheet: sme_scope_table
+    source_ref: Visitors (count)
+    decode_rule: visitor-distinct
+    grain: daily
+    direction: context_dependent
+    owner: TBD
+    status: candidate
+  - metric_id: gwam_wm_errors
+    name: Errors — Web Member
+    domain: gwam_retirement
+    channel: web_member
+    report_suite_label: GRS+
+    scope_predicate: "evar185 = 'MPS Member'"
+    source_sheet: sme_scope_table
+    source_ref: Errors (count)
+    decode_rule: error-count        # field of record unknown: eVar181-184 or event173 (probe C5, doc 20 Q7)
+    grain: daily
+    direction: higher_is_bad
+    owner: TBD
+    status: candidate
+
+  # ---- Mobile — probably rsid manufingbrsmobileapp.prod; scope = an Adobe segment NAME ----
+  - metric_id: gwam_mob_page_views
+    name: Page Views — Mobile App
+    domain: gwam_retirement
+    channel: mobile
+    report_suite_label: GBRS Mobile App - Production
+    scope_predicate: "segment 'Canada Retirement App Pages v2' — definition not supplied (doc 20 Q11)"
+    source_sheet: sme_scope_table
+    source_ref: Page Views (count)
+    decode_rule: hit-count          # ⚠ app hits carry no page URL — unscopeable by the current predicate (doc 19 G4)
+    grain: daily
+    direction: context_dependent
+    owner: TBD
+    status: candidate
+  - metric_id: gwam_mob_visits
+    name: Visits — Mobile App
+    domain: gwam_retirement
+    channel: mobile
+    report_suite_label: GBRS Mobile App - Production
+    scope_predicate: "segment 'Canada Retirement App Pages v2'"
+    source_sheet: sme_scope_table
+    source_ref: Visits (count)
+    decode_rule: visit-distinct
+    grain: daily
+    direction: context_dependent
+    owner: TBD
+    status: candidate
+  - metric_id: gwam_mob_visitors
+    name: Visitors — Mobile App
+    domain: gwam_retirement
+    channel: mobile
+    report_suite_label: GBRS Mobile App - Production
+    scope_predicate: "segment 'Canada Retirement App Pages v2'"
+    source_sheet: sme_scope_table
+    source_ref: Visitors (count)
+    decode_rule: visitor-distinct
+    grain: daily
+    direction: context_dependent
+    owner: TBD
+    status: candidate
+  - metric_id: gwam_mob_errors
+    name: Errors — Mobile App
+    domain: gwam_retirement
+    channel: mobile
+    report_suite_label: GBRS Mobile App - Production
+    scope_predicate: "segment 'Canada Retirement App Pages v2'"
+    source_sheet: sme_scope_table
+    source_ref: Errors (count)
+    decode_rule: error-count
+    grain: daily
+    direction: higher_is_bad
+    owner: TBD
+    status: candidate
+
+  # ---- ManulifeID — rsid UNRESOLVED (manucustomer.prod); NO retirement discriminator known ----
+  - metric_id: gwam_mid_page_views
+    name: Page Views — ManulifeID
+    domain: gwam_retirement
+    channel: manulifeid
+    report_suite_label: manucustomer.prod   # UNRESOLVED rsid (doc 20 Q2)
+    scope_predicate: null           # SME's own open item: cannot separate retirement sign-ins (doc 20 Q9)
+    source_sheet: sme_scope_table
+    source_ref: Page Views (count)
+    decode_rule: hit-count
+    grain: daily
+    direction: context_dependent
+    owner: TBD
+    status: candidate               # ⚠ sign-in traffic — conflicts with doc-16 D8 (doc 20 Q1)
+  - metric_id: gwam_mid_visits
+    name: Visits — ManulifeID
+    domain: gwam_retirement
+    channel: manulifeid
+    report_suite_label: manucustomer.prod
+    scope_predicate: null
+    source_sheet: sme_scope_table
+    source_ref: Visits (count)
+    decode_rule: visit-distinct
+    grain: daily
+    direction: context_dependent
+    owner: TBD
+    status: candidate
+  - metric_id: gwam_mid_visitors
+    name: Visitors — ManulifeID
+    domain: gwam_retirement
+    channel: manulifeid
+    report_suite_label: manucustomer.prod
+    scope_predicate: null
+    source_sheet: sme_scope_table
+    source_ref: Visitors (count)
+    decode_rule: visitor-distinct
+    grain: daily
+    direction: context_dependent
+    owner: TBD
+    status: candidate
+  - metric_id: gwam_mid_errors
+    name: Errors — ManulifeID
+    domain: gwam_retirement
+    channel: manulifeid
+    report_suite_label: manucustomer.prod
+    scope_predicate: null
+    source_sheet: sme_scope_table
+    source_ref: Errors (count)
+    decode_rule: error-count
+    grain: daily
+    direction: higher_is_bad
+    owner: TBD
+    status: candidate
+  - metric_id: gwam_mid_signin_completion_rate
+    name: Sign-in Completion Rate — ManulifeID
+    domain: gwam_retirement
+    channel: manulifeid
+    report_suite_label: manucustomer.prod
+    scope_predicate: null
+    source_sheet: sme_scope_table
+    source_ref: Sign in % rate completion
+    decode_rule: completion-ratio   # engine ready (gold_lib `ratio`); numerator/denominator undefined (doc 20 Q8)
+    grain: daily
+    direction: higher_is_good
+    owner: TBD
+    status: candidate               # ⚠ blocked twice over: D8 (Q1) and no attempt/success marker (probe C6)
+  - metric_id: gwam_mid_signin_errors
+    name: Sign-in Errors — ManulifeID
+    domain: gwam_retirement
+    channel: manulifeid
+    report_suite_label: manucustomer.prod
+    scope_predicate: null
+    source_sheet: sme_scope_table
+    source_ref: Sign in Error (count)
+    decode_rule: error-count
+    grain: daily
+    direction: higher_is_bad
+    owner: TBD
+    status: candidate

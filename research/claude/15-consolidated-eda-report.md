@@ -516,6 +516,28 @@ the business signs off scope**, because flipping either re-baselines every KPI.
 > from "what do these mean?" to "does the spec hold per suite?". Five questions are new (Q10–Q14),
 > and three of them (Q10, Q12, Q13) are **blocking** — they change scope, privacy posture, or both.
 
+> ⚠️ **PARTLY SUPERSEDED 2026-07-28 by the SME four-channel scope table** (doc-16 **D9**, recorded in
+> [19 §1](19-gwam-channel-readiness.md)). This section was written for a **single-website, URL-scoped**
+> product. The SME has since described **four channels** (Public Website / Web Member / Mobile /
+> ManulifeID) scoped by **segment tags**, not URLs. Specifically:
+>
+> - **Q5 is answered.** "Which KPIs should actually trigger alerts?" — the business shortlist is now
+>   explicit: Page Views, Visits, Visitors on all four channels; Errors on three; Sign-in completion
+>   rate and Sign-in errors on ManulifeID. 17 (metric × channel) pairs, seeded as `candidate` entries
+>   in [`metric-registry.yaml`](metric-registry.yaml) `gwam_channel_metrics`.
+> - **Q14 is narrowed.** The Platform eVar110↔185 conflict now has a business-side data point: the SME
+>   writes "Platfrom - v185 = MPS Member", i.e. eVar185. Probe section C4 settles which column actually
+>   carries the value.
+> - **Q1/Q2 (suite union, French inclusion) are reframed, not closed.** A segment-scoped definition is
+>   language-agnostic, so it would resolve the French question as a side effect — but only if the
+>   business signs off on the re-baseline (doc-16 **D10**).
+> - 🚩 **A new blocker outranks everything here:** the ManulifeID and Web Member channels require the
+>   individual-login traffic that **D8** excludes. See [20](20-gwam-sme-questions.md) Q1.
+>
+> The exit criteria in §8b still hold — scope must be frozen before baselines are fit — but item 5's
+> "written confirmation of scope" now means confirming the **four-channel** definition, not the
+> two-suite/URL one.
+
 ### Closed by the dictionary
 
 | Was | Now |
