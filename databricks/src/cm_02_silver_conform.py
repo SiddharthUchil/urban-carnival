@@ -3,7 +3,7 @@
 # MAGIC # GMAI-Pulse CoverMe — Task 2/3: Silver conform
 # MAGIC KPI-ready hit table: apply the Workspace-parity eligibility filter (`exclude_hit = 0`,
 # MAGIC `hit_source` not a data-source row — this feed has no `customer_perspective` column),
-# MAGIC derive `event_ts` and the domain language (SME interim ruling — NOT eVar8), normalize
+# MAGIC derive `event_ts` and the domain language (SME-approved 2026-07-29 — NOT eVar8), normalize
 # MAGIC `post_event_list` to bare ids, pseudonymize identity fields (ADR-0007), and run DQ
 # MAGIC gates. Same `replaceWhere` window as bronze.
 

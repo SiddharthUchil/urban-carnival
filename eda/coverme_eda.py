@@ -28,8 +28,10 @@
 # MAGIC post_page_url` — vs GWAM's 2. Adobe writes empty strings, not NULLs, so blanks map to NULL first.
 # MAGIC
 # MAGIC **Language is split by DOMAIN, not path** (~50/50): coverme.com = EN, pourmeproteger = FR
-# MAGIC (SME interim ruling 2026-07-27 — eVar8/eVar149/prop5 are NOT language of record until the
-# MAGIC SME names the field). The funnel of interest is the quote→application conversion path
+# MAGIC (**SME-APPROVED 2026-07-29** — the domain rule is the field of record; eVar8 is confirmed
+# MAGIC mis-tagged at ~96% EN. Forward note: the SME expects eVar149 to always be language and will
+# MAGIC confirm, so eVar149 may supersede this later — a silver rebuild, not a hot swap).
+# MAGIC The funnel of interest is the quote→application conversion path
 # MAGIC (Quote Start → Quote Complete → Save Quote → App Start → App Confirm), profiled in **S6b**
 # MAGIC — **visit-level and NON-monotonic** (saved-quote resume; Save Quote is optional), so step
 # MAGIC ratios are population proxies that may exceed 1.0, never within-visit sequences. Hit
@@ -397,8 +399,8 @@ def url_expr(df):
     return F.lower(F.coalesce(*parts, F.lit("")))
 
 def lang_from_host(host):
-    """Domain-derived language (SME interim ruling 2026-07-27 — eVar8/eVar149/prop5 are NOT
-    language of record until the SME names the field). Mirrors
+    """Domain-derived language — SME-APPROVED 2026-07-29 (eVar8 is mis-tagged and NOT language of
+    record; eVar149 may supersede this if the SME confirms it, per doc 18 Q4). Mirrors
     databricks/src/cm_silver_lib.lang_from_host_expr verbatim: the legacy manuvie hosts only
     appear when scope widens beyond the ruled 2-domain include, and insttrip maps 'en' for
     the retired-baseline toggle."""
@@ -870,7 +872,7 @@ run_section("S4b", s4b_url_scope_audit)
 # MAGIC ## S4c — URL-column & pagename category audit
 # MAGIC Per-candidate-column CoverMe-category match (`CM_STRICT` / `CM_BROAD`) — a **legacy/dev
 # MAGIC census** (those hosts are ruled OUT of scope, SME 2026-07-27) — plus a `pagename` sweep,
-# MAGIC the language-by-domain split (SME interim ruling), and the eVar8-vs-domain disagreement
+# MAGIC the language-by-domain split (SME-approved 2026-07-29), and the eVar8-vs-domain disagreement
 # MAGIC rate (evidence for the pending language ruling, doc 18 Q4).
 
 # COMMAND ----------
@@ -920,15 +922,17 @@ def s4c_url_column_audit():
                     "approx_distinct": pr["dist"], "cm_broad_rows": pr["cb"],
                     "top_pagenames": top_pn}
 
-    # language by domain (SME interim ruling 2026-07-27; helper mirrors cm_silver_lib)
+    # language by domain (SME-approved 2026-07-29; helper mirrors cm_silver_lib)
     host = F.regexp_extract(hp(coal), r"^([^/]+)", 1)
     lang = lang_from_host(host)
     lang_rows = [{"lang": x["lang"], "hits": x["n"]}
                  for x in (raw_window.select(lang.alias("lang")).groupBy("lang")
                            .agg(F.count("*").alias("n")).orderBy(F.desc("n")).collect())]
 
-    # eVar8-vs-domain disagreement (evidence for the pending language ruling, doc 18 Q4:
-    # eVar8 reports ~96% EN while the domain split is ~50/50 — likely mis-tagged).
+    # eVar8-vs-domain disagreement. This was the evidence FOR the language ruling; keep it, because
+    # it is now the evidence the ruling was right (SME approved the domain rule 2026-07-29 and
+    # accepted eVar8 is mis-tagged: it reports ~96% EN while the domain split is ~50/50). Also the
+    # cheapest ongoing check that eVar8's tagging has not been fixed upstream behind our backs.
     evar8_col = pick_col(raw_window, "post_evar8", "evar8")
     evar8_vs_domain = None
     if evar8_col:
@@ -943,13 +947,16 @@ def s4c_url_column_audit():
         evar8_vs_domain = {
             "comparable_rows": cmp_row["n"], "disagree_rows": cmp_row["dis"],
             "disagree_pct": round(100.0 * (cmp_row["dis"] or 0) / max(cmp_row["n"], 1), 3),
-            "note": ("rows where eVar8-derived en/fr differs from domain-derived language — "
-                     "NEITHER is language of record until the SME rules (doc 18 Q4)")}
+            "note": ("rows where eVar8-derived en/fr differs from domain-derived language. "
+                     "Domain is the field of record (SME-approved 2026-07-29); eVar8 is NOT, and a "
+                     "high disagreement rate here is the expected/confirming result rather than a "
+                     "problem. Watch for it dropping toward 0, which would mean eVar8 was retagged "
+                     "upstream and is worth revisiting (doc 18 Q4)")}
 
     emit("url_column_audit", {
         "note": ("window population; per-column CM_STRICT/CM_BROAD is a legacy/dev census "
                  "(hosts ruled out of scope, SME 2026-07-27); language split by DOMAIN per "
-                 "the SME interim ruling (coverme.com/insttrip=en, pourmeproteger=fr)."),
+                 "the SME-approved domain rule (coverme.com/insttrip=en, pourmeproteger=fr)."),
         "window_rows": total,
         "columns_present": present,
         "recommended_scope_col": "coalesce(" + ", ".join(present) + ")",
@@ -1165,7 +1172,7 @@ def s6b_funnel_kpi():
                               .groupBy("eid").agg(F.countDistinct("vk").alias("n"))
                               .collect())}
 
-    # Funnel by domain-derived language (SME interim ruling) — hit-presence counts.
+    # Funnel by domain-derived language (SME-approved 2026-07-29) — hit-presence counts.
     u6 = url_expr(DF_CM)
     lang_cut = {}
     if u6 is not None:
@@ -1275,14 +1282,20 @@ def s7_live_custom_dims():
         top = (DF_S.filter(nonblank(c)).groupBy(qcol(c).alias("v")).count()
                    .orderBy(F.desc("count")).limit(TOP_N).collect())
         pop_rows = max(SAMPLE_ROWS * CENSUS[c]["pop_pct"] / 100.0, 1)
-        # The three candidate language fields are all pending the SME's field-of-record
-        # ruling (doc 18 Q4) — flag them so their values can't be read as authoritative.
+        # None of the three candidate language fields is the field of record — the SME approved the
+        # domain-derived rule on 2026-07-29 (doc 18 Q4). Flag them so their values can't be read as
+        # authoritative, but distinguish eVar149: the SME expects it to always BE language and will
+        # confirm, so it is a future candidate rather than a dead end like eVar8/prop5.
         caveat = None
         _m = _VAR_RE.match(str(c).lower())
         if _m and ((_m.group(1) == "evar" and int(_m.group(2)) in (8, 149))
                    or (_m.group(1) == "prop" and int(_m.group(2)) == 5)):
-            caveat = ("NOT language of record (pending SME ruling, doc 18 Q4) — interim "
-                      "language is domain-derived (S4c/S8)")
+            caveat = ("NOT language of record — language is domain-derived (SME-approved "
+                      "2026-07-29; S4c/S8)")
+            if _m.group(1) == "evar" and int(_m.group(2)) == 149:
+                caveat += (". FUTURE CANDIDATE: the SME expects eVar149 to always be language "
+                           "(a French page's URL is sometimes English-translated) and will confirm "
+                           "— adopting it would mean a silver rebuild (doc 18 Q4)")
         out.append({
             "col": c, "label": dim_label(c), "caveat": caveat,
             "pop_pct": CENSUS[c]["pop_pct"], "apx_distinct": CENSUS[c]["apx_distinct"],
@@ -1322,7 +1335,7 @@ def s8_time_series():
     if excl:
         aggs.append(F.sum(F.when(F.coalesce(F.expr(f"try_cast(`{excl}` as int)"), F.lit(0)) == 0, 1)
                           .otherwise(0)).alias("clean_hits"))
-    # Daily language split (SME interim ruling: domain-derived; registry ids
+    # Daily language split (SME-approved 2026-07-29: domain-derived; registry ids
     # language_share_{en,fr,unknown} = lang_*/hits).
     u8 = url_expr(DF_W)
     if u8 is not None:
@@ -1401,8 +1414,8 @@ def s8_time_series():
     emit("ts_daily", {
         "basis": "exact_window", "csv_header": "date," + ",".join(cols),
         "csv": csv_daily[-MAX_CSV_LINES:],
-        "language_note": ("lang_* = daily hits by domain-derived language (SME interim ruling "
-                          "2026-07-27); registry language_share_{en,fr,unknown} = lang_*/hits"),
+        "language_note": ("lang_* = daily hits by domain-derived language (SME-approved "
+                          "2026-07-29); registry language_share_{en,fr,unknown} = lang_*/hits"),
         "clean_hits_note": ("equals hits when exclude_bots=true (frames are pre-filtered by "
                             "the eligibility rule); informative only when the widget is false"),
         "visits_visitors_note": "approx_count_distinct (~5% rsd)" if vis_hi else "visid columns missing"})
@@ -1470,8 +1483,8 @@ def s9_dimensions():
             mode = "raw"
         note = "numeric lookup-ID code" if c in LOOKUP_ID_DIMS else ""
         if c == "language":
-            note = ("numeric lookup-ID code — NOT language of record (pending SME ruling, "
-                    "doc 18 Q4); interim language is domain-derived (S4c/S8)")
+            note = ("numeric lookup-ID code — NOT language of record; language is domain-derived "
+                    "(SME-approved 2026-07-29, doc 18 Q4; S4c/S8)")
         out.append({"dim": c, "mode": mode, "label": dim_label(c),
                     "coverage_pct": CENSUS[c]["pop_pct"], "apx_distinct": CENSUS[c]["apx_distinct"],
                     "top": top_vals, "note": note})

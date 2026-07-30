@@ -52,6 +52,23 @@ Two standing caveats:
 - **Consent**: hits carrying Adobe consent-opt-out signals are excluded before Silver; the exclusion
   count is itself a monitored data-quality metric (a consent-misfire anomaly class,
   [02 §9](02-solution-architecture.md)).
+  > ⚠️ **↺ NOT IMPLEMENTED, and on the 2026-07-29 ruling it arguably should not be.** Two facts, both
+  > later than this line. **(1)** No pipeline stage has ever applied a consent filter — CoverMe
+  > eligibility is `exclude_hit`/`hit_source` only ([coverme_settings.py](../../databricks/conf/coverme_settings.py)),
+  > and no consent column is even landed in bronze. So this sentence has described an intention, not
+  > the build. **(2)** The CoverMe SME confirmed on 2026-07-29 that **eVar65 is OneTrust *cookie*
+  > consent, carrying no PII**, and that no PII arrives from Adobe at all. A cookie preference is not
+  > an analytics-suppression instruction, so excluding those hits is not required — and taking this
+  > line literally would drop **~92%** of CoverMe traffic (the measured opt-out share), which would
+  > end anomaly detection on the product rather than protect anyone.
+  >
+  > **Do not implement this as written.** The rule to keep is the one that survived: direct
+  > identifiers are excluded from bronze by column policy (`SENSITIVE_COLUMNS`), and pseudonymization
+  > applies to the visitor keys per ADR-0007. If a genuine analytics-opt-out signal is identified
+  > later — distinct from cookie consent — this line should be rewritten around *that* field, per
+  > domain, rather than reinstated generically. Tracked at
+  > [17 §4 item 9](17-coverme-eda-readiness.md). GWAM is unaffected: no consent-based exclusion has
+  > ever been in its pipeline either.
 
 ## 3. Identity model today — stitching deferred
 

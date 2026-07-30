@@ -203,6 +203,7 @@ These conclusions are consistent with the `detect/` engine's observed behaviour 
 
 1. `date_time` is **local Eastern** (EST/EDT) time; `hit_time_gmt` is **epoch GMT**. Confirmed by the −4/−5 h clock‑skew offset.
 2. CA Retirement = `rsid = manulifeglobalprod` **AND** URL contains `…/ca/en/personal/group-plans/group-retirement` (both notebook widgets).
+   > ↺ **2026-07-29 — a candidate replacement for this definition now exists, and the rsid half is confirmed.** The SME defines Canada Retirement by the **eVar105 brand tag** (`ca-retirement` + `GWAM`, matched on parts) rather than by URL; the ruling that scope is the Public Website only (doc-16 **D11**) also confirms `manulifeglobalprod` as the sole suite. **The URL definition above is still what the code does** — switching is a full re-baseline and is not decided ([20](20-gwam-sme-questions.md) Q3, and Q3b on two unclassified brand variants). Every percentage in this document was computed under the URL definition; the two disagree on ~4% of rows, so figures here are not automatically transferable if the switch happens.
 3. The **5 % sample (seed 42, 57,832 rows, persisted before counting)** is representative; percentages are computed on the sample, exact counts on the full subset where noted.
 4. Adobe uses **empty string, not NULL**, for "no value" (all populated/blank logic uses `trim() != ''`).
 5. `language` values are **Adobe numeric lookup IDs**, not ISO codes.

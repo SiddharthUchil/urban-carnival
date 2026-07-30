@@ -1,20 +1,34 @@
 # GMAI-Pulse Phase-1 Metric Registry
 # ------------------------------------------------------------------
-# version: 0.4.0 (2026-07-29)
+# version: 0.5.0 (2026-07-29)
 # generated_from: new_data/data_profile_summary.json (profiler v0.1.0, run 2026-07-02)
 # seed_source: CoverMe data dictionary rows where Notes == "Anomaly Detection"
 #              -> confirmed counts: 9 (data_feed_columns) + 8 (post_eVar) + 12 (post_event_list) = 29
 #              GWAM: the SME four-channel scope table received 2026-07-28
-#              -> 17 (metric x channel) pairs in `gwam_channel_metrics`
+#              -> 17 (metric x channel) pairs transcribed in `gwam_channel_metrics`;
+#              ↺ 2026-07-29 the SME (Abhisekh) narrowed the alerting scope to the Public
+#              Website channel ONLY -> 14 of those 17 are now `status: deferred`, and two
+#              SME-suggested anomaly signals were seeded = 19 entries.
 #
-# STATUS: MIXED. The CoverMe entries are SME-CONFIRMED (v0.3.0). The GWAM entries added in
-# v0.4.0 are NOT -- they are a verbatim transcription of a scope table that has not yet been
-# ruled on, and every one of them is `status: candidate` with `owner: TBD`. Nothing in
-# `gwam_channel_metrics` may be promoted to `active` before (a) the discovery probe runs
-# (eda/gwam_channel_discovery.py — done 2026-07-29, C3 re-run pending) and (b) the three
-# blocking questions in doc 20 are answered
-# -- above all Q1, which asks whether this table supersedes the 2026-07-20 login-exclusion
-# rule (doc-16 D8). See meta.gwam_sme_inputs.
+# STATUS: MIXED. The CoverMe entries are SME-CONFIRMED (v0.3.0 definitions; v0.5.0 adds the
+# 2026-07-29 rulings to meta.sme_confirmations without touching a single series). The GWAM
+# entries are still NOT confirmed -- they remain a transcription of a scope table, and every
+# one of them is `owner: TBD`. Nothing in `gwam_channel_metrics` may be promoted to `active`
+# before (a) the extended discovery probe runs (eda/gwam_channel_discovery.py — C1-C10 ran
+# clean 2026-07-29; C3 re-run + new C11/C12 pending) and (b) doc 20 Q3b and Q6 are answered.
+#
+# v0.5.0 records the 2026-07-29 SME updates:
+#   GWAM (Abhisekh) — alerting scope = Public Website ONLY. The 3 public_website entries stay
+#   `candidate`; the 14 web_member / mobile / manulifeid entries become `deferred` (kept, not
+#   deleted — the probe evidence attached to them is what makes re-expansion cheap). Q5 is
+#   ANSWERED: "marketing" = hits carrying the CID campaign query-string parameter (pending
+#   verification that post_campaign is equivalent — probe C11). The D8 conflict below is
+#   ↺ DISSOLVED, not adjudicated: the two channels that needed login traffic left scope, so
+#   D8 itself stands untouched. Two new candidate seeds record the SME's suggested anomaly
+#   signals (page-views-per-visit, and the exactly-2 duplication indicator).
+#   CoverMe (Kerrian) — the domain-derived language rule is APPROVED, no PII comes from Adobe
+#   (medallion ingestion cleared), and the missing-day root cause is known. See
+#   meta.sme_confirmations.language / .pii_consent / .data_gaps.
 #
 # v0.3.0 records the business rulings received 2026-07-27
 # (Kerrian, SME): target set confirmed complete/current; the 5 transactional funnel
@@ -32,11 +46,11 @@
 # ------------------------------------------------------------------
 
 meta:
-  version: 0.4.0
+  version: 0.5.0
   updated: 2026-07-29
   default_grain: daily          # hourly reserved — enable only after >=30-day feed confirms volume
   domains: [coverme, gwam_retirement]
-  sme_confirmations:            # rulings from Kerrian (Business SME), email 2026-07-27
+  sme_confirmations:            # rulings from Kerrian (Business SME), email 2026-07-27; ↺ extended 2026-07-29
     target_set: >
       Confirmed complete and current (incl. the data_feed_columns tags). Priority = the 5
       transactional funnel events, PAIRED with the tagged eVars as breakdown dimensions —
@@ -56,10 +70,35 @@ meta:
       Dropping exclude_hit > 0 confirmed correct. eVar148 Bot Detector (catches bots past
       Adobe's built-in filters) is being verified with the implementation team — until then
       eVar116/eVar148 are corroboration signals only, not the exclusion rule.
+    language: >
+      APPROVED 2026-07-29 (Kerrian): derive language from the domain — coverme.com = EN,
+      pourmeproteger.com = FR. This ratifies the 2026-07-27 interim rule, so no silver rebuild
+      is needed; it is what cm_silver_lib.lang_from_host_expr already implements. eVar8 is
+      confirmed suspect (~96% EN against a ~50/50 domain split) and is NOT the field of record.
+      FORWARD NOTE: she expects eVar149 to "always be language" (a French page's URL is
+      sometimes English-translated, so the URL is the weaker signal in principle) — eVar149 is
+      therefore the likely permanent field of record, pending her confirmation. Switching to it
+      would mean reworking that one expression and rebuilding silver; the domain rule holds
+      until then.
+    pii_consent: >
+      CLEARED VERBALLY 2026-07-29 (Kerrian): no PII comes from Adobe, so landing CoverMe hits
+      in the medallion architecture is approved. Consent is captured via OneTrust in eVar65 and
+      is COOKIE consent — it carries no PII and is not an analytics-suppression flag. That
+      reframes the opt-out question in readiness doc 17 item 9: the 91.7% "opt-out" share is a
+      cookie preference, not a signal that those hits must be dropped, so aggregate anomaly
+      KPIs may include them. The pipeline lands no consent column at all today and needs none.
+    data_gaps: >
+      ROOT CAUSE 2026-07-29 (Kerrian): the ~30 missing calendar days are FEED gaps, not site
+      outages — they trace to the data migration to Databricks, where a source file (most
+      likely hit_data) was not updated. This confirms the working assumption in readiness doc
+      17 item 8, so the "impute/interpolate + mask before training" branch is the correct
+      policy. Exact per-date confirmation is still pending: our date list has been shared with
+      her and she will come back on it.
     pending_with_sme: >
       (1) Identity of events 510/511/512/513 (~43.5% of hits each) and 514 — not in the data
-      map. (2) Language field of record (eVar8 vs eVar149 vs prop5) — eVar8 looks mis-tagged
-      (~96% EN vs ~50/50 domain split); interim rule = derive language from domain.
+      map. (2) eVar148 Bot Detector verification with the implementation team (see
+      bot_exclusion). (3) Confirmation that eVar149 is the permanent language field of record
+      (see language). (4) Per-date confirmation of the ~30 missing days (see data_gaps).
   notes: >
     One canonical Adobe hit schema serves both domains (ADR-0006); entries default to
     domain: shared unless a metric is proven domain-specific. No metric columns exist
@@ -72,73 +111,97 @@ meta:
     dictionary / event-lookup extraction before these definitions transfer.
   gwam_sme_inputs:              # four-channel scope table from the Business SME, 2026-07-28
     status: >
-      DRAFT INPUT — NOT YET RULED. Recorded verbatim as the scope spec of record and mapped
-      cell-by-cell in doc 19; every cell is still a claim to verify. Contrast with
-      meta.sme_confirmations above, which records actual rulings. No standing decision has
-      been reversed on the strength of this table.
+      DRAFT INPUT — ↺ SUPERSEDED IN SCOPE 2026-07-29. The table below is retained verbatim as
+      the historical input and is still mapped cell-by-cell in doc 19, but the SME (Abhisekh)
+      has since ruled that the alerting scope is the PUBLIC WEBSITE CHANNEL ONLY. The other
+      three channel blocks are kept as the evidence base for the 14 `deferred` entries, so
+      re-expansion is a status flip rather than a re-transcription. Contrast with
+      meta.sme_confirmations above, which records CoverMe rulings. No standing decision has
+      been reversed on the strength of this table — see conflicts_raised for what the narrowing
+      dissolved versus what it left untouched.
     channels:                   # Instance / Report Suite / Segment exactly as supplied
-      public_website:
+      public_website:           # IN SCOPE (ruled 2026-07-29) — the only alerting channel
         instance: Manulife
         report_suite_label: Manulife Global Prod       # resolves to rsid manulifeglobalprod
         segment: "Brand (evar105) = 'ca-retirement :  : GWAM'"
-      web_member:
+      web_member:               # DEFERRED 2026-07-29 (single-channel ruling)
         instance: Manulife
         report_suite_label: GRS+                       # RESOLVED (probe C1/C4) -> rsid manugrs; SME to ratify the string (doc 20 Q2)
         segment: "Platform - v185 = 'MPS Member'"      # v185 = eVar185 — CONFIRMED field of record (probe C4);
                                                        # 100% of manugrs's populated eVar185, 54.14% of the suite.
                                                        # NOT suite-unique: also 18.16% of manufingbrsmobileapp.prod,
                                                        # so the predicate must be suite AND segment.
-      mobile:
+      mobile:                   # DEFERRED 2026-07-29 (single-channel ruling)
         instance: Manulife Financial                   # NOTE: different Adobe login company (doc 20 Q10)
         report_suite_label: GBRS Mobile App - Production   # = manufingbrsmobileapp.prod (probe C1: 68.9% of source table, 881 days)
         segment: Canada Retirement App Pages v2        # an Adobe segment NAME; definition still not supplied (doc 20 Q11).
                                                        # Probe C8 reconstruction: post_pagename LIKE 'MPS %'
                                                        # (vs 'GB ' = Group Benefits, 'MM ' = app shell, 'CIAM Sign In').
-      manulifeid:
+      manulifeid:               # DEFERRED 2026-07-29 (single-channel ruling)
         instance: Manulife
         report_suite_label: manucustomer.prod          # ABSENT from our feed — probe C9: 0 rows, not in the 16-rsid census.
-                                                       # Data-ACCESS request, not a modelling gap (doc 20 Q2).
+                                                       # Was a data-ACCESS request (doc 20 Q2); ↺ MOOT under the
+                                                       # single-channel ruling — withdraw the request unless scope re-widens.
         segment: null                                  # SME: "Not sure how to seperate Retirement from other ManulifeID signins"
     metric_matrix: >
-      Page Views / Visits / Visitors = all four channels (qualified "ideally non-marketing",
-      undefined). Errors = web_member, mobile, manulifeid (NOT public_website). Sign in %
-      rate completion and Sign in Error = manulifeid only. Read as 1 = in scope, 0 = out of
-      scope -> 17 (metric x channel) pairs; that reading is itself unconfirmed (doc 20 Q4).
+      Page Views / Visits / Visitors = all four channels (qualified "ideally non-marketing" —
+      ↺ DEFINED 2026-07-29: marketing = carries the CID campaign query-string parameter).
+      Errors = web_member, mobile, manulifeid (NOT public_website). Sign in % rate completion
+      and Sign in Error = manulifeid only. Read as 1 = in scope, 0 = out of scope -> 17
+      (metric x channel) pairs. ↺ 2026-07-29: that 17-pair reading collapses to THREE live
+      pairs — Page Views / Visits / Visitors on the public website — plus the two seeded
+      anomaly signals. Errors and both sign-in metrics leave scope entirely with their
+      channels, so doc 20 Q4 (does 1/0 mean independent alerting?) is moot for them.
     conflicts_raised: >
-      (1) BLOCKING — the manulifeid and web_member channels require exactly the individual-login
-      traffic that doc-16 D8 (business rule, 2026-07-20) excludes in every mode via
-      SCOPE_LOGIN_HOST_EXCLUDE. Two business rules point opposite ways; D8 stands until the
-      authority that issued it rules otherwise (doc 20 Q1). (2) Scoping by segment instead of
-      URL is a re-baseline event (conf/settings.py:25-31) and cannot be done incrementally.
-      (3) A URL-based scope cannot express the mobile channel at all — app hits carry no page
-      URL, and every scope predicate in the repo is a SQL LIKE on a URL column.
+      (1) ↺ DISSOLVED 2026-07-29 — the manulifeid and web_member channels required exactly the
+      individual-login traffic that doc-16 D8 (business rule, 2026-07-20) excludes in every mode
+      via SCOPE_LOGIN_HOST_EXCLUDE. Both channels have left scope, so the two rules no longer
+      point opposite ways. NOTE this is a dissolution, not an adjudication: D8 was never ruled on
+      and stands unchanged, and the conflict returns verbatim if scope ever re-widens to a
+      signed-in channel. (2) STANDS — scoping by segment instead of URL is a re-baseline event
+      (conf/settings.py:25-31) and cannot be done incrementally; it is now purely a
+      public-website decision (see pending_with_sme Q3). (3) ↺ MOOT — a URL-based scope cannot
+      express the mobile channel, but the mobile channel is deferred. This was the load-bearing
+      argument FOR the segment model, so its removal materially re-prices decision (2).
     pending_with_sme: >
-      BLOCKING: Q1 sign-in vs D8 (now narrowed to web_member — manulifeid is moot until access);
-      Q2 ACCESS to manucustomer.prod (escalated from "which rsid" — probe C9 found 0 rows; the
-      GRS+/mobile halves of Q2 downgraded to ratification); Q3 segment-scope sign-off (probe C3
-      priced it: +1,436 / -60,594 rows, ~96% overlap on the public website; corrected 2026-07-29 —
-      a C3 null-guard bug undercounted the +1,436 GAIN figure for NULL-URL rows, code fixed,
-      re-run pending, -60,594 unaffected). Plus Q4 the 1/0
-      reading, Q5 "non-marketing" (C10: only bites on public_website — campaign is 57% there vs
-      0.5%/0.02% on web_member/mobile), Q6 page-views-vs-hits, Q7 error field + grain (C5: the
-      fields ARE populated — eVar181/182/184 at 52/70/61% on manugrs), Q8 sign-in ratio
-      definition (C6: eVar122/135 are 0% on the Canada suites — pagename funnel is the only
-      path), Q9 the ManulifeID retirement split (C9: unanswerable until access), Q10 the
-      "Manulife Financial" instance, Q11 the App Pages v2 segment definition (C8 reconstruction
-      offered), Q12 thresholds and owners. Full text: research/claude/20-gwam-sme-questions.md.
+      ↺ REWRITTEN 2026-07-29 against the single-channel ruling. OPEN: Q3b — the SME's brand-tag
+      examples include "Manulife: GWAM: wealth-ca" and "Manulife: GWAM : pvt-wealth", two values
+      that appear nowhere in our data docs and are presumably other GWAM lines of business. Are
+      they inside Canada Retirement or outside it? Our predicate is HELD at a parts-match on
+      (ca-retirement AND gwam) until she rules; probe C3 now sizes both variants so the answer
+      can be priced. Q3 — segment-vs-URL scope sign-off still needed, but re-priced: with the
+      other three channels gone it is a straight +1,436 / -60,594 row trade on the public
+      website (~96% overlap), and the +1,436 GAIN figure is an undercount pending the C3 re-run
+      (null-guard bug found 2026-07-29, code fixed). Q6 — page-views-vs-hits, ESCALATED: the two
+      new anomaly signals are both per-visit page-view ratios, so they cannot be declared until
+      the numerator is defined; probe C12 profiles every available basis. Q12 — thresholds and
+      owners for the surviving metrics.
+      ANSWERED: Q5 "non-marketing" = hits carrying the CID campaign query-string parameter
+      (Abhisekh, 2026-07-29). Verification pending on our side that post_campaign (the C10
+      candidate, 57% populated on manulifeglobalprod) is equivalent to CID presence — probe C11.
+      WITHDRAWN under the ruling: Q1 (sign-in vs D8 — both signed-in channels deferred), Q2
+      (manucustomer.prod access — channel deferred), Q4 (the 1/0 reading — moot for the deferred
+      metrics), Q7/Q8 (error field, sign-in ratio — those metrics left scope), Q9/Q10/Q11
+      (ManulifeID split, "Manulife Financial" instance, App Pages v2 definition).
+      Full text: research/claude/20-gwam-sme-questions.md.
     pending_with_us: >
-      ONE — re-run probe C3 on Databricks: the 2026-07-29 audit found a null-guard bug that
-      undercounted segment_only (the +1,436 GAIN figure) for rows with no URL; code fixed in
-      eda/gwam_channel_discovery.py, figures stand pending the re-run.
-      Otherwise eda/gwam_channel_discovery.py (sections C1-C10) RAN CLEAN 2026-07-29 (doc 19 G1
-      closed): 11 sections, run_manifest.skipped == {}, complete: true, 90-day window
-      2026-04-29..2026-07-28. Export: gwam_channel_discovery.html. It settled rsid existence and
-      history, web-vs-app per suite, the eVar105 value and delimiter, segment-vs-URL scope
-      sizing, eVar185-vs-eVar110, error/sign-in field population, per-suite event ids, app
-      pagenames, ManulifeID discriminators, and marketing candidates. Three pre-probe claims
-      were CORRECTED: the delimiter is ":" not " : "; mobile is 68.9% of the table not 56.9%;
-      and segment scope is marginally NARROWER than URL scope on the public website, not wider
-      (so it does not close a French gap — the case for it rests on the other three channels).
+      ONE extended probe run on Databricks, replacing the standalone C3 re-run: (a) C3 re-run
+      with the null-guard fix, which also lifts the undercounted +1,436 segment_only figure;
+      (b) the C3 extension sizing the wealth-ca / pvt-wealth brand variants for Q3b; (c) new
+      C11 cid_vs_campaign, which tests whether post_campaign is equivalent to CID presence
+      before any marketing-exclusion rule is written; (d) new C12 visit_shape, which profiles
+      the per-visit page-view distribution behind the SME's anomaly signals and quantifies the
+      ECID-vs-visid-pair visitor-grain divergence. Expect 13 sections, run_manifest.skipped ==
+      {}, complete: true.
+      Sections C1-C10 RAN CLEAN 2026-07-29 (doc 19 G1 closed): 11 sections, skipped == {}, 90-day
+      window 2026-04-29..2026-07-28. Export: gwam_channel_discovery.html. They settled rsid
+      existence and history, web-vs-app per suite, the eVar105 value and delimiter,
+      segment-vs-URL scope sizing, eVar185-vs-eVar110, error/sign-in field population, per-suite
+      event ids, app pagenames, ManulifeID discriminators, and marketing candidates. Three
+      pre-probe claims were CORRECTED: the delimiter is ":" not " : "; mobile is 68.9% of the
+      table not 56.9%; and segment scope is marginally NARROWER than URL scope on the public
+      website, not wider (so it does not close a French gap — and ↺ 2026-07-29 the fallback
+      case for it, "the other three channels cannot be expressed by URL", is gone too).
       Results folded into docs 19, 20, 16 and 15.
 
 # ------------------------------------------------------------------
@@ -453,51 +516,75 @@ post_event_list:     # exactly 12 entries (seed count 12)
     status: active                  # SME priority: pair with eVar breakdowns (esp. post_evar4)
 
 # ------------------------------------------------------------------
-# 4) gwam_channel_metrics — 17 (metric x channel) pairs transcribed from the
-#    SME four-channel scope table of 2026-07-28 (see meta.gwam_sme_inputs).
+# 4) gwam_channel_metrics — 19 entries: the 17 (metric x channel) pairs transcribed
+#    from the SME four-channel scope table of 2026-07-28, plus 2 anomaly-signal seeds
+#    from the 2026-07-29 update (see meta.gwam_sme_inputs).
 #
 #    SEPARATE TOP-LEVEL SECTION, not a fourth "sheet": these do not come from a
 #    dictionary workbook, they come from a scope table, and they carry two extra
 #    fields (channel, report_suite_label) that the CoverMe sheets do not have.
 #
-#    EVERY entry is `status: candidate` / `owner: TBD` and must stay that way until
-#    the probe runs AND doc 20 Q1-Q3 are answered. Promoting any of these to `active`
-#    while doc-16 D8 still excludes login traffic would ship a metric whose scope
-#    contradicts a standing business rule. Enforced by tests/test_registry_yaml.py
-#    (test_gwam_channel_seed_counts).
+#    ↺ STATUS PARTITION 2026-07-29 (single-channel ruling): the 5 public_website entries
+#    are `status: candidate`; the 14 web_member / mobile / manulifeid entries are
+#    `status: deferred`. Deferred means kept-with-evidence, not deleted — each block
+#    retains its probe findings so a re-widening is a status flip. EVERY entry is still
+#    `owner: TBD` and none may be promoted to `active` before doc 20 Q3b (the wealth-ca /
+#    pvt-wealth brand variants) and Q6 (the page-view numerator) are answered. Enforced by
+#    tests/test_registry_yaml.py (test_gwam_channel_seed_counts, test_gwam_status_partition).
 #
 #    decode_rule values here extend the CoverMe vocabulary: hit-count, visit-distinct,
-#    visitor-distinct, error-count, completion-ratio. The first three map onto existing
-#    gold_lib sources (hits/visits/visitors); completion-ratio maps onto the existing
-#    `ratio` kind (gold_lib.py:168-175) but cannot yet be DECLARED, because GWAM's
-#    SeriesSpec has no numerator/denominator fields (doc 19 G2).
+#    visitor-distinct, error-count, completion-ratio, ratio, point-mass-share. The first
+#    three map onto existing gold_lib sources (hits/visits/visitors). completion-ratio and
+#    ratio map onto the existing `ratio` kind (gold_lib.py:168-175) but cannot yet be
+#    DECLARED, because GWAM's SeriesSpec has no numerator/denominator fields (doc 19 G2).
+#    point-mass-share has no engine at all: it tests a single bucket of a distribution,
+#    which none of the current scorers (robust-z, level-shift, ECOD, rules) expresses.
 # ------------------------------------------------------------------
-gwam_channel_metrics:   # exactly 17 entries (3 traffic x 4 channels + 3 errors + 2 sign-in)
+gwam_channel_metrics:   # 19 entries (3 traffic x 4 channels + 3 errors + 2 sign-in + 2 anomaly signals)
 
   # ---- Public Website — rsid manulifeglobalprod; scope = eVar105 brand tag ----
+  # ↺ 2026-07-29: the ONLY channel in the alerting scope (SME ruling). 5 entries.
   # Probe C1: 9.1M rows but only 138 days of history (from 2026-03-10) — thinnest baseline margin
   # of the three located suites. C3: the SME's literal value exists (776,860 hits); a second form
   # "Manulife : GWAM : group-plans:ca-retirement" (526,357) means the predicate must match on the
   # PARTS (ca-retirement + GWAM), not equal the one quoted string. Delimiter is ":" not " : ".
+  #
+  # MARKETING EXCLUSION — the "ideally non-marketing" qualifier, ANSWERED 2026-07-29 (Abhisekh):
+  # marketing traffic = hits carrying the CID campaign identifier, the standard query-string
+  # parameter appended to marketing URLs. NOT YET IMPLEMENTABLE, two reasons: (a) our marketing
+  # candidate is Adobe's post_campaign column (C10: 57.03% populated here), and nothing yet
+  # proves it is equivalent to CID presence — probe C11 tests exactly that; (b) the pipeline
+  # STRIPS query strings by policy (ADR-0007; bronze projects post_page_url only), so parsing
+  # cid= in production needs an ADR amendment. Tracked in doc 16's backlog. Until then these
+  # metrics count ALL public-website traffic, marketing included.
+  #
+  # BRAND PREDICATE — HELD at the parts-match below. The 2026-07-29 examples add
+  # "Manulife: GWAM: wealth-ca" and "Manulife: GWAM : pvt-wealth"; both are unseen in our data
+  # and presumably separate lines of business, so widening the predicate is doc 20 Q3b, not an
+  # implementation detail. Probe C3 sizes them.
   - metric_id: gwam_pw_page_views
     name: Page Views — Public Website
     domain: gwam_retirement
     channel: public_website
     report_suite_label: Manulife Global Prod
-    scope_predicate: "evar105 = 'ca-retirement :  : GWAM'"   # value VERIFIED (probe C3); scope-model switch still needs sign-off (doc 20 Q3)
+    scope_predicate: "evar105 parts-match: contains 'ca-retirement' AND contains 'gwam'"   # value VERIFIED (probe C3);
+                                    # parts-match because a second brand form exists (see block note); HELD here —
+                                    # do NOT widen to wealth-ca / pvt-wealth before doc 20 Q3b.
+                                    # Scope-model switch (segment vs URL) still needs sign-off (doc 20 Q3).
     source_sheet: sme_scope_table
     source_ref: Page Views (count)
-    decode_rule: hit-count          # ⚠ we count hits; SME may mean Adobe page views (doc 20 Q6)
+    decode_rule: hit-count          # ⚠ we count hits; SME may mean Adobe page views (doc 20 Q6 — now ESCALATED,
+                                    # since the two anomaly-signal seeds below divide by this numerator)
     grain: daily
     direction: context_dependent
     owner: TBD
-    status: candidate               # "ideally non-marketing" — undefined (doc 20 Q5)
+    status: candidate               # marketing rule ANSWERED 2026-07-29 (CID) but not yet implementable — see block note
   - metric_id: gwam_pw_visits
     name: Visits — Public Website
     domain: gwam_retirement
     channel: public_website
     report_suite_label: Manulife Global Prod
-    scope_predicate: "evar105 = 'ca-retirement :  : GWAM'"
+    scope_predicate: "evar105 parts-match: contains 'ca-retirement' AND contains 'gwam'"
     source_sheet: sme_scope_table
     source_ref: Visits (count)
     decode_rule: visit-distinct
@@ -510,16 +597,65 @@ gwam_channel_metrics:   # exactly 17 entries (3 traffic x 4 channels + 3 errors 
     domain: gwam_retirement
     channel: public_website
     report_suite_label: Manulife Global Prod
-    scope_predicate: "evar105 = 'ca-retirement :  : GWAM'"
+    scope_predicate: "evar105 parts-match: contains 'ca-retirement' AND contains 'gwam'"
     source_sheet: sme_scope_table
     source_ref: Visitors (count)
-    decode_rule: visitor-distinct
+    decode_rule: visitor-distinct   # ↺ 2026-07-29 the SME names "Unique ECID - unique visitor" an anomaly signal in its
+                                    # own right, which this entry already covers: gold resolves visitor-distinct to
+                                    # countDistinct(mcvisid) (databricks/src/gold_lib.py:94) and mcvisid IS the ECID.
+                                    # ⚠ GRAIN DIVERGENCE to settle: the EDA notebooks count visitors as the
+                                    # post_visid_high:post_visid_low pair instead (gwam_canada_retirement_eda.py:1320),
+                                    # so EDA and gold can disagree on the same day. Probe C12 quantifies the gap daily.
     grain: daily
     direction: context_dependent
     owner: TBD
     status: candidate
 
+  # ---- Public Website anomaly signals — SME suggestions, 2026-07-29 (Abhisekh) ----
+  # Two of his three suggestions land here as new seeds; the third (unique ECID visitors) is
+  # already covered by gwam_pw_visitors above, see its decode_rule note.
+  # BOTH are blocked on doc 19 G2 — detect/registry.py:68-83 SeriesSpec has no numerator/
+  # denominator fields, so a per-visit ratio cannot be DECLARED even though gold_lib supports
+  # the arithmetic — and on doc 20 Q6, which defines the page-view numerator. Probe C12
+  # profiles the distributions first so thresholds are set from data, not from a guess.
+  - metric_id: gwam_pw_pv_per_visit
+    name: Page Views per Visit — Public Website
+    domain: gwam_retirement
+    channel: public_website
+    report_suite_label: Manulife Global Prod
+    scope_predicate: "evar105 parts-match: contains 'ca-retirement' AND contains 'gwam'"
+    source_sheet: sme_anomaly_signals
+    source_ref: "SME 2026-07-29: Page view per visit (if page view < 1 could be anomaly)"
+    decode_rule: ratio              # page_views / visits. A daily ratio can only fall below 1 if visits exist with
+                                    # zero page views, so the SME's "< 1" test is really a zero-page-view-visit
+                                    # detector — C12 reports that share directly (share_pv_eq_0).
+    grain: daily
+    direction: context_dependent    # the SME flags the LOW side; the enum has no lower_is_bad, and a spike is
+                                    # independently interesting, so context_dependent is the honest reading
+    owner: TBD
+    status: candidate               # blocked on G2 + Q6
+  - metric_id: gwam_pw_pv_per_visit_dup2
+    name: Exactly-2-Page-View Visit Share — Public Website (duplication indicator)
+    domain: gwam_retirement
+    channel: public_website
+    report_suite_label: Manulife Global Prod
+    scope_predicate: "evar105 parts-match: contains 'ca-retirement' AND contains 'gwam'"
+    source_sheet: sme_anomaly_signals
+    source_ref: "SME 2026-07-29: if all pages are consistently at 2, sometimes an indicator of duplication"
+    decode_rule: point-mass-share   # share of visits with EXACTLY 2 page views. The SME's signal is CONSISTENCY at 2,
+                                    # not the level — i.e. an unusually stable point mass, which no current scorer
+                                    # expresses (see section header). Needs a new rule kind, not a new threshold.
+    grain: daily
+    direction: higher_is_bad
+    owner: TBD
+    status: candidate               # blocked on G2 + Q6 + a new detector kind
+
   # ---- Web Member — rsid manugrs ("GRS+", data-confirmed; SME to ratify); scope = eVar185 platform tag ----
+  # ↺ DEFERRED 2026-07-29 — the SME (Abhisekh) narrowed the alerting scope to the Public Website
+  # channel only. All 4 entries below keep their verified predicates and probe findings so that
+  # re-activation is a status flip; nothing here is a modelling gap. The D8 login-exclusion
+  # conflict that gated this channel is dissolved by the narrowing, not resolved — it returns
+  # verbatim if this channel comes back.
   # Probe C1/C4: 322M rows, 883 days. eVar185='MPS Member' = 54.14% of the suite and 100% of its
   # populated eVar185. NOTE eVar105 is populated on 0.0001% of rows here — effectively absent, so the
   # brand tag does NOT work on this suite; eVar185 is the only segment handle. Predicate must be
@@ -536,7 +672,7 @@ gwam_channel_metrics:   # exactly 17 entries (3 traffic x 4 channels + 3 errors 
     grain: daily
     direction: context_dependent
     owner: TBD
-    status: candidate               # ⚠ signed-in traffic — conflicts with doc-16 D8 (doc 20 Q1)
+    status: deferred                # ↺ 2026-07-29 out of scope; the D8 conflict (doc 20 Q1) is dissolved, not ruled
   - metric_id: gwam_wm_visits
     name: Visits — Web Member
     domain: gwam_retirement
@@ -549,7 +685,7 @@ gwam_channel_metrics:   # exactly 17 entries (3 traffic x 4 channels + 3 errors 
     grain: daily
     direction: context_dependent
     owner: TBD
-    status: candidate
+    status: deferred                # ↺ 2026-07-29 single-channel ruling
   - metric_id: gwam_wm_visitors
     name: Visitors — Web Member
     domain: gwam_retirement
@@ -562,7 +698,7 @@ gwam_channel_metrics:   # exactly 17 entries (3 traffic x 4 channels + 3 errors 
     grain: daily
     direction: context_dependent
     owner: TBD
-    status: candidate
+    status: deferred                # ↺ 2026-07-29 single-channel ruling
   - metric_id: gwam_wm_errors
     name: Errors — Web Member
     domain: gwam_retirement
@@ -579,9 +715,15 @@ gwam_channel_metrics:   # exactly 17 entries (3 traffic x 4 channels + 3 errors 
     grain: daily
     direction: higher_is_bad
     owner: TBD
-    status: candidate
+    status: deferred                # ↺ 2026-07-29 single-channel ruling — Errors was already 0 for public_website in
+                                    # the SME matrix, so this metric leaves scope with its channel and doc 20 Q7
+                                    # (which error field?) is withdrawn rather than answered
 
   # ---- Mobile — rsid manufingbrsmobileapp.prod (confirmed present); scope = an Adobe segment NAME ----
+  # ↺ DEFERRED 2026-07-29 — single-channel ruling (Public Website only). All 4 entries kept with
+  # their probe findings. Worth remembering if scope re-widens: this is the largest unmodelled
+  # data mass we have (68.9% of the source table) AND the channel that no URL predicate can
+  # express, which is what made the segment-scope model look mandatory before the narrowing.
   # Probe C1: 2.24B rows = 68.9% of the source table, 881 days, entirely unmodelled.
   # C2: coalesced URL rate is EXACTLY 0.000 — no URL LIKE predicate can ever express this channel
   # (and mobileappid is 0.000 populated on every suite, so it is not the discriminator either).
@@ -601,7 +743,7 @@ gwam_channel_metrics:   # exactly 17 entries (3 traffic x 4 channels + 3 errors 
     grain: daily
     direction: context_dependent
     owner: TBD
-    status: candidate
+    status: deferred                # ↺ 2026-07-29 single-channel ruling; G4 is moot while this channel is deferred
   - metric_id: gwam_mob_visits
     name: Visits — Mobile App
     domain: gwam_retirement
@@ -614,7 +756,7 @@ gwam_channel_metrics:   # exactly 17 entries (3 traffic x 4 channels + 3 errors 
     grain: daily
     direction: context_dependent
     owner: TBD
-    status: candidate
+    status: deferred                # ↺ 2026-07-29 single-channel ruling
   - metric_id: gwam_mob_visitors
     name: Visitors — Mobile App
     domain: gwam_retirement
@@ -627,7 +769,7 @@ gwam_channel_metrics:   # exactly 17 entries (3 traffic x 4 channels + 3 errors 
     grain: daily
     direction: context_dependent
     owner: TBD
-    status: candidate
+    status: deferred                # ↺ 2026-07-29 single-channel ruling
   - metric_id: gwam_mob_errors
     name: Errors — Mobile App
     domain: gwam_retirement
@@ -640,11 +782,14 @@ gwam_channel_metrics:   # exactly 17 entries (3 traffic x 4 channels + 3 errors 
     grain: daily
     direction: higher_is_bad
     owner: TBD
-    status: candidate
+    status: deferred                # ↺ 2026-07-29 single-channel ruling
 
   # ---- ManulifeID — rsid manucustomer.prod ABSENT FROM OUR FEED; NO retirement discriminator known ----
-  # Probe C9: 0 rows in the window; not among the 16 rsids in the full-history census. These five
-  # entries are unbuildable until a DATA-ACCESS request lands (doc 20 Q2) — not merely ungoverned.
+  # ↺ DEFERRED 2026-07-29 — single-channel ruling. This retires the programme's longest-lead item:
+  # the manucustomer.prod data-access request is now MOOT and should be withdrawn unless scope
+  # re-widens. All 6 entries kept with their probe findings.
+  # Probe C9: 0 rows in the window; not among the 16 rsids in the full-history census. These six
+  # entries were unbuildable until a DATA-ACCESS request landed (doc 20 Q2) — not merely ungoverned.
   # The retirement-split question (Q9) could not even be attempted: there were no rows to profile.
   # Partial consolation (C8): the sign-in flow is partly visible inside manugrs as pagenames
   # 'mfid:sign-in' (1,160,058) and 'grs:id-flow:member:account-selection' (2,312,927) — which is
@@ -653,7 +798,7 @@ gwam_channel_metrics:   # exactly 17 entries (3 traffic x 4 channels + 3 errors 
     name: Page Views — ManulifeID
     domain: gwam_retirement
     channel: manulifeid
-    report_suite_label: manucustomer.prod   # ABSENT from our feed — 0 rows (probe C9); blocked on data access (doc 20 Q2)
+    report_suite_label: manucustomer.prod   # ABSENT from our feed — 0 rows (probe C9); access request now moot (doc 20 Q2)
     scope_predicate: null           # SME's own open item: cannot separate retirement sign-ins (doc 20 Q9)
     source_sheet: sme_scope_table
     source_ref: Page Views (count)
@@ -661,7 +806,7 @@ gwam_channel_metrics:   # exactly 17 entries (3 traffic x 4 channels + 3 errors 
     grain: daily
     direction: context_dependent
     owner: TBD
-    status: candidate               # ⚠ sign-in traffic — conflicts with doc-16 D8 (doc 20 Q1)
+    status: deferred                # ↺ 2026-07-29 out of scope; the D8 conflict (doc 20 Q1) is dissolved, not ruled
   - metric_id: gwam_mid_visits
     name: Visits — ManulifeID
     domain: gwam_retirement
@@ -674,7 +819,7 @@ gwam_channel_metrics:   # exactly 17 entries (3 traffic x 4 channels + 3 errors 
     grain: daily
     direction: context_dependent
     owner: TBD
-    status: candidate
+    status: deferred                # ↺ 2026-07-29 single-channel ruling
   - metric_id: gwam_mid_visitors
     name: Visitors — ManulifeID
     domain: gwam_retirement
@@ -687,7 +832,7 @@ gwam_channel_metrics:   # exactly 17 entries (3 traffic x 4 channels + 3 errors 
     grain: daily
     direction: context_dependent
     owner: TBD
-    status: candidate
+    status: deferred                # ↺ 2026-07-29 single-channel ruling
   - metric_id: gwam_mid_errors
     name: Errors — ManulifeID
     domain: gwam_retirement
@@ -700,7 +845,7 @@ gwam_channel_metrics:   # exactly 17 entries (3 traffic x 4 channels + 3 errors 
     grain: daily
     direction: higher_is_bad
     owner: TBD
-    status: candidate
+    status: deferred                # ↺ 2026-07-29 single-channel ruling
   - metric_id: gwam_mid_signin_completion_rate
     name: Sign-in Completion Rate — ManulifeID
     domain: gwam_retirement
@@ -713,10 +858,12 @@ gwam_channel_metrics:   # exactly 17 entries (3 traffic x 4 channels + 3 errors 
     grain: daily
     direction: higher_is_good
     owner: TBD
-    status: candidate               # ⚠ blocked three ways: D8 (Q1), no data access (C9), and the assumed inputs
-                                    # are EMPTY — probe C6 found eVar122/eVar135 0% populated on the Canada suites
-                                    # (eVar122 is John-Hancock-only and duplicates eVar182 there). Remaining path is
-                                    # the C8 pagename funnel; needs an SME definition (Q8) and G2 to declare a ratio.
+    status: deferred                # ↺ 2026-07-29 single-channel ruling. Was blocked three ways: D8 (Q1), no data
+                                    # access (C9), and the assumed inputs are EMPTY — probe C6 found eVar122/eVar135
+                                    # 0% populated on the Canada suites (eVar122 is John-Hancock-only and duplicates
+                                    # eVar182 there). The remaining path was the C8 pagename funnel, needing an SME
+                                    # definition (Q8) and G2. Q8 is withdrawn with the channel; G2 stays live because
+                                    # the new public-website per-visit ratio needs it too.
   - metric_id: gwam_mid_signin_errors
     name: Sign-in Errors — ManulifeID
     domain: gwam_retirement
@@ -729,4 +876,4 @@ gwam_channel_metrics:   # exactly 17 entries (3 traffic x 4 channels + 3 errors 
     grain: daily
     direction: higher_is_bad
     owner: TBD
-    status: candidate
+    status: deferred                # ↺ 2026-07-29 single-channel ruling

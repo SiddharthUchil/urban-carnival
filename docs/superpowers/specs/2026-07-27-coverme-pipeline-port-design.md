@@ -42,6 +42,9 @@ series in gold as the foundation for the future detector.
   only, not per-visitor conversion.
 - **Language**: derived from coalesced-URL host (`pourmeproteger|manuvie|assurance-manuvie → fr`;
   `coverme.com|insttrip → en`; else unknown). eVar8 is not language-of-record (likely mis-tagged).
+  ↺ **SME-approved 2026-07-29** — the domain rule is confirmed as the field of record, so this
+  design needs no change. Forward note: eVar149 may supersede it once the SME confirms, which would
+  mean reworking the derivation and rebuilding silver.
 - **Not promoted**: events 510–514 (pending SME naming); event 20100 excluded from any
   value-based KPI (doc-17 E4).
 
@@ -70,7 +73,10 @@ buckets present as corroboration.
 
 ## 5. Governance
 
-Job ships PAUSED. Production enablement gated on PII/consent sign-off (readiness item 9, open).
+Job ships PAUSED. ~~Production enablement gated on PII/consent sign-off (readiness item 9, open).~~
+↺ **2026-07-29: that gate is CLEARED** (readiness item 9 — no PII from Adobe; eVar65 is OneTrust
+cookie consent, no PII). The job still ships PAUSED by design; enabling the schedule is a manual
+Databricks action, no longer a governance dependency.
 Sensitive columns dropped at bronze; identities pseudonymized at silver (keyed SHA-256, same
 secret scope as GWAM).
 

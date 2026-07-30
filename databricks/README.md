@@ -114,24 +114,72 @@ Key differences vs GWAM (all EDA/SME-confirmed 2026-07-27):
 - **Adobe metric keys**: visits = 4-part key (visid pair + visit_num + visit_start_time_gmt),
   visitors = visid pair (not mcvisid). **Event counts are visit-distinct** (SME ruling); the
   funnel is non-monotonic (saved-quote resume) — no within-visit sequencing anywhere.
-- **Language is domain-derived** (en/fr/unknown from the URL host), not eVar8.
+- **Language is domain-derived** (en/fr/unknown from the URL host), not eVar8 — **SME-approved
+  2026-07-29** (Kerrian), so this is the field of record rather than an interim rule. eVar8 is
+  confirmed suspect (~96% EN against a ~50/50 domain split). *Forward note: she expects eVar149 to
+  always be language and will confirm; if it becomes the field of record, rework
+  `cm_silver_lib.lang_from_host_expr` and rebuild silver — the EN/FR shares would move.*
 - Partition `hit_date`, `OVERLAP_DAYS=5` (late-arrival p99), backfill start **2023-02-28**.
 
-Backfill (deployment gated on the PII/consent sign-off — readiness doc 17 item 9 — so the
-schedule stays PAUSED until that clears):
+Backfill — ↺ **UN-GATED 2026-07-29.** The PII/consent sign-off (readiness doc 17 item 9) that held
+this is **cleared**: the CoverMe SME confirmed no PII comes from Adobe, and eVar65 is OneTrust
+*cookie* consent (no PII, not an analytics-suppression flag), so opted-out rows may be included in
+aggregate KPIs. The job still **ships PAUSED** — enabling the schedule is a deliberate manual action
+in Databricks, not something this doc grants. The clearance was verbal; convert it to a written
+data-owner approval if your governance process needs one on file.
+**This is a first-ever deployment, not a `run-now` on an existing job** — the CoverMe job has
+never been created. Pre-flight, in order; each row is a hard stop, not a nicety:
+
+| # | Do this | How it fails if you skip it |
+|---|---|---|
+| 1 | Push the branch and register the repo as a Databricks **Git folder** at `/Repos/<owner>/anomoly-detection` (step 1 above) | arbitrary `.py` under `src/` will not import as modules |
+| 2 | Provision `gmai_pulse` / `identity_hmac_key` (step 2 above) | silver raises `RuntimeError` — `cm_02_silver_conform.py:37-43` |
+| 3 | Confirm `SELECT` on `csdo_prod_catalog.adobe_coverme_bronze.hit_data` — a **different** grant from the GWAM source | `assert_source_columns` raises — `cm_01_bronze_ingest.py:40` |
+| 4 | Replace all four placeholders in `jobs/coverme_pulse_daily.json` (table below) | `resolve()` raises on the catalog; the rest fail at cluster/task creation |
+| 5 | `databricks jobs create --json @databricks/jobs/coverme_pulse_daily.json` | — |
+
+Placeholders — the committed JSON is a template on purpose, so these stay out of git:
+
+| Token | Line(s) | Replace with | Must satisfy |
+|---|---|---|---|
+| `__SET_ME__` | 10 | your Unity Catalog name | writable; you can create the three `gmai_pulse_*` schemas in it. Left as-is, `coverme_settings.resolve()` raises rather than writing somewhere wrong. |
+| `__SET_ME__` | 40, 51, 62, 73 | your Databricks Git-folder owner segment in `/Repos/<owner>/…` | must match the path from step 1 exactly, or the task cannot find the notebook |
+| `__SET_ME_NODE_TYPE__` | 20 | a node type in your workspace's cloud (e.g. `Standard_DS3_v2` on Azure) | must exist in the workspace region |
+| `__ALERT_EMAIL__` | 33 | on-failure notification address | — |
+
 ```bash
 databricks jobs run-now --job-id <id> \
   --job-parameters target_catalog=<catalog>,mode=backfill,start_date=2023-02-28
 ```
+Idempotent and safely re-runnable: bronze/silver use `replaceWhere hit_date >= start`, gold is a
+full `overwrite`. `pause_status: PAUSED` gates only the **cron** — `run-now` works on a paused job.
+
 Expected (per the verified EDA manifest):
 - **bronze** `adobe_hit_coverme` ≈ 57.7M rows across ~1,211 `hit_date` partitions (~30 known
-  missing source days); the backfill run asserts both production brand domains are present.
+  missing source days — ↺ root-caused 2026-07-29 to the **Databricks migration** leaving a source
+  file, most likely `hit_data`, un-refreshed; these are feed gaps, not site outages, and the exact
+  date list is pending SME confirmation); the backfill run asserts both production brand domains
+  are present.
 - **silver** `hits_conformed_coverme` ≈ 94% of bronze; DQ prints `event_list_nonnull≈0.93`
   (gate is 0.90 here, not GWAM's 0.95).
 - **gold** `kpi_daily_coverme` = 53 series × days, no calendar gaps; backfill sanity gate
   asserts all 5 funnel events fire and both language domains are present.
 - Gold funnel counts read **below** the EDA S6b totals (visit-distinct post-eligibility vs
   hit-presence pre-filter) — expected, not a bug. Compare **conversion ratios**, not raw totals.
+
+**Verify the run** with `sql/coverme_backfill_verify.sql` — 10 checks, each returning a `verdict`
+column, covering every expectation above: bronze volume + partition coverage, interior gap count,
+both brand domains present with no UAT leakage, silver eligible share + `event_list_nonnull`,
+identity pseudonymisation, 53 gold series, the zero-fill trap, all 5 funnel events firing, funnel
+ratios, and language shares. Set `target_catalog` and read down `verdict` for `FAIL`/`REVIEW`.
+
+Two things it surfaces that the pipeline's own gates cannot:
+- **Check 4** flags an eligible share inside the `[0.90, 0.98]` warn band. `cm_02:76-79` only
+  *prints* a WARNING there, so a run can succeed while the `exclude_hit`/`hit_source` mix has moved.
+- **Check 7** cross-joins all-zero gold days against bronze partitions to separate genuine
+  zero-traffic days from `gold_lib`'s zero-filled synthetic ones, and **7b lists the dates** — which
+  is the gap list the "Deferred" note below wants and the mask the detect task will need. Nothing in
+  the pipeline detects interior gaps today.
 
 ## Local verification (dev box)
 The gold KPI build is unit-tested for exact parity with the pandas detector, and the CoverMe
@@ -158,8 +206,21 @@ On Windows set `PYSPARK_PYTHON`/`PYSPARK_DRIVER_PYTHON` to your venv python and
 ### Deferred (tracked)
 - **Missing-day imputation policy** — `gold_lib` zero-fills the ~30 missing CoverMe source
   days on the gap-free calendar, while doc 17 §4 item 8's working assumption is "feed gaps →
-  impute/interpolate". Decision deferred until the SME rules on outage-vs-gap; zero-fill is
+  impute/interpolate". ~~Decision deferred until the SME rules on outage-vs-gap~~; zero-fill is
   the current, documented behavior and the detect task must mask those dates before training.
+  ↺ **The outage-vs-gap question is ANSWERED (2026-07-29): they are feed gaps** — the Databricks
+  migration left a source file un-refreshed. So the "impute/interpolate + mask before training"
+  branch is confirmed correct and this is no longer waiting on anyone. **Still deferred, now on us:**
+  zero-fill remains in force in code, which is the one known-wrong default still shipping — a
+  zero-filled gap is indistinguishable from a real zero-traffic day to anything that reads gold
+  without the mask. Two things to do when this is picked up: encode the confirmed gap dates
+  somewhere the detect task reads (nothing does today — `cm_00_freshness_guard.py` checks the
+  watermark only, not interior gaps), and decide imputation vs mask-only. Blocking neither the
+  backfill nor the pipeline; it blocks trustworthy baselines.
+  ↺ **The date list no longer needs the SME**: `sql/coverme_backfill_verify.sql` check **7b**
+  derives it from the data — all-zero gold days that have no bronze partition are exactly the
+  synthetic ones. Run it after the backfill and that half of the item is closed; what remains is
+  the design decision (impute vs mask) and somewhere for the detect task to read the list from.
 - **7 SME-confirmed feed columns not mirrored to bronze** (`campaign`, `geo_city`,
   `geo_country`, `geo_region`, `os`, `referrer`, `user_agent`; metric-registry
   `data_feed_columns`, Kerrian's calculated-metrics follow-up). Promoting any of them

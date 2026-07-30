@@ -50,11 +50,15 @@ def scope_expr(include, exclude, cols=URL_CANDIDATES, *,
 
 
 def lang_from_host_expr(url: Column) -> Column:
-    """TODO(SME-pending): language field of record (eVar8 vs eVar149 vs prop5, doc 18
-    Q4) -- rework this derivation and rebuild silver when Kerrian rules.
-    Domain-derived language (SME interim ruling 2026-07-27 -- eVar8 is likely
-    mis-tagged and is NOT language of record). coverme.com/insttrip = en,
-    pourmeproteger/manuvie = fr, anything else (incl. no URL) = unknown."""
+    """Domain-derived language -- SME-APPROVED 2026-07-29 (Kerrian, doc 18 Q4). This is the
+    field of record, not an interim rule: eVar8 is confirmed suspect (~96% EN against a
+    ~50/50 domain split) and is NOT used. coverme.com/insttrip = en,
+    pourmeproteger/manuvie = fr, anything else (incl. no URL) = unknown.
+
+    Forward note, deliberately NOT acted on: she expects eVar149 to always be language,
+    since a French page's URL is sometimes an English translation. If she confirms it,
+    rework this derivation and rebuild silver -- that would move the EN/FR shares, so it is
+    a re-baseline, not a hot swap."""
     host = F.regexp_extract(F.regexp_replace(url, r"^[a-z]+://", ""), r"^([^/]+)", 1)
     return (F.when(host.rlike(r"pourmeproteger|manuvie|assurance-manuvie"), "fr")
              .when(host.rlike(r"coverme\.com|insttrip\.manulife\.com"), "en")
