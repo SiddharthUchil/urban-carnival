@@ -41,7 +41,7 @@ from registry import slug
 # touched nothing CoverMe. v0.5.0 deferred 14 of those GWAM entries to the SME's
 # single-channel ruling and recorded the 2026-07-29 CoverMe rulings in meta only. The
 # CoverMe series definitions below are unchanged from v0.3.0.
-REGISTRY_VERSION = "0.6.0"
+REGISTRY_VERSION = "0.6.1"
 
 # --- Gold build parameters (consumed by cm_03_gold_kpis via gold_lib) ---
 DATE_COL = "hit_date"

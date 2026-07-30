@@ -591,6 +591,8 @@ the business signs off scope**, because flipping either re-baselines every KPI.
 > - **Item 5's "written confirmation of scope"** now means confirming the **single-channel** definition:
 >   `manulifeglobalprod` + eVar105 parts-match (`ca-retirement` + `gwam`), with the `wealth-ca` /
 >   `pvt-wealth` brand variants still unclassified ([20](20-gwam-sme-questions.md) Q3b).
+>   ↺ **2026-07-30: Q3b answered — both variants are OUT of Canada Retirement.** The parts-match
+>   above is confirmed as the definition of record; no re-baseline follows.
 >
 > One genuinely new tension this ruling creates for **this** document — see §5's note on query-string
 > stripping: the SME's marketing definition (`CID`) lives in exactly the substring this EDA discards by

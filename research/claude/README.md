@@ -90,8 +90,8 @@ when, why, and what to do"). The design rests on eight decisions:
 | 17 | [17-coverme-eda-readiness.md](17-coverme-eda-readiness.md) | **CoverMe** EDA readiness & SME gap assessment — E1–E4 engineering must-fixes, the SME agenda, readiness verdict. E1 fixed and re-run verified 2026-07-27 · ↺ **2026-07-29**: item 5 (language) resolved, item 8 (missing days) root-caused to the Databricks migration, item 9 **PII cleared verbally** — the backfill job is no longer doc-gated |
 | 18 | [18-coverme-sme-questions.md](18-coverme-sme-questions.md) | **CoverMe** send-ready SME questionnaire, with Kerrian's rulings merged inline (Q1–Q10) · ↺ **2026-07-29**: Q4 language **answered** (domain rule approved; eVar149 the likely permanent field), Q7 PII/consent **answered** (no PII from Adobe; eVar65 = cookie consent), Q8 missing days **answered** (migration feed gap). Still ⏳: Q10 events 510-514, eVar148 verification |
 | 19 | [19-gwam-channel-readiness.md](19-gwam-channel-readiness.md) | **GWAM Canada Retirement** channel readiness & SME gap assessment — the 2026-07-28 four-channel scope table mapped cell-by-cell to the repo, G1–G6 engineering gates, SME agenda. ↺ **Probe run clean 2026-07-29 — G1 closed** · ↺ **re-scoped 2026-07-29 to the Public Website channel ONLY (D11)**: D8 conflict dissolved, `manucustomer.prod` request retired, G2 promoted to critical, **new §1.1** (three SME anomaly signals) + **§2.5.1** (the CID marketing rule) |
-| 20 | [20-gwam-sme-questions.md](20-gwam-sme-questions.md) | **GWAM Canada Retirement** SME questionnaire (Q1–Q12) with Abhisekh's answers merged inline. ↺ **2026-07-29**: Q1/Q2/Q7–Q11 **withdrawn** (their channels left scope), Q5 **answered** (marketing = CID query parameter), Q3 partly answered → **new Q3b** (`wealth-ca` / `pvt-wealth` brand variants), Q6 **escalated to blocking**, **new Part 4** (his three anomaly suggestions) |
-| — | [metric-registry.yaml](metric-registry.yaml) | Versioned Phase-1 metric registry — **v0.5.0**: 29 CoverMe AD-tagged seeds (SME-confirmed; language/PII/data-gap rulings recorded in `meta`) + 19 GWAM entries — 5 `candidate` on the public website (3 traffic + 2 new anomaly-signal seeds), 14 `deferred` by the single-channel ruling |
+| 20 | [20-gwam-sme-questions.md](20-gwam-sme-questions.md) | **GWAM Canada Retirement** SME questionnaire (Q1–Q12) with Abhisekh's answers merged inline. ↺ **2026-07-29**: Q1/Q2/Q7–Q11 **withdrawn** (their channels left scope), Q5 **answered** (marketing = CID query parameter), Q3 partly answered → **new Q3b** (`wealth-ca` / `pvt-wealth` brand variants), Q6 **escalated to blocking**, **new Part 4** (his three anomaly suggestions) · ↺ **2026-07-30: Q3b answered — both brand variants are OUT of Canada Retirement**, which confirms the predicate we had held, so no re-baseline; open list is now Q3, **Q6**, Q12 |
+| — | [metric-registry.yaml](metric-registry.yaml) | Versioned Phase-1 metric registry — **v0.6.1**: 29 CoverMe AD-tagged seeds (SME-confirmed; language/PII/data-gap rulings recorded in `meta`) + 19 GWAM entries — 5 `candidate` on the public website (3 traffic + 2 new anomaly-signal seeds), 14 `deferred` by the single-channel ruling. v0.6.0 folded in the 2026-07-30 extended-probe evidence (C3/C11/C12) and closed gate G2; **v0.6.1** records the Q3b ruling — brand variants out, predicate confirmed. Neither changed a series |
 | — | [adr/](adr/) | ADR-0001 ingestion (v2) · ADR-0002 models · ADR-0003 Gen-AI · ADR-0004 Akka · ADR-0005 Adaptive ML · ADR-0006 compute plane · ADR-0007 identity & privacy · **ADR-0008 serving topology & Gen-AI plane** |
 
 > **Namespace note:** "D1–D5" in doc 06 are *Mermaid diagram ids* and "D6/D7" in doc 13 continue that
@@ -137,10 +137,13 @@ when, why, and what to do"). The design rests on eight decisions:
   [17 §4 item 9](17-coverme-eda-readiness.md)).
 - Open items needing business input: feed refresh cadence/SLA per domain, holiday/campaign calendars, the
   labeled incident set for evaluation ([02 §7](02-solution-architecture.md)), and owners for the **43
-  still-ungoverned** entries among the 48 registry metrics (v0.5.0: 29 CoverMe + 19 GWAM; only the 5
+  still-ungoverned** entries among the 48 registry metrics (v0.6.1: 29 CoverMe + 19 GWAM; only the 5
   CoverMe funnel events are `active` with an owner, and of the GWAM entries 5 are `candidate` and 14
-  `deferred`). Still with the SMEs: GWAM — the `wealth-ca` / `pvt-wealth` brand variants
-  ([20](20-gwam-sme-questions.md) Q3b) and page-views-vs-hits (Q6); CoverMe — the identity of events
+  `deferred`). Still with the SMEs: GWAM — page-views-vs-hits
+  ([20](20-gwam-sme-questions.md) Q6, the sole remaining gate on promoting any GWAM metric to
+  `active`) and the Q3 scope sign-off; ↺ the `wealth-ca` / `pvt-wealth` brand variants (Q3b) were
+  **answered 2026-07-30 — both out of Canada Retirement**, confirming the held predicate.
+  CoverMe — the identity of events
   510-514, eVar148 bot-detector verification, whether eVar149 becomes the permanent language field, and
   per-date confirmation of the ~30 missing days.
 - Diagrams are **Mermaid** (render in GitHub/VS Code; import to Lucidchart) per the agreed format.

@@ -1,6 +1,6 @@
 # GMAI-Pulse Phase-1 Metric Registry
 # ------------------------------------------------------------------
-# version: 0.6.0 (2026-07-30)
+# version: 0.6.1 (2026-07-30)
 # generated_from: new_data/data_profile_summary.json (profiler v0.1.0, run 2026-07-02)
 # seed_source: CoverMe data dictionary rows where Notes == "Anomaly Detection"
 #              -> confirmed counts: 9 (data_feed_columns) + 8 (post_eVar) + 12 (post_event_list) = 29
@@ -17,7 +17,17 @@
 # before doc 20 Q3b and Q6 are answered. ↺ 2026-07-30: the probe half of that condition is now
 # DISCHARGED — the extended run (eda/gwam_channel_discovery.py, generated_at 2026-07-30T08:28:42)
 # returned all 12 sections complete, skipped == {}, 12/12 payloads matching the manifest
-# bytes+sha1. What remains is purely SME: Q3b and Q6.
+# bytes+sha1. What remains is purely SME: Q3b and Q6. ↺ 2026-07-30 (later): Q3b is ANSWERED,
+# so the promotion gate now rests on Q6 ALONE. The partition itself is unchanged — every GWAM
+# entry stays `candidate` / `deferred` with `owner: TBD`.
+#
+# v0.6.1 records the doc 20 Q3b ruling (Abhisekh, 2026-07-30): the `wealth-ca` and `pvt-wealth`
+# brand variants are NOT part of Canada Retirement. This CONFIRMS the predicate that was already
+# HELD, so it is the rare governance change that moves nothing: no series, no status, no
+# scope_predicate string, and NO re-baseline. The +19.3% widening priced by C3 is now ruled OUT
+# permanently rather than deferred. Accepted cost, recorded so it is not read as an oversight:
+# ~250k wealth-ca records per 90 days are unwatched by explicit decision, and because the C3
+# overlap with ca-retirement is exactly 0, none of it reaches alerting by another route.
 #
 # v0.6.0 records the 2026-07-30 extended-probe evidence (C3 re-run, C11, C12) and closes doc 19
 # gate G2 in code. No entry is added, removed, or promoted — every change below is evidence
@@ -28,6 +38,7 @@
 #     numerator/denominator + governance), leaving Q6. C12 baselines attached so thresholds
 #     get set from data.
 #   - brand predicate: still HELD, but wealth-ca / pvt-wealth are now SIZED (C3).
+#     ↺ v0.6.1: SIZED became ANSWERED — both ruled OUT, predicate CONFIRMED (see above).
 #   - Q5's "pending verification that post_campaign is equivalent" is ANSWERED, and the answer
 #     is NO — see the marketing note on gwam_pw_page_views.
 #
@@ -60,7 +71,7 @@
 # ------------------------------------------------------------------
 
 meta:
-  version: 0.6.0
+  version: 0.6.1
   updated: 2026-07-30
   default_grain: daily          # hourly reserved — enable only after >=30-day feed confirms volume
   domains: [coverme, gwam_retirement]
@@ -178,12 +189,15 @@ meta:
       express the mobile channel, but the mobile channel is deferred. This was the load-bearing
       argument FOR the segment model, so its removal materially re-prices decision (2).
     pending_with_sme: >
-      ↺ REWRITTEN 2026-07-29 against the single-channel ruling. OPEN: Q3b — the SME's brand-tag
-      examples include "Manulife: GWAM: wealth-ca" and "Manulife: GWAM : pvt-wealth", two values
-      that appear nowhere in our data docs and are presumably other GWAM lines of business. Are
-      they inside Canada Retirement or outside it? Our predicate is HELD at a parts-match on
-      (ca-retirement AND gwam) until she rules; probe C3 now sizes both variants so the answer
-      can be priced. Q3 — segment-vs-URL scope sign-off still needed, but re-priced: with the
+      ↺ REWRITTEN 2026-07-29 against the single-channel ruling. ↺ ANSWERED 2026-07-30: Q3b —
+      the SME's brand-tag examples include "Manulife: GWAM: wealth-ca" and
+      "Manulife: GWAM : pvt-wealth", two values that appear nowhere in our data docs and are
+      presumably other GWAM lines of business. Are they inside Canada Retirement or outside it?
+      Probe C3 sized both variants so the answer could be priced (+250,355 / +9,690 rows, exactly
+      zero overlap), and Abhisekh ruled on 2026-07-30 that NEITHER is part of Canada Retirement.
+      That CONFIRMS the parts-match predicate on (ca-retirement AND gwam) that was HELD meanwhile,
+      so the predicate string is unchanged and no re-baseline follows; widening to either variant
+      is now ruled OUT rather than deferred. STILL OPEN: Q3 — segment-vs-URL scope sign-off still needed, but re-priced: with the
       other three channels gone it is a straight +1,436 / -60,594 row trade on the public
       website (~96% overlap), and the +1,436 GAIN figure is an undercount pending the C3 re-run
       (null-guard bug found 2026-07-29, code fixed). Q6 — page-views-vs-hits, ESCALATED: the two
@@ -545,6 +559,9 @@ post_event_list:     # exactly 12 entries (seed count 12)
 #    `owner: TBD` and none may be promoted to `active` before doc 20 Q3b (the wealth-ca /
 #    pvt-wealth brand variants) and Q6 (the page-view numerator) are answered. Enforced by
 #    tests/test_registry_yaml.py (test_gwam_channel_seed_counts, test_gwam_status_partition).
+#    ↺ 2026-07-30: Q3b is ANSWERED (both variants ruled OUT), so the promotion gate rests on
+#    Q6 ALONE. The partition is deliberately unchanged — answering half a two-part gate
+#    promotes nothing.
 #
 #    decode_rule values here extend the CoverMe vocabulary: hit-count, visit-distinct,
 #    visitor-distinct, error-count, completion-ratio, ratio, point-mass-share. The first
@@ -572,7 +589,13 @@ gwam_channel_metrics:   # 19 entries (3 traffic x 4 channels + 3 errors + 2 sign
   # cid= in production needs an ADR amendment. Tracked in doc 16's backlog. Until then these
   # metrics count ALL public-website traffic, marketing included.
   #
-  # BRAND PREDICATE — HELD at the parts-match below. The 2026-07-29 examples add
+  # BRAND PREDICATE — ✅ CONFIRMED 2026-07-30 (doc 20 Q3b, Abhisekh): neither `wealth-ca` nor
+  # `pvt-wealth` is part of Canada Retirement, so the parts-match below is the definition of
+  # record and widening to either variant is RULED OUT, not deferred. The predicate string is
+  # unchanged — the hold was correct, so this costs no re-baseline. The history that produced
+  # that ruling is kept below, because the sizing is what made the answer safe to act on.
+  #
+  # ↺ was: HELD at the parts-match below. The 2026-07-29 examples add
   # "Manulife: GWAM: wealth-ca" and "Manulife: GWAM : pvt-wealth"; both are presumably separate
   # lines of business, so widening the predicate is doc 20 Q3b, not an implementation detail.
   # ↺ 2026-07-30 probe C3 SIZED them (they are present in the data, not unseen as first assumed):
@@ -580,6 +603,11 @@ gwam_channel_metrics:   # 19 entries (3 traffic x 4 channels + 3 errors + 2 sign
   # ca-retirement's 1,298,417. Decisive detail: overlap_with_ca_retirement is EXACTLY 0 for both,
   # so each is purely ADDITIVE (+19.3% / +0.7%) — including them cannot double-count, and
   # excluding them silently drops that traffic. Sizing is not an answer: STILL HELD pending Q3b.
+  # ↺ 2026-07-30 — Q3b ANSWERED: both OUT. The sizing did its job (it turned "we don't recognise
+  # these" into a priced either/or) and the SME chose exclusion, which is the branch that costs
+  # nothing. The 250,355 wealth-ca rows are now unwatched BY DECISION — with zero overlap they
+  # reach no other alert — and that is recorded here so a future reader does not mistake the
+  # absence for a scope bug.
   - metric_id: gwam_pw_page_views
     name: Page Views — Public Website
     domain: gwam_retirement
@@ -587,7 +615,8 @@ gwam_channel_metrics:   # 19 entries (3 traffic x 4 channels + 3 errors + 2 sign
     report_suite_label: Manulife Global Prod
     scope_predicate: "evar105 parts-match: contains 'ca-retirement' AND contains 'gwam'"   # value VERIFIED (probe C3);
                                     # parts-match because a second brand form exists (see block note); HELD here —
-                                    # do NOT widen to wealth-ca / pvt-wealth before doc 20 Q3b.
+                                    # NEVER widen to wealth-ca / pvt-wealth — both were ruled OUT of
+                                    # Canada Retirement by the SME on 2026-07-30 (doc 20 Q3b).
                                     # Scope-model switch (segment vs URL) still needs sign-off (doc 20 Q3).
     source_sheet: sme_scope_table
     source_ref: Page Views (count)

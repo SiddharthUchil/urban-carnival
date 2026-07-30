@@ -3,22 +3,26 @@
 > **STATUS (2026-07-29, updated): ↺ answers received from Abhisekh — most of this list is closed.**
 > He has ruled that **only the Public Website is in scope for now**, which withdraws seven of the
 > twelve questions outright, and he answered Q5. What remains is short:
-> **Still open (4):** **Q3b** (new — are `wealth-ca` and `pvt-wealth` part of Canada Retirement?) ·
-> **Q3** (sign-off on the scope switch, now re-priced) · **Q6** (page views vs hits — *escalated to
-> blocking*) · **Q12** (thresholds and owners).
-> **Answered:** Q5 (marketing = the CID query parameter) · Q3 partly (brand-tag examples).
+> **Still open (3):** **Q3** (sign-off on the scope switch, now re-priced) · **Q6** (page views vs
+> hits — *escalated to blocking*) · **Q12** (thresholds and owners).
+> **Answered:** Q5 (marketing = the CID query parameter) · Q3 partly (brand-tag examples) ·
+> **Q3b** (2026-07-30 — `wealth-ca` and `pvt-wealth` are both **out** of Canada Retirement, which
+> confirms the predicate we had held; no re-baseline).
 > **Withdrawn — the channels they concerned are out of scope:** Q1, Q2, Q7, Q8, Q9, Q10, Q11.
 > **Shrunk to one channel:** Q4.
 > **New from him, not asked by us:** three anomaly signals — see **Part 4**.
 > Answers are merged inline as **A (SME, date)** blocks; withdrawn questions are marked ⬜ and kept.
 
 > **↺ UPDATE (2026-07-30): we ran the data checks we promised, and three of them came back with
-> something you should see.** No new questions — the open list is still Q3b, Q3, Q6 and Q12 — but two
-> of those now come with numbers attached instead of asking you to judge in the abstract, and one of
-> your three anomaly suggestions turns out not to work as written.
+> something you should see.** No new questions — the open list was Q3b, Q3, Q6 and Q12, and **Q3b has
+> since been answered the same day, leaving Q3, Q6 and Q12** — but two of those come with numbers
+> attached instead of asking you to judge in the abstract, and one of your three anomaly suggestions
+> turns out not to work as written.
 >
 > - **Q3b** — we said we would size `wealth-ca` and `pvt-wealth` before asking. `wealth-ca` would add
 >   **19%** to everything we report; `pvt-wealth` is negligible. Neither overlaps Canada Retirement.
+>   ↺ **Answered 2026-07-30: both are out.** That confirms the definition we were holding, so nothing
+>   re-baselines — the 19% swing is off the table for good.
 > - **Q6** — the page-views-vs-hits choice is bigger than a labelling question: the two definitions
 >   give **2.9** and **1.3** pages per visit on your channel, and your "consistently at 2" instinct
 >   only makes sense under one of them.
@@ -84,6 +88,8 @@ suggest that switch is **much cheaper than we feared**.
 > Two things we still need from you, both small: **Q3b** (below — two brand tags we do not recognise)
 > and **Q6** (page views vs hits, which has become more important than it looked, because your
 > per-visit suggestions divide by it).
+>
+> ↺ **2026-07-30: Q3b is answered (both brand tags are out), so this is down to Q6 alone.**
 
 ---
 
@@ -241,8 +247,8 @@ Two things we need before switching:
 
 ---
 
-**Q3b. Are `wealth-ca` and `pvt-wealth` part of Canada Retirement?** 🚩 *(new 2026-07-29 — blocks the
-scope definition)*
+**Q3b. Are `wealth-ca` and `pvt-wealth` part of Canada Retirement?** ✅ *(new 2026-07-29 — **answered
+2026-07-30**: both are out)*
 
 Two of the three Brand-tag examples you sent name things we have never seen:
 
@@ -280,6 +286,23 @@ it. Either way it is your call, not a technical one.
 > currently alerting on it.
 >
 > We are still **holding** at group retirement only until you say otherwise.
+
+> ### ↺ A (Abhisekh, 2026-07-30) — answered: both are OUT
+>
+> Verbatim: *"No they are not part of the Canada Retirement."*
+>
+> **This confirms the definition we were already holding**, which is the best possible outcome. We
+> held at group retirement only (`ca-retirement` + `GWAM`) precisely *because* we did not recognise
+> the other two — your ruling says that hold was right, so **nothing about our scope changes**: no
+> re-baseline, no rebuilt "what's normal" baselines, no threshold recalibration. The 19% swing we
+> warned you about does not happen, and it is now ruled out permanently rather than parked.
+>
+> **One consequence worth stating plainly rather than burying.** That traffic is now deliberately
+> unwatched. `wealth-ca` is ~250,000 records per 90 days, and since it has *exactly zero* overlap
+> with Canada Retirement, none of it reaches our alerting by another route. Nobody — us or anyone
+> else — is monitoring it. That is the correct outcome of your ruling, not an oversight, and we are
+> putting it on the record so that if those businesses ever ask "who watches this?", the answer is
+> **no one, by decision**, with a date against it.
 
 ---
 
@@ -553,9 +576,11 @@ we can calibrate against a case you already believe is duplication rather than g
 
 ---
 
-*Fastest path, ↺ updated 2026-07-30 after our data checks: **Q3b** and **Q6** are now equally urgent
-and both come with numbers rather than abstractions. **Q3b** — `wealth-ca` is a 19% swing in
-everything we report, so this is no longer a question we can hold indefinitely. **Q6** — the two
+*Fastest path, ↺ updated 2026-07-30 after our data checks — then updated again the same day when you
+answered Q3b: **Q6 is now the only urgent one.** ~~**Q3b** — `wealth-ca` is a 19% swing in everything
+we report, so this is no longer a question we can hold indefinitely.~~ **Answered: both brand tags are
+out**, which confirms the definition we were holding, so the 19% swing never happens and nothing
+re-baselines. **Q6** — the two
 definitions give 2.9 vs 1.3 pages per visit, which decides whether your "consistently at 2" signal is
 readable at all; and please tell us whether we may swap the "< 1" test for the zero-page-view share,
 since the test as written cannot fire. **Q3** (Brand tag as the definition of record) should still be

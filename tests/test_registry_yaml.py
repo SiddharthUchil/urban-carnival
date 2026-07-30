@@ -5,7 +5,10 @@ Kerrian's SME rulings of 2026-07-27; v0.4.0 adds the GWAM four-channel scope see
 records the 2026-07-29 rulings -- GWAM narrowed to the Public Website channel, so 14 of the
 17 GWAM entries are deferred and 2 anomaly-signal seeds are added, and CoverMe's language
 rule is ratified in meta with no series change; v0.6.0 records the 2026-07-30 extended-probe
-evidence -- C3/C11/C12 -- and closes doc 19 gate G2, again with no series change);
+evidence -- C3/C11/C12 -- and closes doc 19 gate G2, again with no series change; v0.6.1
+records the doc 20 Q3b ruling of 2026-07-30 -- the wealth-ca / pvt-wealth brand variants are
+NOT part of Canada Retirement, which CONFIRMS the predicate that was already held, so once
+more no series changes and nothing re-baselines);
 detect/cm_registry.py is its Python binding. Enforces the yaml's own validation_rules
 block plus the code pin, so REGISTRY_VERSION and the copied status/direction/owner
 governance fields cannot drift silently.
@@ -48,7 +51,7 @@ def entries(registry):
 
 
 def test_version_pin(registry):
-    assert str(registry["meta"]["version"]) == REGISTRY_VERSION == "0.6.0"
+    assert str(registry["meta"]["version"]) == REGISTRY_VERSION == "0.6.1"
 
 
 def test_per_sheet_counts(registry):
@@ -92,6 +95,8 @@ def test_series_governance_matches_yaml(registry):
 # --- GWAM channel scope seed (v0.4.0 transcription, v0.5.0 single-channel ruling) ---------
 GWAM_CHANNELS = {"public_website", "web_member", "mobile", "manulifeid"}
 GWAM_IN_SCOPE = {"public_website"}      # SME ruling 2026-07-29: the only alerting channel
+# SME ruling 2026-07-30 (doc 20 Q3b): eVar105 brand variants ruled OUT of Canada Retirement.
+GWAM_BRAND_VARIANTS_OUT = ("wealth-ca", "pvt-wealth")
 
 
 @pytest.fixture(scope="module")
@@ -112,7 +117,14 @@ def test_gwam_channel_seed_counts(gwam):
 def test_gwam_status_partition(gwam):
     """The 2026-07-29 ruling narrowed alerting to the Public Website channel. Those entries stay
     `candidate` -- nothing may reach `active` before doc 20 Q3b (the wealth-ca / pvt-wealth brand
-    variants) and Q6 (the page-view numerator) are answered. The other three channels are
+    variants) and Q6 (the page-view numerator) are answered.
+
+    Q3b was ANSWERED 2026-07-30: both variants are OUT of Canada Retirement, which confirms the
+    predicate we had held. **Q6 is therefore the sole remaining gate**, and this assertion is
+    deliberately unchanged -- answering half a two-part gate promotes nothing. See
+    test_gwam_brand_variants_never_in_scope for the invariant that ruling created.
+
+    The other three channels are
     `deferred`, which means kept-with-evidence: their predicates and probe findings survive so a
     re-widening is a status flip. Deferring rather than deleting is also what keeps the dissolved
     D8 conflict visible -- it was never ruled on, so it returns if a signed-in channel comes back.
@@ -121,6 +133,26 @@ def test_gwam_status_partition(gwam):
         want = "candidate" if e["channel"] in GWAM_IN_SCOPE else "deferred"
         assert e["status"] == want, f'{e["metric_id"]} ({e["channel"]}) should be {want}'
     assert {e["owner"] for e in gwam} == {"TBD"}
+
+
+def test_gwam_brand_variants_never_in_scope(gwam):
+    """doc 20 Q3b (Abhisekh, 2026-07-30): `wealth-ca` and `pvt-wealth` are NOT part of Canada
+    Retirement, so the eVar105 predicate stays a parts-match on (ca-retirement AND gwam).
+
+    Probe C3 measured what widening would have cost: +250,355 and +9,690 rows against
+    ca-retirement's 1,298,417, with EXACTLY zero overlap -- so +19.3% purely additive. That
+    makes an accidental widening both cheap to type (one string) and expensive to absorb (any
+    scope change re-baselines every KPI, threshold and injected-anomaly calibration, and must
+    be a full backfill). Pinning the ruling here turns it from prose in the yaml into an
+    invariant that fails loudly.
+    """
+    for e in gwam:
+        predicate = str(e.get("scope_predicate", "")).lower()
+        for variant in GWAM_BRAND_VARIANTS_OUT:
+            assert variant not in predicate, (
+                f'{e["metric_id"]}: scope_predicate references "{variant}", which doc 20 Q3b '
+                "ruled OUT of Canada Retirement on 2026-07-30"
+            )
 
 
 def test_gwam_enums_and_domain(gwam):
