@@ -4,7 +4,9 @@ research/claude/metric-registry.yaml is the governed source of truth (v0.3.0 rec
 Kerrian's SME rulings of 2026-07-27; v0.4.0 adds the GWAM four-channel scope seed; v0.5.0
 records the 2026-07-29 rulings -- GWAM narrowed to the Public Website channel, so 14 of the
 17 GWAM entries are deferred and 2 anomaly-signal seeds are added, and CoverMe's language
-rule is ratified in meta with no series change); detect/cm_registry.py is its Python binding. Enforces the yaml's own validation_rules
+rule is ratified in meta with no series change; v0.6.0 records the 2026-07-30 extended-probe
+evidence -- C3/C11/C12 -- and closes doc 19 gate G2, again with no series change);
+detect/cm_registry.py is its Python binding. Enforces the yaml's own validation_rules
 block plus the code pin, so REGISTRY_VERSION and the copied status/direction/owner
 governance fields cannot drift silently.
 
@@ -46,7 +48,7 @@ def entries(registry):
 
 
 def test_version_pin(registry):
-    assert str(registry["meta"]["version"]) == REGISTRY_VERSION == "0.5.0"
+    assert str(registry["meta"]["version"]) == REGISTRY_VERSION == "0.6.0"
 
 
 def test_per_sheet_counts(registry):

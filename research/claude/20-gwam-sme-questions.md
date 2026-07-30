@@ -12,6 +12,22 @@
 > **New from him, not asked by us:** three anomaly signals — see **Part 4**.
 > Answers are merged inline as **A (SME, date)** blocks; withdrawn questions are marked ⬜ and kept.
 
+> **↺ UPDATE (2026-07-30): we ran the data checks we promised, and three of them came back with
+> something you should see.** No new questions — the open list is still Q3b, Q3, Q6 and Q12 — but two
+> of those now come with numbers attached instead of asking you to judge in the abstract, and one of
+> your three anomaly suggestions turns out not to work as written.
+>
+> - **Q3b** — we said we would size `wealth-ca` and `pvt-wealth` before asking. `wealth-ca` would add
+>   **19%** to everything we report; `pvt-wealth` is negligible. Neither overlaps Canada Retirement.
+> - **Q6** — the page-views-vs-hits choice is bigger than a labelling question: the two definitions
+>   give **2.9** and **1.3** pages per visit on your channel, and your "consistently at 2" instinct
+>   only makes sense under one of them.
+> - **Your "page views per visit < 1" suggestion cannot fire.** In 88 days the figure never dropped
+>   below **1.22**. We propose measuring the thing you meant a different way — see **Q6**.
+> - **Q5 (already answered, no action)** — we verified your CID rule against the field we hold and
+>   they do *not* match, so we are amending our own privacy design to honour your rule properly.
+>   Flagged for transparency; nothing needed from you.
+
 > Reconciled against the four-channel alerting scope table received 2026-07-28
 > (Public Website / Web Member / Mobile / ManulifeID). Every question the table already answers has
 > been removed — only genuine business decisions remain. Supersedes the technical agenda in
@@ -243,10 +259,27 @@ If they *are* part of the retirement product from your side, excluding them mean
 it. Either way it is your call, not a technical one.
 
 **What we're doing meanwhile.** We have **held** our definition at group retirement only
-(`ca-retirement` + `GWAM`), because that is the one you confirmed, and we are **measuring** how much
-traffic the other two carry so you can see the size of the decision. If they turn out to be tiny, this
-question is academic; if they are large, it matters a lot. We will have those numbers from our next data
-run, and we'll send them to you rather than asking you to guess.
+(`ca-retirement` + `GWAM`), because that is the one you confirmed.
+
+> **↺ We promised you the numbers before asking you to guess — here they are (2026-07-30).** Over
+> three months on the public website:
+>
+> | Brand tag | Traffic in 90 days | If we added it |
+> |---|---|---|
+> | `ca-retirement` — what we monitor today | 1,298,417 | — |
+> | `wealth-ca` | 250,355 | **+19%** |
+> | `pvt-wealth` | 9,690 | +0.7% |
+>
+> **This is not academic.** `wealth-ca` would add roughly a fifth to everything we report — well
+> outside the range where the answer stops mattering. `pvt-wealth` is small enough to be a rounding
+> error either way.
+>
+> One thing worth knowing before you answer: **neither overlaps with Canada Retirement at all** — not
+> approximately, but exactly zero shared traffic. So this is a clean either/or. Including them cannot
+> double-count anything, and excluding them means that traffic is simply unwatched by us. Nobody is
+> currently alerting on it.
+>
+> We are still **holding** at group retirement only until you say otherwise.
 
 ---
 
@@ -293,6 +326,18 @@ type, or a specific set of pages? Any rule we can apply consistently works.
 > the `CID` value at load time (which needs a small amendment to our privacy design, not a new
 > question for you).
 >
+> **↺ We checked, and they are not the same (2026-07-30).** Your rule is confirmed as a rule — almost
+> nothing carries a `CID` that Adobe's field misses. But when both are present they **disagree about
+> half the time** on Canada Retirement (they match on 54% of records; 76% across the whole report
+> suite). That is far too loose to treat the field we hold as a stand-in for what you described.
+>
+> **What this means practically:** the shortcut is gone, so honouring your rule means extracting the
+> `CID` value at load time and amending the privacy design — the second of the two options above. That
+> is our decision to make and we are making it; **nothing here needs an answer from you.** Until it
+> lands, the three public-website numbers keep counting *all* traffic including marketing, which we
+> are flagging because it deviates from your "ideally non-marketing" note. Your word "ideally"
+> suggests that is an acceptable starting point — tell us if it is not.
+>
 > **Until one of those lands, our page-view / visit / visitor counts include marketing traffic.** We
 > would rather tell you that than quietly ship a number that does not match your definition. Your
 > wording — "*ideally* non-marketing" — suggests that is an acceptable starting point; tell us if not.
@@ -306,11 +351,45 @@ number you'd see on a dashboard.
 > **↺ Why this got more important (2026-07-29).** When we sent this it was a question about what a
 > dashboard number means. Your anomaly suggestions in **Part 4** are both *page views per visit* — so
 > "page views" is now the top half of a fraction, and the answer changes whether "less than 1" or
-> "consistently 2" mean anything at all. If we count every interaction, a typical visit has well over
-> 2 and the "consistently 2" signal would never fire; if we count Adobe page views, 2 is an ordinary
-> number and the signal is meaningful. **We need your answer before we can set any threshold on those
-> two.** In the meantime we are measuring the distribution under *both* definitions so that whichever
-> you pick, we have the numbers ready.
+> "consistently 2" mean anything at all. **We need your answer before we can set any threshold on
+> those two.**
+
+> **↺ We have now measured it, and it changes the question (2026-07-30).** We said we would get the
+> numbers under both definitions before asking you to choose. Here they are — 88 days of the public
+> website, May through July:
+>
+> | | every interaction ("hits") | Adobe page views |
+> |---|---|---|
+> | Pages per visit, Canada Retirement | **2.89** | **1.34** |
+> | Pages per visit, whole report suite | 1.86 | 1.32 |
+>
+> **This is why the definition matters more than we realised.** Your "consistently at 2" instinct
+> lands almost exactly on the left-hand number — under the "every interaction" definition a typical
+> Canada Retirement visit *is* about 2. Under the Adobe definition it is about 1.3, and "2" stops
+> being a meaningful landmark. So the two definitions do not just rescale the dashboard; one of them
+> makes your duplication signal readable and the other makes it noise.
+>
+> **And one of your two suggestions cannot work as written.** We checked whether pages-per-visit ever
+> drops below 1, which is the test you described. **In 88 days it never came close** — the lowest any
+> single day reached was **1.22**, and that is on the Adobe definition, the one most likely to dip.
+> The reason is arithmetic rather than data quality: about **79% of visits are a single page view**,
+> and that mass holds the average up, so the visits you actually care about get averaged away.
+>
+> Those visits do exist, and we can count them directly: **3.3% of visits record no page view at
+> all** (2.4% within Canada Retirement). That number moves on its own and is worth an alert; the
+> ratio dipping under 1 is not, because it will not happen.
+>
+> **So, two things — and the second one is the real question:**
+>
+> 1. **Which definition of "page views"** do you mean — every interaction, or Adobe's page views?
+> 2. **For the "less than 1" signal: may we alert on the share of visits with no page view at all
+>    (currently 3.3%) instead of on the ratio?** It is the same concern, measured somewhere it will
+>    actually show up. If you meant something different by "less than 1", tell us and we will look
+>    again.
+>
+> Your "consistently at 2" suggestion needs no change — it is 11.7% of visits today and it holds
+> fairly steady, which is exactly the baseline we needed in order to spot it becoming *unusually*
+> steady. That one we can build once you answer question 1.
 
 > **↺ 2026-07-29 — Q7 through Q11 are all WITHDRAWN.** Every one of them concerns Errors, sign-in, the
 > mobile app, or ManulifeID, and all of those left scope with the single-channel ruling. **No answers
@@ -431,12 +510,25 @@ use. No work needed.
 > are usually close but not identical. We are measuring the gap and will standardise on ECID, since
 > that is what you asked for. Nothing needed from you.
 
+> **↺ Measured, and it was a non-issue (2026-07-30).** The two counts agree on 74 of 88 days, and on
+> the days they differ the gap is at most **15 visitors** — under a tenth of a percent. We are
+> standardising on ECID as planned, but there was no discrepancy worth worrying about.
+
 **2. "Page view per visit — if page view < 1 could be an anomaly."**
-🟡 **Building it; one thing to note about what it detects.** A per-visit average can only drop below 1
-if some visits contain **no page view at all** — so this is really a detector for *visits that record
-activity but no page*. That is a genuinely good signal (it usually means either tracking is
-half-broken or something non-human is hitting the site), and we are measuring how often it happens
-today so we can set a sensible threshold. Depends on your Q6 answer.
+🔴 **↺ We measured this and the test cannot fire — but the concern behind it is real, so we want to
+measure it a different way.** A per-visit average can only drop below 1 if some visits contain **no
+page view at all** — so this is really a detector for *visits that record activity but no page*. That
+is a genuinely good signal: it usually means tracking is half-broken or something non-human is hitting
+the site.
+
+The problem is the averaging. **In 88 days the figure never fell below 1.22**, nowhere near 1. About
+**79% of visits are a single page view**, and that mass holds the average up, so the visits you care
+about get diluted away — a real outage would have to be enormous before the average noticed.
+
+Those visits do exist and we can count them directly instead: **3.3% of visits currently record no
+page view at all**. That is a number that moves on its own, and it is the same thing you were pointing
+at. **We would like to build that instead of the "< 1" test** — see Q6, where we have asked you
+directly. Still depends on your Q6 answer for the definition.
 
 **3. "If all pages are consistently at 2 — sometimes an indicator of duplication, especially when we
 see consistently 2."**
@@ -447,6 +539,13 @@ from everything else we run — our detectors look for values that *move*, and t
 value that *stops moving*. We are building the measurement now and will need to add a new kind of check
 for the "unusually steady" part. Also depends on Q6.
 
+> **↺ Measured, and this one works as you described (2026-07-30).** Today **11.7%** of visits are
+> exactly two page views (12.7% within Canada Retirement), and it wobbles between roughly 8% and 14%
+> from day to day. That day-to-day wobble is precisely what we needed: it tells us what "normal
+> variation" looks like, so a stretch where the number goes unnaturally flat is something we can now
+> detect rather than guess at. No change to your suggestion — we just need your Q6 answer before we
+> can set the check.
+
 **A question back on this one:** have you seen the doubling before, and if so **where** — a particular
 set of pages, a particular period, after a tag release? If you can point us at even one known instance,
 we can calibrate against a case you already believe is duplication rather than guessing what counts as
@@ -454,12 +553,15 @@ we can calibrate against a case you already believe is duplication rather than g
 
 ---
 
-*Fastest path, ↺ updated 2026-07-29 after your ruling: **Q3b** (are `wealth-ca` and `pvt-wealth` part
-of Canada Retirement?) is now the top item — it defines what we monitor, and we cannot hold our
-definition provisionally forever. **Q6** (page views vs hits) is next, because your two per-visit
-suggestions both divide by it. **Q3** (Brand tag as the definition of record) should still be decided
-before we fit baselines rather than after, though with the other channels out of scope it is now a
-governance choice rather than a coverage one.*
+*Fastest path, ↺ updated 2026-07-30 after our data checks: **Q3b** and **Q6** are now equally urgent
+and both come with numbers rather than abstractions. **Q3b** — `wealth-ca` is a 19% swing in
+everything we report, so this is no longer a question we can hold indefinitely. **Q6** — the two
+definitions give 2.9 vs 1.3 pages per visit, which decides whether your "consistently at 2" signal is
+readable at all; and please tell us whether we may swap the "< 1" test for the zero-page-view share,
+since the test as written cannot fire. **Q3** (Brand tag as the definition of record) should still be
+decided before we fit baselines rather than after, though with the other channels out of scope it is
+now a governance choice rather than a coverage one. Everything else on our side is unblocked —
+there is no engineering work left waiting on you.*
 
 *Nothing else on this list needs you. Q1, Q2 and Q7–Q11 are withdrawn; Q5 is answered; Q4 and Q12 we
 can proceed on with the assumptions stated above — they are written down explicitly so you can override

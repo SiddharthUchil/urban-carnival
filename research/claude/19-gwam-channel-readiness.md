@@ -153,15 +153,38 @@ report-suite inventory. All three are seeded in
 
 | SME wording | What it means for us | Status |
 |---|---|---|
-| "Unique ECID - unique visitor" | **Already covered.** `gwam_pw_visitors` resolves to `countDistinct(mcvisid)` ([gold_lib.py:94](../../databricks/src/gold_lib.py)) and `mcvisid` *is* the ECID. ⚠ But it exposes a grain divergence: the EDA notebooks count the `post_visid` pair instead ([gwam_canada_retirement_eda.py:1320](../../eda/gwam_canada_retirement_eda.py)), so EDA and gold can disagree on the same day. Probe **C12** now measures the gap. | ✅ exists; grain to settle |
-| "Page view per visit (if page view < 1 could be anomaly)" | New metric `gwam_pw_pv_per_visit`. Note what the test really detects: a daily ratio can only fall **below 1** if visits exist containing **no page view at all**, so this is a zero-page-view-visit detector. C12 reports that share directly. | 🔴 blocked on **G2** + Q6 |
-| "If all pages are consistently at 2 (sometimes an indicator of duplication) especially when we see consistently 2" | New metric `gwam_pw_pv_per_visit_dup2` — the share of visits with **exactly** 2 page views. His concern is **consistency**, not level: an unusually *stable* point mass. No current scorer (robust-z, level-shift, ECOD, rules) expresses "unusually stable", so this needs a new rule kind, not a threshold. | 🔴 blocked on **G2** + Q6 + new detector kind |
+| "Unique ECID - unique visitor" | **Already covered.** `gwam_pw_visitors` resolves to `countDistinct(mcvisid)` ([gold_lib.py:94](../../databricks/src/gold_lib.py)) and `mcvisid` *is* the ECID. ✅ The grain divergence we flagged — the EDA notebooks count the `post_visid` pair instead ([gwam_canada_retirement_eda.py:1320](../../eda/gwam_canada_retirement_eda.py)) — is **measured and negligible** (C12, below). | ✅ **settled** |
+| "Page view per visit (if page view < 1 could be anomaly)" | New metric `gwam_pw_pv_per_visit`. Note what the test really detects: a daily ratio can only fall **below 1** if visits exist containing **no page view at all**, so this is a zero-page-view-visit detector. ⚠ **C12 says the literal test never fires** — see below. | 🟡 blocked on **Q6** only |
+| "If all pages are consistently at 2 (sometimes an indicator of duplication) especially when we see consistently 2" | New metric `gwam_pw_pv_per_visit_dup2` — the share of visits with **exactly** 2 page views. His concern is **consistency**, not level: an unusually *stable* point mass. No current scorer (robust-z, level-shift, ECOD, rules) expresses "unusually stable", so this needs a new rule kind, not a threshold. C12 gives it a stability baseline. | 🟡 blocked on **Q6** + new detector kind |
 
-Both new metrics are per-visit **ratios**, which is why **G2 is now the critical gate** rather than a
-tidy-up item: `SeriesSpec` has no numerator/denominator fields
-([registry.py:68-83](../../detect/registry.py)). And both divide by "page views", so **Q6 — page
-views or hits? — has gone from a labelling question to a blocking one.** Probe C12 profiles every
-available basis and reports which it used (`pv_basis`) rather than picking silently.
+**↺ 2026-07-30 — C12 has run, and it changes two of these three rows.** 88 days, rsid
+`manulifeglobalprod`, measured on the Adobe page-view basis (`pv_basis` =
+`try_cast(post_page_event as int) == 0`).
+
+- **The grain question is closed.** ECID and the visid-pair agree on 74 of 88 days; on the 14 that
+  differ the gap is at most **15 visitors** (max 0.068%, mean 0.0039%), and ECID never *exceeds* the
+  pair — the expected direction, since a pair can split one ECID but cannot merge two. There is no
+  reconciliation work and no re-baseline risk: either grain answers his signal.
+- **The "< 1" test is inert as specified.** `pv_per_visit` = **1.3219** (segment 1.3429), daily min
+  **1.2236**, max 1.5571 — on **zero of 88 days** did it approach 1.0, let alone fall below. The
+  floor sits 22% above the threshold. The reason is dilution: 78.8% of visits have exactly one page
+  view, which swamps the zero-page-view visits in the mean. The quantity that *is* detectable is
+  `share_pv_eq_0` = **3.25%** (segment 2.38%). We should alert on that share, not on a ratio
+  crossing 1 — put to the SME as Q6 in [20](20-gwam-sme-questions.md).
+- **dup2 now has a stability baseline.** `share_pv_eq_2` = **11.67%** suite / 12.66% segment. Since
+  the signal is about steadiness, the dispersion is the number that matters: daily range
+  0.0768–0.1350, sd 0.0140, **cv 0.122** (segment cv 0.099). That is the normal wobble a
+  "suspiciously steady" detector has to fire *below*. Full mix: 0pv 3.3% / 1pv 78.8% / 2pv 11.7% /
+  3–5pv 5.2% / 6+ 1.1%.
+
+**G2 is closed** (2026-07-30) — `SeriesSpec` now carries `numerator`/`denominator` plus
+`status`/`direction`/`owner`, `kpis.py` resolves `kind=ratio` in a second pass matching `gold_lib`,
+and [test_gold_parity.py](../../tests/test_gold_parity.py) pins pandas/Spark agreement including the
+zero-denominator day. Both metrics are now *declarable*; neither is *declared*, because both divide
+by "page views" and **Q6 — page views or hits? — is the one remaining blocker**, and it is an SME
+answer rather than engineering. C12 also priced Q6: on this scope the two bases give **2.885**
+(hits/visit, derived) versus **1.343** (Adobe page views), so the "consistently 2" signal is
+meaningful under one basis and meaningless under the other.
 
 ---
 
@@ -324,11 +347,11 @@ gated on the same ruling. It does not create a workaround; it raises the cost of
 
 | Metric | Exists? | Detail |
 |---|---|---|
-| Page Views | 🟡 Approximately | We compute `hits_total` = row count ([gold_lib.py:149-154](../../databricks/src/gold_lib.py)) and surface it as page views. Adobe's *page views* are narrower than *hits*. Which the SME means changes the number ([20](20-gwam-sme-questions.md) Q6). ↺ **2026-07-29: this ambiguity is now load-bearing** — the pv-per-visit signals are ratios over it. Probe C12 reports which basis it used. |
+| Page Views | 🟡 Approximately | We compute `hits_total` = row count ([gold_lib.py:149-154](../../databricks/src/gold_lib.py)) and surface it as page views. Adobe's *page views* are narrower than *hits*. Which the SME means changes the number ([20](20-gwam-sme-questions.md) Q6). ↺ **2026-07-29: this ambiguity is now load-bearing** — the pv-per-visit signals are ratios over it. ↺ **2026-07-30: C12 priced it** — 2.885 hits/visit (derived) vs 1.343 Adobe page views/visit on this scope. |
 | Visits | ✅ | `visits_total` = distinct `concat(post_visid_high, post_visid_low, visit_num)`. |
-| Visitors | ✅ | `visitors_total` = distinct `mcvisid`. ↺ **2026-07-29: the SME named "unique ECID" as a signal, which is exactly this** — `mcvisid` is the ECID. But the EDA notebooks count the `post_visid` pair instead, so the two layers can disagree; C12 measures the gap (§1.1). |
+| Visitors | ✅ | `visitors_total` = distinct `mcvisid`. ↺ **2026-07-29: the SME named "unique ECID" as a signal, which is exactly this** — `mcvisid` is the ECID. But the EDA notebooks count the `post_visid` pair instead, so the two layers can disagree; ↺ **2026-07-30 C12 measured the gap and it is negligible** — 14 of 88 days differ, by at most 15 visitors (0.068%), ECID never above the pair (§1.1). |
 | Errors | 🟢 **Buildable** (C5) | ↺ was "🔴 Nothing". The error eVars are **populated at scale on the channels that need them**: on `manugrs` eVar181 **52.0%** (12.2M rows) / eVar182 **69.9%** (16.4M) / eVar184 **61.3%** (14.4M); on mobile eVar184 **17.9%** (**37.6M rows** — the largest error footprint anywhere). ⚠ **eVar183 is effectively absent from the Canada channels** — 0.00% on `manugrs`, 0.14% on mobile — so it is a John Hancock field, not ours. Remaining work is **G3** + Q7 (field of record, and errors-vs-affected-visits). See the attribution caveat below before quoting any example value. |
-| Sign in % rate completion | 🔴 **Not buildable from the assumed fields** (C6) | ↺ was "🟡 engine ready, inputs missing" — the inputs are now known to be *absent*. **eVar122 and eVar135 are 0% populated on `manugrs` and on mobile.** eVar122's entire footprint is John Hancock (2.77% of `jhfswamjhreupeprod`), where its values **duplicate eVar182 exactly** — so eVar122 carries error descriptions there, not ordered login steps. eVar135 is an auth-method enum (`email` 23.7M / `mfa` 145k / `biometrics` 1k / `username/password` 17), not an attempt/success marker. **The remaining path is pagename-based** (C8): `mfid:sign-in` → `grs:id-flow:member:account-selection` on `manugrs`, or `CIAM Sign In` (9.27M) on mobile. That needs an SME definition (Q8), and G2 still blocks *declaring* the ratio. |
+| Sign in % rate completion | 🔴 **Not buildable from the assumed fields** (C6) | ↺ was "🟡 engine ready, inputs missing" — the inputs are now known to be *absent*. **eVar122 and eVar135 are 0% populated on `manugrs` and on mobile.** eVar122's entire footprint is John Hancock (2.77% of `jhfswamjhreupeprod`), where its values **duplicate eVar182 exactly** — so eVar122 carries error descriptions there, not ordered login steps. eVar135 is an auth-method enum (`email` 23.7M / `mfa` 145k / `biometrics` 1k / `username/password` 17), not an attempt/success marker. **The remaining path is pagename-based** (C8): `mfid:sign-in` → `grs:id-flow:member:account-selection` on `manugrs`, or `CIAM Sign In` (9.27M) on mobile. That needs an SME definition (Q8). ↺ **2026-07-30: G2 no longer blocks declaring the ratio** — but this row stays 🔴 because the channel it belongs to is deferred and Q8 is withdrawn. |
 | Sign in Error | 🟡 **Likely buildable, not yet proven** (C5/C6) | ↺ was "🔴 Nothing". Sign-in failure strings are present in the window (`Username & Password, Invalid, Attempt` 1,054,850 · `Your password is required.` 800,213 · `Username & Password, Invalid, Locked` 462,428) and eVar181 carries `N/A_CAS_INVALID_CREDENTIALS` / `N/A_CAS_USER_LOCKED`. **But none of these can be attributed to a Canada channel from this probe** — see the caveat below. Same G3 + Q7 dependency as Errors, plus one confirming query. |
 
 ⚠ **Attribution caveat — C5's value lists are cross-suite, its population rates are not.** `top_values`
@@ -418,14 +441,29 @@ That is a clear business answer, and it does **not** immediately give us an impl
 gaps sit between the answer and a shipped filter, and it is worth being explicit that neither is a
 business question:
 
-**(1) Is `post_campaign` the same thing as `cid=`?** Our C10 candidate is Adobe's `post_campaign`
-column (**57.03%** populated on `manulifeglobalprod`), which is Adobe's *tracking code* — normally
-populated *from* a query parameter like `cid`, but that mapping is a report-suite configuration we
-have not seen. Nothing in our data proves the two agree. **New probe section C11** tests it directly,
-and it is deliberately built to expect an asymmetry rather than equality: Adobe **persists** a
-campaign value across the whole visit, while `cid=` appears only on the landing hit. So
-`campaign_only >> cid_only` is the healthy result. The two figures to read are **`cid_only` ≈ 0**
-(nothing carries CID that the column misses) and a high **`agreement_when_both`**.
+**(1) Is `post_campaign` the same thing as `cid=`?** ↺ **ANSWERED 2026-07-30 by probe C11 — and the
+answer is no.** Our C10 candidate is Adobe's `post_campaign` column (**57.03%** populated on
+`manulifeglobalprod`), which is Adobe's *tracking code* — normally populated *from* a query parameter
+like `cid`, but that mapping is a report-suite configuration we have not seen. C11 tested it
+directly, built to expect asymmetry rather than equality: Adobe **persists** a campaign value across
+the whole visit, while `cid=` appears only on the landing hit, so `campaign_only >> cid_only` is the
+healthy result. The two figures to read were `cid_only` ≈ 0 and a high `agreement_when_both`:
+
+| scope | rows | `cid_rows` | `cid_only` | `campaign_only` | `agreement_when_both` |
+|---|---|---|---|---|---|
+| suite (`manulifeglobalprod`) | 6,264,094 | 2,806,754 | 17,275 (0.62%) | 777,524 | **0.7621** |
+| segment scope (ca-retirement) | 1,298,417 | 186,188 | 7,739 (4.16%) | 179,411 | **0.5365** |
+
+**One test passes and the other fails.** `cid_only` is small, so the rule's *direction* is confirmed —
+there is almost no CID traffic the column misses entirely, and `campaign_only >> cid_only` is exactly
+the persistence asymmetry we predicted. But agreement is only **76%** suite-wide and **54%** on the
+segment scope we would actually ship: when both are present they disagree about half the time in the
+scope that matters. `post_campaign` is therefore **not** a usable substitute for the SME's rule, and
+must not be silently swapped in for it. Note the segment scope is the *worse* of the two — the
+opposite of what a "narrower scope is cleaner" intuition would suggest.
+
+Counts only were emitted; no URLs or query-string values leave the probe, and the ADR-0007 privacy
+grep over this section is clean (§7).
 
 **(2) We strip query strings by policy.** This is the harder one. The pipeline projects
 `post_page_url` and the EDA notebooks strip `?`-onward explicitly, on the stated grounds that session
@@ -433,8 +471,10 @@ tokens live in query strings ([15 §](15-consolidated-eda-report.md), and
 [ADR-0007 §](adr/adr-0007-identity-privacy-layer.md)). The SME's rule lives in exactly the substring
 our privacy posture discards. So implementing it means **either** extracting `cid` at ingest and
 keeping only that (not the raw query string), **or** relying on `post_campaign` as the proxy if C11
-vindicates it. The first needs an **ADR-0007 amendment**; the second needs nothing new. That decision
-is tracked in [16](16-e2e-production-blueprint.md)'s backlog.
+vindicates it. ↺ **2026-07-30: C11 did not vindicate it, so the second option is gone.** The
+zero-cost path is closed and the only remaining route is extracting `cid` at ingest — which needs an
+**ADR-0007 amendment**. That decision is tracked in [16](16-e2e-production-blueprint.md)'s backlog and
+is now the *sole* blocker on marketing exclusion.
 
 Until one of those lands, the three public-website metrics count **all** traffic, marketing included —
 which is a documented deviation from the SME's "ideally non-marketing" qualifier, not an oversight.
@@ -475,15 +515,15 @@ Numbered **G1–G6**. Deliberately *not* the `E1–E4` series: that namespace be
 >
 > | Gate | Was | Now |
 > |---|---|---|
-> | **G2** SeriesSpec ratio | nice-to-have; only sign-in completion needed it | 🚩 **CRITICAL** — both new anomaly signals are per-visit ratios and cannot be *declared* without it. The one gate genuinely on the critical path. |
+> | **G2** SeriesSpec ratio | nice-to-have; only sign-in completion needed it | ✅ **CLOSED 2026-07-30** — was 🚩 CRITICAL (both new anomaly signals are per-visit ratios and could not be *declared* without it). Ported; the signals are now blocked on Q6 alone. |
 > | **G3** error columns | actionable, cheapest of three | **MOOT** — Errors was already `0` for the public website in the SME matrix, and the channels that needed it are deferred. Do not widen bronze for eVar181/182/184. |
 > | **G4** channel dimension | blocked on the D8 ruling | **MOOT** — one channel needs no channel dimension. This also means the re-baseline risk it carried disappears. |
 > | **G1, G5, G6** | — | unchanged. G6 (scope tests) matters *more*, since scope is what the SME just changed. |
 
 | # | Gap | Evidence | Fix | Impact if unfixed |
 |---|---|---|---|---|
-| **G1** | ✅ **CLOSED 2026-07-29.** The discovery probe has been run. | [`eda/gwam_channel_discovery.py`](../../eda/gwam_channel_discovery.py) executed on Databricks; export [`gwam_channel_discovery.html`](../../gwam_channel_discovery.html). `generated_at` 2026-07-29T02:00:54, 11 sections, **`skipped == {}`**, `complete: true`. | Done — results folded into §0, §2.1-2.6 and §4. Three pre-probe claims were **corrected**, not just filled in (suite count, delimiter, segment-vs-URL direction). | — |
-| **G2** | **GWAM's `SeriesSpec` cannot express a ratio or carry governance.** The Spark engine supports `ratio`; the GWAM Python spec does not. | [registry.py:68-83](../../detect/registry.py) — `kind` is `count \| rate \| share`; no `numerator`/`denominator`, no `status`/`direction`/`owner`. `CmSeriesSpec` ([cm_registry.py:106-134](../../detect/cm_registry.py)) has all of them. | Port the missing fields from `CmSeriesSpec`. `gold_lib` needs **no** change — [gold_lib.py:168-175](../../databricks/src/gold_lib.py) already resolves ratios by sibling `metric_id`. | "Sign in % rate completion" cannot be declared at all, and GWAM metrics stay ungoverned (no owner/status). |
+| **G1** | ✅ **CLOSED 2026-07-29; extended run landed 2026-07-30.** The discovery probe has been run twice. | [`eda/gwam_channel_discovery.py`](../../eda/gwam_channel_discovery.py) executed on Databricks; export [`gwam_channel_discovery.html`](../../gwam_channel_discovery.html). Current run: `generated_at` **2026-07-30T08:28:42**, **12 sections** (13 SHAREABLE blocks), **`skipped == {}`**, `complete: true`, and **12/12 payloads match the manifest bytes+sha1** per [`scripts/decode_databricks_export.py`](../../scripts/decode_databricks_export.py). Supersedes the 2026-07-29T02:00:54 / 11-section run. | Done — the C1–C10 results are folded into §0, §2.1-2.6 and §4; the C3 re-run, C11 and C12 into §1.1, §2.5.1 and §7. Three pre-probe claims were **corrected**, not just filled in (suite count, delimiter, segment-vs-URL direction). | — |
+| **G2** | ✅ **CLOSED 2026-07-30.** GWAM's `SeriesSpec` could not express a ratio or carry governance; the Spark engine supported `ratio` but the GWAM Python spec did not. | Was [registry.py:68-83](../../detect/registry.py) — `kind` was `count \| rate \| share`, with no `numerator`/`denominator` and no `status`/`direction`/`owner`, while `CmSeriesSpec` ([cm_registry.py:118-145](../../detect/cm_registry.py)) had all of them. | Done. The five fields are ported from `CmSeriesSpec`; [kpis.py](../../detect/kpis.py) gained the two-pass ratio arm it was missing (its `else` raised `ValueError`, so a declared ratio would have built in Spark and crashed in pandas); [test_gold_parity.py](../../tests/test_gold_parity.py) pins pandas/Spark agreement including a zero-denominator day. `gold_lib` needed **no** change, as predicted — [gold_lib.py:168-175](../../databricks/src/gold_lib.py) already resolved ratios by sibling `metric_id`. | — (was: "Sign in % rate completion" undeclarable, and GWAM metrics ungoverned). |
 | **G3** | **No error or sign-in columns reach bronze/silver.** Now **actionable** — C5/C6 determined which columns are worth carrying. | [bronze_columns.py](../../databricks/conf/bronze_columns.py) — `DETECTOR_COLUMNS` / `SILVER_COLUMNS` carry no eVar181-184, eVar122, eVar135. | Add **`post_evar181`, `post_evar182`, `post_evar184`** — the three populated at scale on the Canada channels (12.2M / 16.4M / 14.4M rows on `manugrs`; 37.6M on mobile for eVar184). **Do NOT add `post_evar183`** (0.00% on `manugrs`, 0.14% on mobile — a John Hancock field) **or eVar122/eVar135** (0% on both Canada suites). Carrying any of those three costs bronze width for near-guaranteed nulls. | Errors and Sign-in Errors are unbuildable regardless of any SME ruling. |
 | **G4** | **Scope has no channel dimension.** `SCOPE_RSID` is a single string and the predicate is one rsid AND a URL match. | [settings.py:19](../../databricks/conf/settings.py), [01_bronze_ingest.py:62-101](../../databricks/src/01_bronze_ingest.py). | Per-channel scope config (rsid + its own segment predicate), and a `channel` column carried to gold so metrics break down by it. **Blocked on the D8 ruling** — do not build until §4 item 1 lands. | A four-channel product cannot be expressed. Note this is also the change that re-baselines everything (§2.2). |
 | **G5** | **GWAM has no registry pin or drift test.** CoverMe has both. | [test_registry_yaml.py](../../tests/test_registry_yaml.py) covers only the three CoverMe sheets; `detect/registry.py` has no `REGISTRY_VERSION`. | Pin GWAM's binding to the YAML and add a drift guard, mirroring `test_series_governance_matches_yaml`. Seeded 2026-07-28 by `test_gwam_channel_seed_counts`. | GWAM metric definitions can drift from the governed registry silently — the exact failure the CoverMe test was written to prevent. |
@@ -554,6 +594,21 @@ this table is the technical agenda behind it.
 > access request. Step D below is no longer "nothing here is startable today" — steps 1–3 are all
 > startable now.
 
+> **↺ 2026-07-30 — steps 1, 2 and 5 have resolved.** Against the sequence above:
+>
+> 1. ✅ **Done.** The probe ran 2026-07-30T08:28:42 — 13 blocks / 12 sections, verified. It did gate
+>    the thresholds, and it also **falsified** two assumptions (§7 item 6).
+> 2. ✅ **Done.** G2 is closed — the fields are ported, plus the `kpis.py` ratio arm that the original
+>    scoping missed and parity coverage for it.
+> 3. ⬜ **G6 unchanged** and now the *only* engineering item left. Still do it before touching scope.
+> 4. ⬜ **Item 3 (URL vs segment) has its numbers**: segment scope *loses* 64,079 rows and gains 1,352
+>    — a net ~4.5% loss. That is the decision input; the decision itself is still Q3.
+> 5. 🔴 **Changed shape.** "Only after C11" is satisfied, but C11 **rejected** `post_campaign`, so the
+>    ADR-0007 amendment is no longer one of two options — it is the only one.
+>
+> Net: the sequence is now **G6, then two SME answers (Q3b, Q6), then the ADR-0007 decision.** Nothing
+> engineering-side is blocked on anyone.
+
 **A. Close what data can close — ✅ done 2026-07-29.** G1 ran clean; §0 and §2.1-2.6 now carry results
 rather than ⏳ markers, and three pre-probe claims were corrected. What remains in §4 is there because
 **no query can settle it**, not because we haven't looked.
@@ -564,8 +619,8 @@ scope change, because it re-baselines everything in the wrong direction. Item **
 pole**: `manucustomer.prod` access is procurement-shaped, not engineering-shaped, and nothing about
 the ManulifeID channel can start until it lands.
 
-**C. Engineering, in dependency order.** G2 (SeriesSpec ratio + governance) and G6 (scope tests) are
-safe to do immediately — neither depends on a ruling. **G3 is now also unblocked**: C5/C6 determined
+**C. Engineering, in dependency order.** ↺ **G2 (SeriesSpec ratio + governance) is DONE, 2026-07-30.**
+G6 (scope tests) remains safe to do immediately — it depends on no ruling. **G3 is now also unblocked**: C5/C6 determined
 exactly which columns to carry (eVar181/182/184 in; **eVar183 OUT** — John Hancock field per the G3
 gate above and §2.4; eVar122/135 out — ↺ corrected 2026-07-29, this line previously listed eVar183
 as in), and it is the cheapest of the three. G4 follows item 1. G5 follows the GWAM registry entries being promoted past `candidate`.
@@ -631,6 +686,28 @@ those three, plus G2/G3/G6, which are all now unblocked and independent of any r
 > watch is no longer coverage but **baseline thinness**: 138 days on the only suite in scope, and any
 > scope flip consumes that margin.
 
+> ### ↺ Revised bottom line (2026-07-30, post-extended-probe)
+>
+> The probe run and the engineering gate are both done. **Everything still open is an SME answer** —
+> there is no engineering work left on the critical path, which is a first for this programme.
+>
+> | Area | Status |
+> |---|---|
+> | Scope definition | ✅ **Settled** — unchanged |
+> | Page Views / Visits / Visitors | ✅ **Engine ready today** — unchanged |
+> | Marketing exclusion | 🔴 **Harder than it looked** — was 🟡. C11 **rejected** `post_campaign` as the proxy (agreement 0.762 suite / 0.537 segment), so the zero-cost path is gone and an **ADR-0007 amendment is the only route** (§2.5.1) |
+> | Brand-variant scope (Q3b) | 🚩 **Open, now sized** — `wealth-ca` +250,355 rows, `pvt-wealth` +9,690, **zero overlap** with ca-retirement, so both are purely additive (§7 item 6) |
+> | Page-view numerator (Q6) | 🚩 **Open, now priced** — the two bases give 2.885 vs 1.343 on this scope; the "consistently 2" signal is meaningful under one and not the other |
+> | New anomaly signals | 🟡 **Blocked on Q6 only** — was 🔴 blocked on G2. ⚠ C12 found the SME's literal "< 1" test **never fires** (88-day floor 1.2236); `share_pv_eq_0` = 3.25% is the detectable quantity (§1.1) |
+> | Baseline history | 🟡 **138 days** — unchanged |
+> | Governance | 🟡 v0.6.0 — 5 candidate / 14 deferred; pin still open (G5) |
+>
+> **G2 is closed**, so the "one engineering gate, one probe run, two SME answers" of 2026-07-29 is now
+> **two SME answers** (Q3b, Q6) plus one architectural decision (the ADR-0007 amendment). The probe
+> also did something better than fill blanks: it **falsified two working assumptions** — that
+> `post_campaign` could stand in for CID, and that the SME's "< 1" test would fire at all. Both would
+> have shipped as silent no-ops. Baseline thinness remains the thing to watch.
+
 ---
 
 ## 7. Verification / how to confirm this is done
@@ -649,38 +726,50 @@ those three, plus G2/G3/G6, which are all now unblocked and independent of any r
 3. **D8 is still in force in code.** `git diff databricks/conf/settings.py` is empty; `SCOPE_LOGIN_HOST_EXCLUDE`
    is unchanged. This document flags the conflict; it does not resolve it.
 4. **Registry seeded, tests green.** `pytest tests/ -q` passes, including `test_gwam_channel_seed_counts`
-   (↺ **19 entries at v0.5.0** — 5 candidate + 14 deferred, partition asserted by
-   `test_gwam_status_partition`) and the untouched `test_gold_parity` (35 GWAM series, Spark↔pandas).
+   (↺ **19 entries at v0.6.0** — 5 candidate + 14 deferred, partition asserted by
+   `test_gwam_status_partition`) and `test_gold_parity` (35 GWAM series, Spark↔pandas; ↺ extended
+   2026-07-30 with the G2 ratio cases — no GWAM ratio is *declared*, so the 35-series parity is
+   unchanged).
 5. **Doc 20 reads as an email.** No repo jargon, no unexplained eVar numbers, blockers first.
 
-### ↺ Added 2026-07-29 — verifying the single-channel revision
+### ↺ Added 2026-07-29 — verifying the single-channel revision — ✅ **ALL PASSED 2026-07-30**
 
-6. **The extended probe run.** Re-run [`gwam_channel_discovery.py`](../../eda/gwam_channel_discovery.py)
-   on Databricks and confirm **13 `BEGIN SHAREABLE` blocks** — which the manifest reports as
-   **`n_sections: 12`**, because `c_run_manifest` counts `RESULTS` before emitting itself (the
-   11-block run above reported `n_sections: 10` the same way; asserting `n_sections == 13` reads as
-   a vanished section when nothing is wrong) — plus `skipped == {}` and `complete: true`. Verify with
-   `python scripts/decode_databricks_export.py <export.html> --expect-sections 12`, which also
-   re-hashes every block against the manifest and flags stdout truncation. Then read, in order:
-   - `evar105_census.brand_variant_sizing` → the Q3b numbers. Expect `overlap_with_ca_retirement` ≈ 0
-     on both variants; a large overlap would mean they are *already* inside our predicate and Q3b is
-     moot.
-   - `evar105_census.scope_sizing_on_pipeline_rsid.segment_only` → the corrected GAIN figure. On a
-     web-only suite the null-guard fix should move it little; a large jump would mean
-     `manulifeglobalprod` carries more URL-less hits than C2's 1.000 URL rate implied.
-   - `cid_vs_campaign` → `cid_only` and `agreement_when_both`. These decide whether the marketing rule
-     can use `post_campaign` or needs the raw query string (§2.5.1).
-   - `visit_shape.suite_all.share_pv_eq_0` and `.share_pv_eq_2`, plus the `daily` series → the
-     thresholds for the two new signals, and whether the "consistently 2" pattern is actually present.
-   - `visit_shape.visitor_grain` → how far ECID and visid-pair visitor counts diverge day to day.
-7. **The probe's new sections respect the privacy posture.** `cid_vs_campaign` emits counts only — grep
-   its payload for `http` and for any query-string value; both must come back empty. It reads raw URLs
-   transiently but nothing raw reaches the shareable block. Mechanically:
-   `python scripts/decode_databricks_export.py <export.html> --grep http --grep-sections cid_vs_campaign`
-   (exits non-zero on a hit).
-8. **No production code moved.** `git diff databricks/ detect/registry.py` shows nothing but comment and
-   version-pin changes. The ruling changed scope *documentation* and the registry; bronze/silver/gold
-   logic and the GWAM detector are untouched in this pass by design.
+6. **The extended probe run.** ✅ **Ran 2026-07-30T08:28:42.** [`gwam_channel_discovery.py`](../../eda/gwam_channel_discovery.py)
+   produced **13 `BEGIN SHAREABLE` blocks** — which the manifest reports as **`n_sections: 12`**,
+   because `c_run_manifest` counts `RESULTS` before emitting itself (the 11-block run above reported
+   `n_sections: 10` the same way; asserting `n_sections == 13` reads as a vanished section when
+   nothing is wrong) — plus `skipped == {}`, `complete: true`, and **12/12 payloads matching the
+   manifest bytes+sha1**. Reproduce with:
+   `python scripts/decode_databricks_export.py gwam_channel_discovery.html --expect-sections 12 --expect-blocks 13`.
+   What each section said:
+   - `evar105_census.brand_variant_sizing` → **Q3b sized.** `wealth-ca` 250,355 rows, `pvt-wealth`
+     9,690, against ca-retirement's 1,298,417. `overlap_with_ca_retirement` is **exactly 0** on both,
+     the expected result — they are additive (+19.3% / +0.7%), not already inside our predicate, so
+     Q3b is live rather than moot. Both are present in the data, correcting the earlier assumption
+     that they were unseen.
+   - `evar105_census.scope_sizing_on_pipeline_rsid` → segment 1,298,417 vs URL-broad 1,415,399;
+     `segment_only` **1,352** (the GAIN) and `url_only` **64,079** (the LOSS). The null-guard fix
+     moved the gain little, as predicted for a web-only suite — switching to segment scope is a net
+     **loss** of ~4.5% of traffic, which is the whole segment-vs-URL trade now that the other three
+     channels are deferred (Q3).
+   - `cid_vs_campaign` → `cid_only` small but `agreement_when_both` only **0.762 / 0.537**.
+     `post_campaign` is **rejected** as the marketing proxy; the rule needs the raw query string and
+     therefore an ADR-0007 amendment (§2.5.1).
+   - `visit_shape` → `share_pv_eq_0` **3.25%**, `share_pv_eq_2` **11.67%** (daily cv 0.122). The
+     "consistently 2" pattern is present but as an 11.7% point mass, not a dominant one; and the
+     `pv_per_visit` floor of 1.2236 over 88 days means the SME's literal "< 1" test never fires (§1.1).
+   - `visit_shape.visitor_grain` → ECID and visid-pair diverge on 14 of 88 days, by at most 15
+     visitors (0.068%). Negligible; the grain question is settled (§1.1).
+7. **The probe's new sections respect the privacy posture.** ✅ **Verified clean.** `cid_vs_campaign`
+   emits counts only; it reads raw URLs transiently but nothing raw reaches the shareable block.
+   `python scripts/decode_databricks_export.py gwam_channel_discovery.html --grep http --grep-sections cid_vs_campaign`
+   returns `grep: 'http' clean across 1 section(s)` and exits zero.
+8. **No pipeline logic moved.** ↺ **Amended 2026-07-30.** The 2026-07-29 pass moved no code at all.
+   The 2026-07-30 pass closes G2, so `detect/registry.py` (five new `SeriesSpec` fields) and
+   `detect/kpis.py` (the ratio arm) *did* change — but both are additive and inert: no GWAM series
+   declares `kind=ratio`, every new field is defaulted, and `test_gold_parity`'s 35-series comparison
+   is byte-identical before and after. `git diff databricks/` is still empty; bronze/silver/gold and
+   the GWAM detector remain untouched by design.
 
 ---
 
@@ -692,3 +781,4 @@ those three, plus G2/G3/G6, which are all now unblocked and independent of any r
 | 2026-07-29 (early) | Probe C1–C10 run clean → **G1 closed**. Three pre-probe claims corrected: three of four suites located (not zero), delimiter is `":"` not `" : "`, and segment scope is *narrower* than URL scope (so it closes no French gap). Errors/Sign-in Errors reclassified from "nothing" to buildable. |
 | 2026-07-29 (audit) | C3 null-guard bug found — `segment_only` (+1,436) is an undercount for NULL-URL rows; code fixed, figures flagged pending re-run. |
 | **2026-07-29 (later, SME ruling)** | **Scope narrowed to the Public Website channel only.** D8 conflict dissolved (not resolved); `manucustomer.prod` access request moot; segment-scope justification collapsed; G3/G4 moot and **G2 promoted to critical**; Q5 answered (marketing = CID) with two new implementation gaps; **new §1.1** (three SME anomaly signals) and **new §2.5.1** (the CID rule); **new Q3b** (`wealth-ca` / `pvt-wealth`); Q6 escalated to blocking. Registry → **v0.5.0** (5 candidate / 14 deferred + 2 new signal seeds); probe gains C3 variant sizing, **C11** and **C12**. |
+| **2026-07-30 (extended probe + G2)** | **The extended probe ran** (`generated_at` 2026-07-30T08:28:42, 12 sections, `complete: true`, 12/12 payloads verified against the manifest, privacy grep clean) and its results are folded in. **Three findings change the plan:** C11 **rejected** `post_campaign` as the CID proxy (agreement 0.762 suite / **0.537** segment), leaving an ADR-0007 amendment as the only route to marketing exclusion; C12 showed the SME's literal "page views per visit **< 1**" test **never fires** (88-day floor 1.2236, so the signal is inert as specified — `share_pv_eq_0` = 3.25% is the detectable quantity); and C12's `visitor_grain` **settled** the ECID-vs-visid-pair divergence as negligible (≤15 visitors/day, 0.068%). C3 **sized** Q3b — `wealth-ca` and `pvt-wealth` are additive with **zero** overlap. **G2 CLOSED**: `SeriesSpec` gains `numerator`/`denominator` + governance, `kpis.py` gains the ratio arm it was missing, `test_gold_parity` gains ratio + zero-denominator cases. Registry → **v0.6.0** (no entry added, removed, or promoted — evidence replacing expectation). Both signals now blocked on **Q6 alone**. |

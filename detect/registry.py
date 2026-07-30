@@ -67,18 +67,31 @@ def slug(value: str) -> str:
 
 @dataclass(frozen=True)
 class SeriesSpec:
-    """One daily KPI time series. kind drives both construction and transform."""
+    """One daily KPI time series. kind drives both construction and transform.
+
+    kind=ratio references two sibling metric_ids (numerator/denominator), mirroring
+    CmSeriesSpec. Both builders resolve it in a second pass -- kpis.build_kpis and
+    gold_lib.build_kpis_spark -- and yield 0.0 where the denominator is 0.
+    """
     metric_id: str
-    kind: str            # count | rate | share
+    kind: str            # count | rate | share | ratio
     source: str          # hits | visits | visitors | event | pagename | language
     event_id: str | None = None
     dim: str | None = None
     dim_value: str | None = None
+    numerator: str | None = None
+    denominator: str | None = None
+    # Governance (metric-registry.yaml v0.6.0): status in {active, candidate, deferred},
+    # direction in {higher_is_good, higher_is_bad, context_dependent}. Ported from
+    # CmSeriesSpec 2026-07-30 (doc 19 G2); GWAM entries are all owner: TBD today.
+    status: str = "candidate"
+    direction: str = "context_dependent"
+    owner: str = "TBD"
 
     @property
     def log_transform(self) -> bool:
         # Counts are modelled in log space (multiplicative anomalies -> additive residuals);
-        # rates and shares are already on [0, 1] and used raw.
+        # rates, shares and ratios are already on a bounded scale and used raw.
         return self.kind == "count"
 
 
