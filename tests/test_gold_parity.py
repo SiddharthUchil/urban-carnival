@@ -28,7 +28,7 @@ sys.path.insert(0, str(REPO / "databricks" / "src"))
 
 pytest.importorskip("pyspark")
 
-from registry import SERIES, EVENT_IDS  # noqa: E402
+from registry import SERIES, EVENT_IDS, SeriesSpec  # noqa: E402
 from kpis import build_kpis  # noqa: E402
 import gold_lib  # noqa: E402
 import silver_lib as sl  # noqa: E402
@@ -99,6 +99,78 @@ def test_gold_spark_matches_pandas(spark, tmp_path):
         if not np.allclose(a, b, rtol=0.0, atol=atol, equal_nan=True):
             mism[m] = float(np.nanmax(np.abs(a - b)))
     assert not mism, f"series mismatch (metric -> max abs diff): {mism}"
+
+
+def _ratio_fixture(dst: Path):
+    """Two populated days with a deliberate calendar gap between them.
+
+    The gap day is the point of the test: both builders fill it from the gap-free
+    calendar, so visits_total is 0 there and the ratio must resolve to 0.0 rather
+    than NaN (pandas 0/0) or inf (pandas n/0).
+    """
+    day1, day3 = pd.Timestamp("2026-01-01"), pd.Timestamp("2026-01-03")
+    rows = [
+        # (date, visid_high, visid_low, visit_num) -- day1: 3 hits over 2 visits,
+        # day3: 2 hits over 1 visit.
+        (day1, "h1", "l1", 1), (day1, "h1", "l1", 1), (day1, "h1", "l1", 2),
+        (day3, "h2", "l2", 1), (day3, "h2", "l2", 1),
+    ]
+    tbl = pa.table({
+        "process_date": pa.array([r[0] for r in rows], pa.timestamp("us")),
+        "post_event_list": pa.array(["10036"] * len(rows)),
+        "post_pagename": pa.array(["p"] * len(rows)),
+        "language": pa.array(["45"] * len(rows)),
+        "mcvisid": pa.array([f"{r[1]}{r[2]}" for r in rows]),
+        "post_visid_high": pa.array([r[1] for r in rows]),
+        "post_visid_low": pa.array([r[2] for r in rows]),
+        "visit_num": pa.array([r[3] for r in rows], pa.int64()),
+    })
+    pq.write_table(tbl, dst)
+
+
+def test_ratio_parity_and_zero_denominator(spark, tmp_path):
+    """G2: kind=ratio builds identically in pandas and Spark, incl. a 0 denominator.
+
+    Uses a local spec list rather than SERIES -- GWAM declares no ratio until doc 20 Q6
+    settles the page-view basis, but the two builders must agree the moment one is added.
+    """
+    series = [
+        SeriesSpec("hits_total", "count", "hits"),
+        SeriesSpec("visits_total", "count", "visits"),
+        # source is unused for kind=ratio; both builders resolve by sibling metric_id.
+        SeriesSpec("pv_per_visit", "ratio", "visits",
+                   numerator="hits_total", denominator="visits_total"),
+    ]
+    staged = tmp_path / "ratio_fixture.parquet"
+    _ratio_fixture(staged)
+
+    pdf = build_kpis(staged, series=series).sort_values("process_date").reset_index(drop=True)
+    rows = gold_lib.build_kpis_spark(spark.read.parquet(str(staged)),
+                                     EVENT_IDS, series).collect()
+    wide = (pd.DataFrame([r.asDict() for r in rows])
+            .sort_values("process_date").reset_index(drop=True))
+
+    assert len(pdf) == len(wide) == 3, "gap-free calendar should yield 3 days"
+    for m in ("hits_total", "visits_total", "pv_per_visit"):
+        assert np.allclose(pdf[m].to_numpy(dtype=float), wide[m].to_numpy(dtype=float),
+                           rtol=0.0, atol=1e-9), f"{m} differs between pandas and spark"
+
+    # day1 = 3 hits / 2 visits, gap day = 0/0 -> 0.0, day3 = 2 hits / 1 visit.
+    assert pdf["pv_per_visit"].tolist() == [1.5, 0.0, 2.0]
+    assert np.isfinite(pdf["pv_per_visit"]).all(), "ratio produced NaN or inf"
+    assert np.isfinite(wide["pv_per_visit"]).all(), "spark ratio produced NaN or inf"
+
+
+def test_ratio_unknown_sibling_raises(tmp_path):
+    """A ratio referencing an undeclared metric_id fails loudly in the pandas builder."""
+    staged = tmp_path / "ratio_fixture.parquet"
+    _ratio_fixture(staged)
+    series = [
+        SeriesSpec("hits_total", "count", "hits"),
+        SeriesSpec("bad", "ratio", "visits", numerator="hits_total", denominator="nope"),
+    ]
+    with pytest.raises(ValueError, match="references unknown metric_ids"):
+        build_kpis(staged, series=series)
 
 
 def test_event_list_normalization(spark, tmp_path):

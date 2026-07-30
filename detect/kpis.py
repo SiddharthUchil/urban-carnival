@@ -53,8 +53,12 @@ def build_kpis(parquet_path: Path, series=SERIES) -> pd.DataFrame:
     visitors = df.groupby("date")["mcvisid"].nunique().reindex(full_index, fill_value=0)
     ev_counts = _event_counts(df, full_index)
 
-    out = pd.DataFrame(index=full_index)
+    # Two passes: ratios reference sibling metric expressions, so build those first
+    # (mirrors gold_lib.build_kpis_spark).
+    exprs: dict[str, pd.Series] = {}
     for spec in series:
+        if spec.kind == "ratio":
+            continue
         if spec.source == "hits":
             col = hits
         elif spec.source == "visits":
@@ -70,7 +74,22 @@ def build_kpis(parquet_path: Path, series=SERIES) -> pd.DataFrame:
             col = (cnt / hits).fillna(0.0)
         else:
             raise ValueError(f"unhandled series spec: {spec}")
-        out[spec.metric_id] = col
+        exprs[spec.metric_id] = col
+    for spec in series:
+        if spec.kind != "ratio":
+            continue
+        if spec.numerator not in exprs or spec.denominator not in exprs:
+            raise ValueError(f"ratio {spec.metric_id} references unknown metric_ids: "
+                             f"{spec.numerator} / {spec.denominator}")
+        num, den = exprs[spec.numerator], exprs[spec.denominator]
+        # .where(den > 0, 0.0) rather than fillna: a 0 denominator with a non-zero
+        # numerator divides to inf, which fillna would not catch. Matches gold_lib's
+        # when(den > 0, ...).otherwise(0.0) -- never NULL/inf.
+        exprs[spec.metric_id] = num.div(den).where(den > 0, 0.0)
+
+    out = pd.DataFrame(index=full_index)
+    for spec in series:                      # series order == gold_lib's column order
+        out[spec.metric_id] = exprs[spec.metric_id]
 
     out.index.name = "process_date"
     return out.reset_index()

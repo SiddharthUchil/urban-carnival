@@ -1,6 +1,6 @@
 # GMAI-Pulse Phase-1 Metric Registry
 # ------------------------------------------------------------------
-# version: 0.5.0 (2026-07-29)
+# version: 0.6.0 (2026-07-30)
 # generated_from: new_data/data_profile_summary.json (profiler v0.1.0, run 2026-07-02)
 # seed_source: CoverMe data dictionary rows where Notes == "Anomaly Detection"
 #              -> confirmed counts: 9 (data_feed_columns) + 8 (post_eVar) + 12 (post_event_list) = 29
@@ -14,8 +14,22 @@
 # 2026-07-29 rulings to meta.sme_confirmations without touching a single series). The GWAM
 # entries are still NOT confirmed -- they remain a transcription of a scope table, and every
 # one of them is `owner: TBD`. Nothing in `gwam_channel_metrics` may be promoted to `active`
-# before (a) the extended discovery probe runs (eda/gwam_channel_discovery.py — C1-C10 ran
-# clean 2026-07-29; C3 re-run + new C11/C12 pending) and (b) doc 20 Q3b and Q6 are answered.
+# before doc 20 Q3b and Q6 are answered. ↺ 2026-07-30: the probe half of that condition is now
+# DISCHARGED — the extended run (eda/gwam_channel_discovery.py, generated_at 2026-07-30T08:28:42)
+# returned all 12 sections complete, skipped == {}, 12/12 payloads matching the manifest
+# bytes+sha1. What remains is purely SME: Q3b and Q6.
+#
+# v0.6.0 records the 2026-07-30 extended-probe evidence (C3 re-run, C11, C12) and closes doc 19
+# gate G2 in code. No entry is added, removed, or promoted — every change below is evidence
+# replacing an expectation:
+#   - gwam_pw_visitors: the ⚠ ECID-vs-visid-pair grain divergence is MEASURED and negligible
+#     (C12 visitor_grain) — resolved, no longer a risk to settle.
+#   - the two anomaly-signal seeds: G2 drops off their blocker list (SeriesSpec now carries
+#     numerator/denominator + governance), leaving Q6. C12 baselines attached so thresholds
+#     get set from data.
+#   - brand predicate: still HELD, but wealth-ca / pvt-wealth are now SIZED (C3).
+#   - Q5's "pending verification that post_campaign is equivalent" is ANSWERED, and the answer
+#     is NO — see the marketing note on gwam_pw_page_views.
 #
 # v0.5.0 records the 2026-07-29 SME updates:
 #   GWAM (Abhisekh) — alerting scope = Public Website ONLY. The 3 public_website entries stay
@@ -46,8 +60,8 @@
 # ------------------------------------------------------------------
 
 meta:
-  version: 0.5.0
-  updated: 2026-07-29
+  version: 0.6.0
+  updated: 2026-07-30
   default_grain: daily          # hourly reserved — enable only after >=30-day feed confirms volume
   domains: [coverme, gwam_retirement]
   sme_confirmations:            # rulings from Kerrian (Business SME), email 2026-07-27; ↺ extended 2026-07-29
@@ -559,9 +573,13 @@ gwam_channel_metrics:   # 19 entries (3 traffic x 4 channels + 3 errors + 2 sign
   # metrics count ALL public-website traffic, marketing included.
   #
   # BRAND PREDICATE — HELD at the parts-match below. The 2026-07-29 examples add
-  # "Manulife: GWAM: wealth-ca" and "Manulife: GWAM : pvt-wealth"; both are unseen in our data
-  # and presumably separate lines of business, so widening the predicate is doc 20 Q3b, not an
-  # implementation detail. Probe C3 sizes them.
+  # "Manulife: GWAM: wealth-ca" and "Manulife: GWAM : pvt-wealth"; both are presumably separate
+  # lines of business, so widening the predicate is doc 20 Q3b, not an implementation detail.
+  # ↺ 2026-07-30 probe C3 SIZED them (they are present in the data, not unseen as first assumed):
+  # wealth-ca = 250,355 rows and pvt-wealth = 9,690 rows in the 90-day window, against
+  # ca-retirement's 1,298,417. Decisive detail: overlap_with_ca_retirement is EXACTLY 0 for both,
+  # so each is purely ADDITIVE (+19.3% / +0.7%) — including them cannot double-count, and
+  # excluding them silently drops that traffic. Sizing is not an answer: STILL HELD pending Q3b.
   - metric_id: gwam_pw_page_views
     name: Page Views — Public Website
     domain: gwam_retirement
@@ -574,11 +592,22 @@ gwam_channel_metrics:   # 19 entries (3 traffic x 4 channels + 3 errors + 2 sign
     source_sheet: sme_scope_table
     source_ref: Page Views (count)
     decode_rule: hit-count          # ⚠ we count hits; SME may mean Adobe page views (doc 20 Q6 — now ESCALATED,
-                                    # since the two anomaly-signal seeds below divide by this numerator)
+                                    # since the two anomaly-signal seeds below divide by this numerator).
+                                    # ↺ 2026-07-30 probe C12 PRICED the choice: on this scope the two bases give
+                                    # 2.885 (hits/visit, derived) vs 1.343 (Adobe page-view marker). The SME's
+                                    # "consistently 2" signal is meaningful under one and not the other, so Q6 is
+                                    # not a labelling question — it decides whether dup2 can fire at all.
     grain: daily
     direction: context_dependent
     owner: TBD
-    status: candidate               # marketing rule ANSWERED 2026-07-29 (CID) but not yet implementable — see block note
+    status: candidate               # marketing rule ANSWERED 2026-07-29 (CID) but not yet implementable.
+                                    # ↺ 2026-07-30 probe C11 tested post_campaign as the proxy and it FAILS:
+                                    # cid_only is near-zero as expected (17,275 rows = 0.62% suite / 7,739 = 4.16%
+                                    # segment, so the rule direction holds), but agreement_when_both is only 0.762
+                                    # suite-wide and 0.537 on the segment scope we would ship. post_campaign is
+                                    # therefore NOT equivalent to CID and must not be substituted for it. The only
+                                    # remaining path is parsing cid= from the URL, which ADR-0007 blocks (bronze
+                                    # projects post_page_url and strips query strings) — needs an ADR amendment.
   - metric_id: gwam_pw_visits
     name: Visits — Public Website
     domain: gwam_retirement
@@ -603,9 +632,13 @@ gwam_channel_metrics:   # 19 entries (3 traffic x 4 channels + 3 errors + 2 sign
     decode_rule: visitor-distinct   # ↺ 2026-07-29 the SME names "Unique ECID - unique visitor" an anomaly signal in its
                                     # own right, which this entry already covers: gold resolves visitor-distinct to
                                     # countDistinct(mcvisid) (databricks/src/gold_lib.py:94) and mcvisid IS the ECID.
-                                    # ⚠ GRAIN DIVERGENCE to settle: the EDA notebooks count visitors as the
-                                    # post_visid_high:post_visid_low pair instead (gwam_canada_retirement_eda.py:1320),
-                                    # so EDA and gold can disagree on the same day. Probe C12 quantifies the gap daily.
+                                    # ✅ GRAIN DIVERGENCE RESOLVED 2026-07-30 (probe C12 visitor_grain). The EDA
+                                    # notebooks count the post_visid_high:post_visid_low pair instead
+                                    # (gwam_canada_retirement_eda.py:1320); measured over 88 days the two agree on
+                                    # 74 of them, and on the 14 that differ the gap is at most 15 visitors
+                                    # (max 0.068%, mean 0.0039%). ECID never EXCEEDS the pair, which is the expected
+                                    # direction — a pair can split one ECID, not merge two. No re-baseline risk and
+                                    # no reconciliation work: either grain answers the SME's signal.
     grain: daily
     direction: context_dependent
     owner: TBD
@@ -614,10 +647,16 @@ gwam_channel_metrics:   # 19 entries (3 traffic x 4 channels + 3 errors + 2 sign
   # ---- Public Website anomaly signals — SME suggestions, 2026-07-29 (Abhisekh) ----
   # Two of his three suggestions land here as new seeds; the third (unique ECID visitors) is
   # already covered by gwam_pw_visitors above, see its decode_rule note.
-  # BOTH are blocked on doc 19 G2 — detect/registry.py:68-83 SeriesSpec has no numerator/
-  # denominator fields, so a per-visit ratio cannot be DECLARED even though gold_lib supports
-  # the arithmetic — and on doc 20 Q6, which defines the page-view numerator. Probe C12
-  # profiles the distributions first so thresholds are set from data, not from a guess.
+  # ✅ G2 CLOSED 2026-07-30 — detect/registry.py SeriesSpec now carries numerator/denominator
+  # plus status/direction/owner, detect/kpis.py resolves kind=ratio in a second pass matching
+  # gold_lib, and tests/test_gold_parity.py pins pandas/Spark agreement including the
+  # zero-denominator day. A per-visit ratio is now DECLARABLE.
+  # BOTH remain blocked on doc 20 Q6 alone, which defines the page-view numerator — an SME
+  # answer, not engineering. Probe C12 profiled the distributions first so thresholds are set
+  # from data rather than from a guess; the baselines are recorded on each entry below.
+  # Baselines are 88 days, rsid manulifeglobalprod, window 2026-05-01..2026-07-30, and are
+  # measured on the ADOBE PAGE-VIEW basis (try_cast(post_page_event as int) == 0). If Q6 comes
+  # back "every hit" instead, every number below is superseded — see gwam_pw_page_views.
   - metric_id: gwam_pw_pv_per_visit
     name: Page Views per Visit — Public Website
     domain: gwam_retirement
@@ -629,11 +668,19 @@ gwam_channel_metrics:   # 19 entries (3 traffic x 4 channels + 3 errors + 2 sign
     decode_rule: ratio              # page_views / visits. A daily ratio can only fall below 1 if visits exist with
                                     # zero page views, so the SME's "< 1" test is really a zero-page-view-visit
                                     # detector — C12 reports that share directly (share_pv_eq_0).
+                                    # ↺ 2026-07-30 C12 BASELINE: pv_per_visit = 1.3219 suite / 1.3429 segment;
+                                    # daily min 1.2236, max 1.5571. ⚠ THE LITERAL "< 1" TEST NEVER FIRED — on ZERO
+                                    # of 88 days did the daily ratio reach 1.0, and the floor sits 22% above it.
+                                    # As specified the signal is inert at daily grain; it is diluted because the
+                                    # zero-page-view visits are averaged against the 78.8% of visits with exactly 1.
+                                    # The quantity that IS detectable is share_pv_eq_0 = 3.25% suite / 2.38% segment,
+                                    # which is a level worth alerting on and moves independently of the mean.
+                                    # Do not set a "< 1" threshold; see doc 20 Q6 for the question put to the SME.
     grain: daily
     direction: context_dependent    # the SME flags the LOW side; the enum has no lower_is_bad, and a spike is
                                     # independently interesting, so context_dependent is the honest reading
     owner: TBD
-    status: candidate               # blocked on G2 + Q6
+    status: candidate               # blocked on Q6 (G2 closed 2026-07-30)
   - metric_id: gwam_pw_pv_per_visit_dup2
     name: Exactly-2-Page-View Visit Share — Public Website (duplication indicator)
     domain: gwam_retirement
@@ -645,10 +692,16 @@ gwam_channel_metrics:   # 19 entries (3 traffic x 4 channels + 3 errors + 2 sign
     decode_rule: point-mass-share   # share of visits with EXACTLY 2 page views. The SME's signal is CONSISTENCY at 2,
                                     # not the level — i.e. an unusually stable point mass, which no current scorer
                                     # expresses (see section header). Needs a new rule kind, not a new threshold.
+                                    # ↺ 2026-07-30 C12 BASELINE: share_pv_eq_2 = 11.67% suite / 12.66% segment.
+                                    # Because the signal is about STABILITY, the dispersion is the figure that
+                                    # matters, not the level: daily range 0.0768–0.1350, sd 0.0140, cv 0.122 (suite);
+                                    # cv 0.099 (segment). That is the normal wobble a "suspiciously steady" detector
+                                    # would have to fire BELOW, so it is the baseline to calibrate against.
+                                    # Full bucket mix (suite): 0pv 3.3% / 1pv 78.8% / 2pv 11.7% / 3-5pv 5.2% / 6+ 1.1%.
     grain: daily
     direction: higher_is_bad
     owner: TBD
-    status: candidate               # blocked on G2 + Q6 + a new detector kind
+    status: candidate               # blocked on Q6 + a new detector kind (G2 closed 2026-07-30)
 
   # ---- Web Member — rsid manugrs ("GRS+", data-confirmed; SME to ratify); scope = eVar185 platform tag ----
   # ↺ DEFERRED 2026-07-29 — the SME (Abhisekh) narrowed the alerting scope to the Public Website
