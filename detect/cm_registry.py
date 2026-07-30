@@ -1,7 +1,7 @@
 """CoverMe metric registry for the GMAI-Pulse gold KPI build (config-not-code).
 
-Python stand-in for research/claude/metric-registry.yaml **v0.4.0** (CoverMe entries
-SME-confirmed at v0.3.0, 2026-07-27),
+Python stand-in for research/claude/metric-registry.yaml **v0.5.0** (CoverMe entries
+SME-confirmed at v0.3.0, 2026-07-27; language rule ratified 2026-07-29),
 which remains the governed source of truth -- metric_ids for the 12 business-flagged
 post_event_list entries are taken from it verbatim. Kept separate from detect/registry.py
 because the two report suites expose different event-id spaces (the YAML's
@@ -19,7 +19,10 @@ SME rulings of the same date):
     visits with zero quote events. Never compute within-visit sequences.
   - funnel ratios are population proxies (daily visit-count ratios), not per-visitor
     conversion; 0-safe (0.0 when the denominator is 0).
-  - language is the silver-derived domain language (en/fr/unknown), not eVar8.
+  - language is the silver-derived domain language (en/fr/unknown), not eVar8. The domain rule
+    is SME-APPROVED (Kerrian, 2026-07-29); eVar8 is confirmed suspect (~96% EN against a
+    ~50/50 domain split). She expects eVar149 to be language in principle, so it may yet
+    become the field of record -- that would be a one-expression change plus a silver rebuild.
 
     python detect/cm_registry.py     # print the registered series
 
@@ -35,8 +38,10 @@ from registry import slug
 
 # research/claude/metric-registry.yaml pin. This is the single pin for the whole registry,
 # so a GWAM-only change bumps it too: v0.4.0 added the gwam_channel_metrics section and
-# touched nothing CoverMe. The CoverMe entries below are unchanged from v0.3.0.
-REGISTRY_VERSION = "0.4.0"
+# touched nothing CoverMe. v0.5.0 deferred 14 of those GWAM entries to the SME's
+# single-channel ruling and recorded the 2026-07-29 CoverMe rulings in meta only. The
+# CoverMe series definitions below are unchanged from v0.3.0.
+REGISTRY_VERSION = "0.5.0"
 
 # --- Gold build parameters (consumed by cm_03_gold_kpis via gold_lib) ---
 DATE_COL = "hit_date"
@@ -103,8 +108,11 @@ TOP_PRODUCT_CATEGORIES = [
 ]
 
 TOP_LANGUAGES = ["en", "fr", "unknown"]   # silver-derived domain language, ~50/50 EN/FR
-# TODO(SME-pending): language field of record (eVar8 vs eVar149 vs prop5, doc 18 Q4);
-# interim rule = domain-derived. Rebuild silver + these shares when Kerrian rules.
+# SME-APPROVED 2026-07-29 (Kerrian, doc 18 Q4): the domain-derived rule is the field of record;
+# eVar8 is mis-tagged. Forward note, not a blocker: she expects eVar149 to always be language
+# (a French page's URL is sometimes English-translated), so eVar149 may supersede the domain
+# rule once she confirms -- that means reworking cm_silver_lib.lang_from_host_expr and
+# rebuilding silver, which would change these shares. Nothing to do until then.
 
 
 @dataclass(frozen=True)

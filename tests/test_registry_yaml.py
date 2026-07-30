@@ -1,8 +1,10 @@
 """metric-registry.yaml <-> detect/cm_registry.py governance contract.
 
 research/claude/metric-registry.yaml is the governed source of truth (v0.3.0 records
-Kerrian's SME rulings of 2026-07-27; v0.4.0 adds the GWAM four-channel scope seed);
-detect/cm_registry.py is its Python binding. Enforces the yaml's own validation_rules
+Kerrian's SME rulings of 2026-07-27; v0.4.0 adds the GWAM four-channel scope seed; v0.5.0
+records the 2026-07-29 rulings -- GWAM narrowed to the Public Website channel, so 14 of the
+17 GWAM entries are deferred and 2 anomaly-signal seeds are added, and CoverMe's language
+rule is ratified in meta with no series change); detect/cm_registry.py is its Python binding. Enforces the yaml's own validation_rules
 block plus the code pin, so REGISTRY_VERSION and the copied status/direction/owner
 governance fields cannot drift silently.
 
@@ -44,7 +46,7 @@ def entries(registry):
 
 
 def test_version_pin(registry):
-    assert str(registry["meta"]["version"]) == REGISTRY_VERSION == "0.4.0"
+    assert str(registry["meta"]["version"]) == REGISTRY_VERSION == "0.5.0"
 
 
 def test_per_sheet_counts(registry):
@@ -85,8 +87,9 @@ def test_series_governance_matches_yaml(registry):
             (e["status"], e["direction"], e["owner"]), mid
 
 
-# --- GWAM four-channel scope seed (v0.4.0) ------------------------------------
+# --- GWAM channel scope seed (v0.4.0 transcription, v0.5.0 single-channel ruling) ---------
 GWAM_CHANNELS = {"public_website", "web_member", "mobile", "manulifeid"}
+GWAM_IN_SCOPE = {"public_website"}      # SME ruling 2026-07-29: the only alerting channel
 
 
 @pytest.fixture(scope="module")
@@ -95,19 +98,26 @@ def gwam(registry):
 
 
 def test_gwam_channel_seed_counts(gwam):
-    """17 = 3 traffic metrics x 4 channels, + errors on 3 channels, + 2 sign-in on ManulifeID."""
-    assert len(gwam) == 17
+    """19 = the 17 transcribed pairs (3 traffic x 4 channels, + errors on 3, + 2 sign-in on
+    ManulifeID) plus the 2 public-website anomaly-signal seeds from the 2026-07-29 update."""
+    assert len(gwam) == 19
     ids = [e["metric_id"] for e in gwam]
     assert len(ids) == len(set(ids))
     by_channel = {c: sum(1 for e in gwam if e["channel"] == c) for c in GWAM_CHANNELS}
-    assert by_channel == {"public_website": 3, "web_member": 4, "mobile": 4, "manulifeid": 6}
+    assert by_channel == {"public_website": 5, "web_member": 4, "mobile": 4, "manulifeid": 6}
 
 
-def test_gwam_entries_are_all_candidate(gwam):
-    """Nothing here may ship before the probe runs and doc 20 Q1-Q3 are answered. Promoting
-    one to `active` while doc-16 D8 still excludes login traffic would ship a metric whose
-    scope contradicts a standing business rule."""
-    assert {e["status"] for e in gwam} == {"candidate"}
+def test_gwam_status_partition(gwam):
+    """The 2026-07-29 ruling narrowed alerting to the Public Website channel. Those entries stay
+    `candidate` -- nothing may reach `active` before doc 20 Q3b (the wealth-ca / pvt-wealth brand
+    variants) and Q6 (the page-view numerator) are answered. The other three channels are
+    `deferred`, which means kept-with-evidence: their predicates and probe findings survive so a
+    re-widening is a status flip. Deferring rather than deleting is also what keeps the dissolved
+    D8 conflict visible -- it was never ruled on, so it returns if a signed-in channel comes back.
+    """
+    for e in gwam:
+        want = "candidate" if e["channel"] in GWAM_IN_SCOPE else "deferred"
+        assert e["status"] == want, f'{e["metric_id"]} ({e["channel"]}) should be {want}'
     assert {e["owner"] for e in gwam} == {"TBD"}
 
 

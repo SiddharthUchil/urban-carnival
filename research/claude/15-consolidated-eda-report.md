@@ -228,6 +228,14 @@ in business columns that were never identifiers. The current rule is the reverse
   `post_visid_high/low`, `cust_visid`, `post_cust_visid`, `cookies`, `post_cookies`,
   `persistent_cookie`, `ip`, `ip2`, `ipv6`, `geo_zip`, `post_zip`, `zip`, `user_agent`.
 - **URL query strings are stripped** (session tokens live there); paths and hosts print in full.
+  > ⚠️ **↺ 2026-07-29 — this now collides with the SME's marketing definition.** He defines marketing
+  > traffic as hits carrying the **`CID`** campaign parameter (doc-16 **D11f**) — which lives in exactly
+  > the substring this rule discards, here and in the pipeline (bronze projects `post_page_url` only).
+  > The privacy rationale is unchanged and still right: session tokens do appear in query strings. But
+  > "strip everything after `?`" is now doing two jobs, one of which we no longer want. Resolution is
+  > tracked as doc-16 backlog #16: either lean on `post_campaign` as a proxy (free, if probe **C11**
+  > proves equivalence) or extract *only* the `cid` value at ingest — which needs an **ADR-0007
+  > amendment**, not a settings change. Do not quietly widen the strip rule to fix this.
 - The residual scrub net is **deliberately minimal**: emails and IPv4 literals only, with a
   2,000-character truncation cap.
 
@@ -559,6 +567,34 @@ the business signs off scope**, because flipping either re-baselines every KPI.
 > The exit criteria in §8b still hold — scope must be frozen before baselines are fit — but item 5's
 > "written confirmation of scope" now means confirming the **four-channel** definition, not the
 > two-suite/URL one.
+
+> ### ↺↺ SECOND REVISION 2026-07-29 — the single-website framing is largely REINSTATED
+>
+> The supersession notice above is itself now superseded, which is worth stating plainly because this
+> section has been rewritten twice in two days. The SME (Abhisekh) has since ruled that **only the
+> Public Website is in scope** (doc-16 **D11**), so:
+>
+> - **This section's original single-website, URL-scoped framing is once again the operative one.** Not
+>   because the four-channel table was wrong, but because it is deferred. The 17 metric×channel pairs
+>   collapse to **three** live metrics — Page Views, Visits, Visitors on `manulifeglobalprod` — plus two
+>   new per-visit signals the SME suggested ([19 §1.1](19-gwam-channel-readiness.md)).
+> - **Q5's answer narrows accordingly**: the alerting shortlist is those five metrics on one channel.
+>   Errors and both sign-in metrics leave scope with their channels.
+> - **Q14 stays closed** (eVar185 is Platform) but is now moot in practice — eVar185 was the Web Member
+>   handle, and Web Member is deferred.
+> - **The Q1/Q2 correction above becomes the whole story.** Its final clause — "the case for the segment
+>   model rests on the other three channels" — no longer has anything to rest on. Segment-vs-URL is now
+>   a bare +1,436 / −60,594 trade on this one suite.
+> - **The "new blocker that outranks everything" is GONE, without being answered.** Both channels that
+>   needed D8's excluded traffic are deferred, so the conflict dissolved rather than resolved. D8 stands
+>   unchanged and the question returns intact if scope re-widens.
+> - **Item 5's "written confirmation of scope"** now means confirming the **single-channel** definition:
+>   `manulifeglobalprod` + eVar105 parts-match (`ca-retirement` + `gwam`), with the `wealth-ca` /
+>   `pvt-wealth` brand variants still unclassified ([20](20-gwam-sme-questions.md) Q3b).
+>
+> One genuinely new tension this ruling creates for **this** document — see §5's note on query-string
+> stripping: the SME's marketing definition (`CID`) lives in exactly the substring this EDA discards by
+> design.
 
 ### Closed by the dictionary
 

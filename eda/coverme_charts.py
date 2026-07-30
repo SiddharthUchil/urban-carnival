@@ -22,8 +22,9 @@
 # MAGIC
 # MAGIC ### What's CoverMe-specific
 # MAGIC - **Language mix (~50/50 EN/FR) is a first-class panel**, split by DOMAIN (coverme.com=EN,
-# MAGIC   pourmeproteger.com=FR) rather than by a numeric language code (SME interim ruling
-# MAGIC   2026-07-27 — eVar8 is NOT language of record).
+# MAGIC   pourmeproteger.com=FR) rather than by a numeric language code (**SME-approved 2026-07-29**
+# MAGIC   — eVar8 is NOT language of record; eVar149 may supersede the domain rule if the SME
+# MAGIC   confirms it, which would move these shares).
 # MAGIC - **A quote→application stage panel** (Quote Start → Quote Complete → Save Quote → App Start
 # MAGIC   → App Confirm) — the business-flagged anomaly KPIs, drawn as population bars because the
 # MAGIC   funnel is **non-monotonic across visits** (saved-quote resume; Save Quote optional — SME
@@ -194,8 +195,8 @@ def share(chart_id, payload):
             print(body[i * 40000:(i + 1) * 40000])
     print(f"===== END SHAREABLE: {sid} =====")
 
-# host -> language, CoverMe splits language by DOMAIN not path (SME interim ruling
-# 2026-07-27; eVar8/eVar149/prop5 are NOT language of record). Mirrors
+# host -> language, CoverMe splits language by DOMAIN not path (SME-APPROVED 2026-07-29;
+# eVar8/eVar149/prop5 are NOT language of record). Mirrors
 # cm_silver_lib.lang_from_host_expr; under the ruled 2-domain scope 'Other' should be ~0 —
 # a non-trivial share is a QA flag (panel 5 renders a loud callout).
 def lang_from_host(host_col):
@@ -427,7 +428,8 @@ if _u is not None:
     share("language_mix", {"granularity": GRANULARITY, "basis": "domain",
                            "other_pct": round(_other_pct, 3),
                            "other_note": ("'Other' should be ~0 under the ruled 2-domain scope "
-                                          "(SME 2026-07-27); a non-trivial share is a QA flag"),
+                                          "(SME 2026-07-27); a non-trivial share is a QA flag. "
+                                          "Domain is the approved language basis (SME 2026-07-29)"),
                            "rows": _records(_lm, date_cols=["period"])})
     _order = [c for c in ["English", "French", "Other"] if c in _piv.columns]
     _colors = {"English": CATEGORICAL[0], "French": CATEGORICAL[1], "Other": "#898781"}
@@ -600,8 +602,8 @@ share("manifest", {"charts": _manifest, "n_charts": len(_manifest)})
 # MAGIC the two SME-ruled production domains (2026-07-27; optional retired-insttrip baseline via
 # MAGIC widget), minus UAT/AEM noise, with `exclude_hit > 0` bots dropped by default (the SME
 # MAGIC eligibility rule), on the D4 blank-guarded `page_url`-first coalesce. Language is split by
-# MAGIC domain (coverme.com=EN, pourmeproteger.com=FR — SME interim ruling; eVar8 is NOT language
-# MAGIC of record). The stage panel is population bars, not a funnel taper — the funnel is
+# MAGIC domain (coverme.com=EN, pourmeproteger.com=FR — SME-approved 2026-07-29; eVar8 is NOT
+# MAGIC language of record). The stage panel is population bars, not a funnel taper — the funnel is
 # MAGIC non-monotonic across visits. Palette is the CVD-validated dataviz dark set; multi-series
 # MAGIC panels carry a legend + hover + direct labels so identity is never colour-alone.
 

@@ -2,8 +2,10 @@
 
 Mirrors the SME-ruled semantics of 2026-07-27 (metric-registry.yaml
 meta.sme_confirmations): 2-domain scope with the retired insttrip host date-bounded to
-baseline history, domain-derived interim language, and the Workspace-parity eligibility
-rule (Adobe datafeeds-calculate; customer_perspective absent from this feed).
+baseline history, domain-derived language (ratified 2026-07-29 -- no longer interim, so
+test_lang_from_host_domain_derived now pins the approved rule rather than a stopgap), and
+the Workspace-parity eligibility rule (Adobe datafeeds-calculate; customer_perspective
+absent from this feed).
 Same parquet staging pattern as the other Spark tests.
 """
 from __future__ import annotations

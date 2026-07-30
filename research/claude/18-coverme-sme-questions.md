@@ -1,11 +1,19 @@
 # CoverMe Analytics — Questions for the Business / SME
 
-> **STATUS (2026-07-27): answers received from Kerrian (SME).**
-> **Answered:** Q1 targets · Q2 scope · Q3 funnel basis · Q5 bots (rule confirmed).
-> **Pending with Kerrian:** Q4 language field · eVar148 bot-detector verification ·
-> **Q10 events 510-513/514** (new — surfaced by the post-E1 decode).
-> **Not yet raised:** Q6-Q9 (sent as a non-blocking attachment).
-> Her answers appear inline as **A (Kerrian, 2026-07-27)** blocks below.
+> **STATUS (↺ updated 2026-07-29): a second round of answers received from Kerrian (SME).**
+> **Answered:** Q1 targets · Q2 scope · Q3 funnel basis · Q5 bots (rule confirmed) ·
+> ↺ **Q4 language** (the domain rule is approved) · ↺ **Q7 consent & personal data**
+> (no PII comes from Adobe; eVar65 is *cookie* consent) · ↺ **Q8 the missing days**
+> (root cause: the migration to Databricks left a source file un-refreshed).
+> **Still pending with Kerrian:** **Q10 events 510-513/514** · eVar148 bot-detector
+> verification · whether **eVar149** becomes the permanent language field of record ·
+> per-date confirmation of the ~30 missing days.
+> **Not yet raised:** Q6, Q9.
+> Her answers appear inline as **A (Kerrian, date)** blocks below.
+>
+> **Why this round matters beyond the answers themselves:** Q7 was the last governance gate on
+> the CoverMe pipeline. With no PII arriving from Adobe, the medallion build is cleared and the
+> backfill job is no longer blocked on a sign-off ([17 §4 item 9](17-coverme-eda-readiness.md)).
 
 > Send-ready shortlist, reconciled against the business data map
 > **`CoverMeDataMap.xlsx`** (tabs: `data_feed_columns`, `post_eVar`, `post_prop`,
@@ -86,6 +94,21 @@ Accept-Language). Traffic is ~50/50 English/French. **Which do we trust?**
 > field to use; "they should ideally align based on the domain." **Interim rule until her
 > ruling: derive language from domain** (coverme.com = EN, pourmeproteger.com = FR).
 
+> **↺ A (Kerrian, 2026-07-29): ✅ ANSWERED — proceed with the domain rule.** She confirmed we can
+> go with our interim rule, so **language is derived from the domain** (coverme.com = EN,
+> pourmeproteger.com = FR) and that is now the approved field of record rather than a stopgap.
+> **Nothing in the pipeline changes** — this is exactly what silver already computes
+> ([cm_silver_lib.py](../../databricks/src/cm_silver_lib.py) `lang_from_host_expr`), so there is
+> no rebuild and no number moves. eVar8 stays flagged as suspect and is **not** used.
+>
+> **One forward note that is worth acting on later, not now.** She added that **eVar149 should
+> always be language** — the reasoning being that a French page's URL is sometimes an English
+> translation, which makes the *URL* the weaker signal in principle even though it is the more
+> reliable one in our sample. She will confirm eVar149 in future. So the honest state is: the
+> domain rule is approved and correct to ship, and **eVar149 is the likely permanent field of
+> record**. Switching later means reworking one expression and rebuilding silver — cheap, but not
+> free, and it would move the EN/FR shares. We are not pre-emptively switching on a "should".
+
 **Q5. How do we exclude bots?**
 The map offers three signals — the **`exclude_hit`** feed flag, **eVar116**
 (Bot Traffic), and **eVar148** (Bot Detector). **Which is authoritative, and do
@@ -107,9 +130,45 @@ Consent is captured (OneTrust — eVar65 / eVar81) and a **Hashed Email ID**
 (eVar121) exists. **Must we honor opt-out for analytics, and is there anything
 we're not allowed to store or analyze?**
 
+> **↺ A (Kerrian, 2026-07-29): ✅ ANSWERED — and this clears our last governance gate.**
+> **No PII comes from Adobe**, so bringing this data into our medallion architecture is approved.
+> **Consent is captured via OneTrust in eVar65 — it is consent to *cookies*, and carries no PII.**
+>
+> That second point matters more than it first appears, because it **reframes the opt-out question
+> rather than answering it as asked.** We had measured eVar65 as ~91.7% "opt-out" and treated that
+> as a potential instruction to drop those hits — which would have discarded roughly nine-tenths of
+> the traffic and made anomaly detection pointless. But a *cookie*-consent preference is not an
+> analytics-suppression flag, so there is nothing to honour by exclusion here: **aggregate anomaly
+> KPIs may include those hits.** Our pipeline lands no consent column at all today, and on this
+> answer it needs none.
+>
+> Note what this does **not** cover, so nobody over-reads it: the direct identifier columns
+> (eVar14/172/173 User & Customer ID, eVar121 Hashed Email) are excluded from bronze by our own
+> policy regardless — see `SENSITIVE_COLUMNS` in
+> [coverme_bronze_columns.py](../../databricks/conf/coverme_bronze_columns.py). Her answer says
+> nothing arrives that would need protecting; our belt-and-braces exclusion stays anyway.
+>
+> ⚠ **This is a verbal clearance, recorded here as the artifact.** If your governance process needs
+> a written data-owner approval on file, this is the point to convert it into one.
+
 **Q8. Missing days.**
 ~30 days across the history have no data at all. **Real outages (site down) or
 gaps in the data feed?** A rough list of known outages keeps us from false alarms.
+
+> **↺ A (Kerrian / Abhisekh, 2026-07-29): ✅ ANSWERED in substance — feed gaps, not outages.**
+> The gaps trace to the **migration of this data to Databricks**: a source file was not updated
+> during the move (most likely `hit_data`). So these are **collection/export gaps, not days when
+> the site was down** — which is the answer that matters for us, because it means the days are
+> *missing* rather than genuinely zero.
+>
+> Two consequences, both already the way we had guessed: the correct treatment is to
+> **impute/interpolate rather than train on zeros**, and the detector must **mask those dates**
+> before fitting baselines so a feed gap is never learned as normal or alerted as a drop.
+>
+> ⏳ **Still open:** the exact date list. We have shared our ~30 dates (clusters including
+> 2023-04-09→12, 2023-12-19→21, 2025-08-05→07, 2025-12-02→07 and 2026-06-07→23) and she will come
+> back confirming which are explained by the migration. Worth noting the 2026-06-07→23 cluster is
+> the largest and most recent, so it is the one most likely to distort current baselines.
 
 **Q9. US traffic.**
 ~12% of visits come from the **USA** (vs 84% Canada). **Is that expected**, or a

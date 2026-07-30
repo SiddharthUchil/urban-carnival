@@ -9,6 +9,16 @@
 # MAGIC answers everything about that table that can be answered **from data**, so the questions we
 # MAGIC put to the SME are only the ones that genuinely need a business ruling.
 # MAGIC
+# MAGIC **↺ 2026-07-29 — the alerting scope narrowed to the Public Website channel only** (SME
+# MAGIC ruling, Abhisekh). The four-channel census sections `C1`-`C10` are KEPT: they are the
+# MAGIC evidence base for the 14 registry entries now marked `deferred`, so a re-widening costs a
+# MAGIC status flip rather than another discovery cycle. The same update answered the marketing
+# MAGIC question ("marketing" = hits carrying the **CID** query-string parameter) and named three
+# MAGIC anomaly signals of its own. That is what the two new sections are for: `C11` tests whether
+# MAGIC the CID rule is expressible with the column we actually ingest, and `C12` profiles the
+# MAGIC per-visit page-view distribution behind the new signals. `C3` also gains sizing for two
+# MAGIC brand-tag variants the SME mentioned that appear nowhere in our data.
+# MAGIC
 # MAGIC Companion to [19-gwam-channel-readiness.md](../research/claude/19-gwam-channel-readiness.md)
 # MAGIC and [20-gwam-sme-questions.md](../research/claude/20-gwam-sme-questions.md). Precedent:
 # MAGIC CoverMe ran a discovery probe before its main EDA.
@@ -24,7 +34,7 @@
 # MAGIC |---|---|
 # MAGIC | `C1 rsid_census` | Do `manucustomer.prod`, a GRS+ suite, and a GBRS-mobile suite exist here? Enough history each? |
 # MAGIC | `C2 web_vs_app` | Which suites are app (no URL) vs web — i.e. can a URL-based scope express them at all? |
-# MAGIC | `C3 evar105_census` | Is `ca-retirement :  : GWAM` a literal value? What delimiter? How big is segment-scope vs today's URL scope? |
+# MAGIC | `C3 evar105_census` | Is `ca-retirement :  : GWAM` a literal value? What delimiter? How big is segment-scope vs today's URL scope? Plus: how much traffic do the `wealth-ca` / `pvt-wealth` brand variants carry (Q3b)? |
 # MAGIC | `C4 platform_census` | Is `MPS Member` a value of eVar185 or eVar110? (resolves the long-open Platform conflict) |
 # MAGIC | `C5 error_fields` | Is an Errors metric implementable, and from which field? |
 # MAGIC | `C6 signin_fields` | Can a sign-in completion ratio be built, and from what? |
@@ -32,13 +42,19 @@
 # MAGIC | `C8 pagename_census` | Is "Canada Retirement App Pages v2" translatable into a pagename predicate? |
 # MAGIC | `C9 manulifeid_split` | Does ANY field separate retirement sign-ins from other ManulifeID sign-ins? (the SME's own open item) |
 # MAGIC | `C10 marketing_fields` | What could "ideally non-marketing" mean operationally? |
+# MAGIC | `C11 cid_vs_campaign` | The SME's marketing rule is "carries CID". Is `post_campaign` — the column we actually ingest — equivalent to the presence of a `cid=` query parameter? |
+# MAGIC | `C12 visit_shape` | What does the per-visit page-view distribution look like: how many visits have zero page views (the "< 1" signal), and how stable is the mass at exactly 2 (the duplication signal)? Also: ECID vs visid-pair visitor counts. |
 # MAGIC
 # MAGIC **What this probe canNOT settle** — deliberately out of reach of any query, and therefore
-# MAGIC still SME questions: whether 1/0 in the table means in/out of scope; whether the 2026-07-20
-# MAGIC login-exclusion rule (D8) is superseded; the business definition of "non-marketing"; the
-# MAGIC numerator/denominator of "Sign in % rate completion"; the friendly-name → rsid mapping for
-# MAGIC "GRS+" if no candidate in C1 is recognisable; and whether the "Manulife Financial" Adobe
-# MAGIC instance is the same feed (an Adobe-admin question).
+# MAGIC still SME questions: whether the `wealth-ca` / `pvt-wealth` brand variants belong to Canada
+# MAGIC Retirement (C3 only sizes them — Q3b); whether "page views" means hits or Adobe page views,
+# MAGIC which C12 profiles under every available basis but cannot choose between; whether 1/0 in the
+# MAGIC table means in/out of scope; whether the 2026-07-20 login-exclusion rule (D8) is superseded;
+# MAGIC the numerator/denominator of "Sign in % rate completion"; the friendly-name → rsid mapping
+# MAGIC for "GRS+" if no candidate in C1 is recognisable; and whether the "Manulife Financial" Adobe
+# MAGIC instance is the same feed (an Adobe-admin question). The business definition of
+# MAGIC "non-marketing" **was** on this list and is now answered (CID) — what remains is the
+# MAGIC mechanical question C11 asks.
 # MAGIC
 # MAGIC **How to run.** Databricks → Workspace → Import → File → select this `.py` (it imports as a
 # MAGIC notebook — the file is in Databricks "source" format). Attach to any cluster with Unity
@@ -54,6 +70,17 @@
 # MAGIC how a missing section went unnoticed for days on CoverMe (doc-17 E1). `skipped` must be `{}`;
 # MAGIC if it isn't, paste the SKIPPED lines back too. Top-N caps are kept deliberately small because
 # MAGIC Databricks silently truncates large stdout payloads mid-JSON (doc-16 §0.5).
+# MAGIC
+# MAGIC **A clean run of this version prints 13 `BEGIN SHAREABLE` blocks and reports
+# MAGIC `n_sections: 12`.** That is not an off-by-one bug: `run_manifest` counts `RESULTS` *before*
+# MAGIC emitting itself, so the manifest total is always one less than the block count. The previous
+# MAGIC 11-section version reported `n_sections: 10` the same way. Checking `n_sections == 13` will
+# MAGIC look like a section vanished when nothing did. What to actually assert:
+# MAGIC `13` blocks · `n_sections: 12` · `skipped == {}` · `complete: true`.
+# MAGIC
+# MAGIC `scripts/decode_databricks_export.py` checks all four against an exported `.html`/`.ipynb`,
+# MAGIC re-hashes every block against the manifest, and flags stdout truncation — run it on the export
+# MAGIC rather than eyeballing the counts.
 
 # COMMAND ----------
 
@@ -94,6 +121,8 @@ SUITE_HINTS = [h.lower() for h in _csv("sme_suite_hints")]
 
 # The SME's scope table, encoded so the emitted payloads can be read against it directly.
 # Values are the SME's own labels, verbatim -- resolving them to real rsids is C1's job.
+# ↺ 2026-07-29: only public_website is in the alerting scope now. All four stay here so the
+# census sections keep reporting per-suite evidence for the deferred registry entries.
 SME_CHANNELS = {
     "public_website": {"instance": "Manulife", "suite_label": "Manulife Global Prod",
                        "segment": "Brand (evar105) = 'ca-retirement :  : GWAM'"},
@@ -114,6 +143,23 @@ URL_SCOPE_EXCLUDE = ["%adobeaemcloud.com%", "%/ph/%"]
 # describe the SHAPE, not the separator; the SME wrote "ca-retirement :  : GWAM". C3 measures
 # which of these actually splits the values, rather than assuming one.
 DELIM_CANDIDATES = [" : ", ":", " | ", "|", " - ", ","]
+
+# The SME's brand-tag examples, verbatim from the 2026-07-29 update. The first is the value we
+# already know (a second form of it); the other two name lines of business that appear NOWHERE
+# in our data or docs. C3 sizes all three so doc-20 Q3b -- are wealth-ca / pvt-wealth inside
+# Canada Retirement or outside it? -- can be priced instead of guessed. The scope predicate
+# stays a parts-match on (ca-retirement AND gwam) until she rules.
+SME_BRAND_EXAMPLES = ["Manulife: GWAM: group-plans:ca-retirement",
+                      "Manulife: GWAM: wealth-ca",
+                      "Manulife: GWAM : pvt-wealth"]
+BRAND_VARIANTS = ["wealth-ca", "pvt-wealth"]
+
+# Q5 ANSWERED 2026-07-29: "marketing" = hits carrying the CID campaign identifier, the standard
+# query-string parameter appended to marketing URLs. Applied to a LOWERCASED url; group 1 is the
+# value. C11 uses this to test the rule against post_campaign, the column the pipeline actually
+# ingests -- note the pipeline strips query strings by policy (ADR-0007), so a production CID
+# rule needs an ADR amendment regardless of what C11 finds.
+CID_REGEX = r"[?&]cid=([^&#]*)"
 
 RESULTS = {}
 SKIPPED = {}
@@ -433,12 +479,24 @@ def c3_evar105_census():
     # (c) the re-baseline sizing: segment-scope vs today's shipped URL-scope, same window.
     is_ca_ret = F.lower(col).contains("ca-retirement")
     is_gwam = F.lower(col).contains("gwam")
+    # (d) Q3b sizing for the 2026-07-29 brand variants. Substring counts only -- these are NOT
+    # part of the predicate. If a variant overlaps ca-retirement it is already counted above;
+    # an overlap near zero means adopting it would ADD that much traffic, not re-label it.
+    variant_flags = {v: F.lower(col).contains(v) for v in BRAND_VARIANTS}
     url_cols = [n for n in (pick("page_url"), pick("post_page_url")) if n]
     if url_cols:
         urlc = F.lower(F.coalesce(*[F.when(nonblank(n), qcol(n)) for n in url_cols], F.lit("")))
         in_url_scope = like_any(urlc, URL_SCOPE_BROAD) & ~like_any(urlc, URL_SCOPE_EXCLUDE)
     else:
         in_url_scope = F.lit(False)
+
+    variant_aggs = []
+    for v in BRAND_VARIANTS:
+        vf = variant_flags[v]
+        key = v.replace("-", "_")
+        variant_aggs.append(F.sum(F.when(vf & is_gwam, 1).otherwise(0)).alias(f"{key}_rows"))
+        variant_aggs.append(
+            F.sum(F.when(vf & is_ca_ret, 1).otherwise(0)).alias(f"{key}_x_ca_ret"))
 
     sizing = (WIN.filter(F.col("rsid") == F.lit(PIPELINE_RSID))
                  .agg(F.count(F.lit(1)).alias("rows"),
@@ -447,6 +505,7 @@ def c3_evar105_census():
                       F.sum(F.when(is_ca_ret & is_gwam & in_url_scope, 1).otherwise(0)).alias("both"),
                       F.sum(F.when(is_ca_ret & is_gwam & ~in_url_scope, 1).otherwise(0)).alias("segment_only"),
                       F.sum(F.when(~(is_ca_ret & is_gwam) & in_url_scope, 1).otherwise(0)).alias("url_only"),
+                      *variant_aggs,
                       )).collect()[0]
 
     per_rsid_match = (WIN.groupBy(F.col("rsid").alias("rsid"))
@@ -458,6 +517,7 @@ def c3_evar105_census():
     emit("evar105_census", {
         "column": EVAR105, "window": [START_DATE, MAX_DATE],
         "sme_claimed_value": "ca-retirement :  : GWAM",
+        "sme_brand_examples": SME_BRAND_EXAMPLES,
         "delimiter_probe": delim_probe, "chosen_delimiter": best,
         "top_values_all_suites": top_values(WIN, EVAR105),
         "top_triples": [{"rsid": r["rsid"], "brand": r["brand"], "lob": r["lob"],
@@ -474,7 +534,21 @@ def c3_evar105_census():
             "url_only": int(sizing["url_only"]),
             "note": ("segment_only = traffic a segment-scoped pipeline would GAIN; url_only = traffic "
                      "it would LOSE. Both are re-baseline magnitude: conf/settings.py:25-31 requires a "
-                     "full mode=backfill with gold truncated for any scope change."),
+                     "full mode=backfill with gold truncated for any scope change. ↺ 2026-07-29: with "
+                     "the other three channels deferred, this trade IS the whole segment-vs-URL "
+                     "decision -- the 'URL cannot express mobile' argument no longer applies."),
+        },
+        "brand_variant_sizing": {
+            "rsid": PIPELINE_RSID, "window_rows": int(sizing["rows"]),
+            "ca_retirement_rows": int(sizing["segment_scope"]),
+            "variants": {v: {"rows_with_gwam": int(sizing[f'{v.replace("-", "_")}_rows']),
+                             "overlap_with_ca_retirement": int(sizing[f'{v.replace("-", "_")}_x_ca_ret'])}
+                         for v in BRAND_VARIANTS},
+            "note": ("Sizes doc-20 Q3b, it does not answer it: are wealth-ca / pvt-wealth inside "
+                     "Canada Retirement? rows_with_gwam is what including a variant would add; a "
+                     "near-zero overlap_with_ca_retirement confirms the variant is additive rather "
+                     "than already counted. The predicate stays a parts-match on (ca-retirement AND "
+                     "gwam) until the SME rules."),
         },
     })
 
@@ -717,11 +791,222 @@ def c10_marketing_fields():
         "per_rsid_population": per_rsid_rates(WIN, cols),
         "top_values_all_suites": {k: top_values(WIN, v) for k, v in cols if v},
         "note": ("Campaign-tagged share is the most likely operational definition of 'marketing', "
-                 "with ref_type as the fallback. The SME picks; this just bounds the options."),
+                 "with ref_type as the fallback. The SME picks; this just bounds the options. "
+                 "↺ 2026-07-29: she picked neither -- the rule is 'carries the CID query "
+                 "parameter'. C11 tests whether campaign is the same thing."),
     })
 
 
 run_section("marketing_fields", c10_marketing_fields)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## C11 — Is `post_campaign` the same thing as a `cid=` query parameter?
+# MAGIC
+# MAGIC The SME's marketing rule (2026-07-29) is **"carries CID"** — a query-string parameter. Our
+# MAGIC pipeline ingests Adobe's `post_campaign` column and **strips query strings by policy**
+# MAGIC (ADR-0007), so before anyone writes an exclusion rule we need to know whether the column we
+# MAGIC have stands in for the parameter she named.
+# MAGIC
+# MAGIC Read the result knowing the two are *not* expected to match row-for-row: Adobe persists a
+# MAGIC campaign value across the visit, while `cid=` appears only on the landing hit. So
+# MAGIC `campaign_only >> cid_only` is normal and healthy. The two figures that matter are
+# MAGIC **`cid_only` ≈ 0** (nothing carries CID that the column misses) and a high
+# MAGIC **`equal_when_both / both`** (when both are present they agree). If either fails, the rule
+# MAGIC cannot be implemented from `post_campaign` and needs the raw query string — which means an
+# MAGIC ADR-0007 amendment, not just a settings change.
+# MAGIC
+# MAGIC **Privacy.** This section reads raw URLs transiently and emits **counts only** — never a
+# MAGIC query-string value, never a URL. That matches the repo's posture (the EDA notebooks strip
+# MAGIC query strings because session tokens live there) while still answering the question.
+
+# COMMAND ----------
+
+def c11_cid_vs_campaign():
+    url_col = pick("page_url", "post_page_url")
+    if not url_col:
+        raise ValueError("no page_url/post_page_url column in this feed")
+    camp_col = pick("post_campaign", "campaign")
+
+    lurl = F.lower(qcol(url_col).cast("string"))
+    cid = F.regexp_extract(F.coalesce(lurl, F.lit("")), CID_REGEX, 1)
+    has_cid = F.length(cid) > 0
+    if camp_col:
+        camp = F.lower(F.trim(qcol(camp_col).cast("string")))
+        has_camp = nonblank(camp_col)
+    else:
+        camp, has_camp = F.lit(""), F.lit(False)
+
+    def xtab(df):
+        r = df.agg(
+            F.count(F.lit(1)).alias("rows"),
+            F.sum(F.when(has_cid, 1).otherwise(0)).alias("cid_rows"),
+            F.sum(F.when(has_camp, 1).otherwise(0)).alias("campaign_rows"),
+            F.sum(F.when(has_cid & has_camp, 1).otherwise(0)).alias("both"),
+            F.sum(F.when(has_cid & ~has_camp, 1).otherwise(0)).alias("cid_only"),
+            F.sum(F.when(~has_cid & has_camp, 1).otherwise(0)).alias("campaign_only"),
+            F.sum(F.when(has_cid & has_camp & (cid == camp), 1).otherwise(0)).alias("equal_when_both"),
+        ).collect()[0]
+        out = {k: int(r[k] or 0) for k in ("rows", "cid_rows", "campaign_rows", "both",
+                                          "cid_only", "campaign_only", "equal_when_both")}
+        out["agreement_when_both"] = (out["equal_when_both"] / out["both"]) if out["both"] else None
+        return out
+
+    d = WIN.filter(F.col("rsid") == F.lit(PIPELINE_RSID))
+    payload = {
+        "window": [START_DATE, MAX_DATE], "rsid": PIPELINE_RSID,
+        "url_column": url_col, "campaign_column": camp_col,
+        "cid_regex": CID_REGEX,
+        "suite_all": xtab(d),
+    }
+    if EVAR105:
+        c105 = F.lower(qcol(EVAR105).cast("string"))
+        payload["segment_scope"] = xtab(
+            d.filter(c105.contains("ca-retirement") & c105.contains("gwam")))
+    payload["note"] = (
+        "Tests the 2026-07-29 marketing rule (Q5: marketing = carries CID) against the column we "
+        "ingest. EXPECTED asymmetry: post_campaign persists across a visit while cid= appears only "
+        "on landing URLs, so campaign_only >> cid_only is normal. The real checks are cid_only ~ 0 "
+        "and a high agreement_when_both. Counts only -- no query-string values or URLs are emitted "
+        "(ADR-0007 posture). Even a clean result does not make the rule shippable: bronze projects "
+        "post_page_url and strips query strings, so parsing cid= in production needs an ADR "
+        "amendment (doc-16 backlog).")
+    emit("cid_vs_campaign", payload)
+
+
+run_section("cid_vs_campaign", c11_cid_vs_campaign)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## C12 — Per-visit page-view distribution, and the ECID-vs-visid-pair visitor grain
+# MAGIC
+# MAGIC The SME named three anomaly signals on 2026-07-29: **unique ECID visitors**, **page views
+# MAGIC per visit < 1**, and **pages consistently at exactly 2** as a duplication indicator. None of
+# MAGIC the three exists as a declared metric today, and two of them are per-visit ratios we have
+# MAGIC never measured. This section profiles the distribution first, so thresholds come from data.
+# MAGIC
+# MAGIC Three things worth knowing about how to read it:
+# MAGIC
+# MAGIC - **"< 1" is really a zero-page-view-visit detector.** A daily total of page views over
+# MAGIC   visits can only fall below 1 if visits exist that contain no page view at all, so
+# MAGIC   `share_pv_eq_0` is the direct measurement of her signal.
+# MAGIC - **The "exactly 2" signal is about consistency, not level.** A stable point mass at 2 is
+# MAGIC   what indicates duplication, so the daily series matters more than the window average —
+# MAGIC   and no current scorer (robust-z, level-shift, ECOD, rules) expresses "unusually stable".
+# MAGIC - **The page-view basis is still an open SME question** (doc-20 Q6). `pv_basis` in the
+# MAGIC   payload records which definition was available; the fallbacks are deliberate, not silent.
+# MAGIC
+# MAGIC The `visitor_grain` block settles something else: gold counts visitors as
+# MAGIC `countDistinct(mcvisid)` (the ECID, which is what the SME named) while the EDA notebooks
+# MAGIC count the `post_visid` pair. Both are defensible; they are not equal, and until now nobody
+# MAGIC had measured the gap.
+
+# COMMAND ----------
+
+def c12_visit_shape():
+    key_cols = ["post_visid_high", "post_visid_low", "visit_num"]
+    missing = [c for c in key_cols if not have(c)]
+    if missing:
+        raise ValueError(f"visit key columns missing from this feed: {missing}")
+
+    # Page-view basis, best available. page_event == 0 is Adobe's own page-view marker; a
+    # populated pagename is the weaker proxy; all-hits is the honest last resort. Whichever
+    # is used is reported, because doc-20 Q6 has not been answered.
+    #
+    # try_cast, never cast: Databricks runs ANSI mode, so a single non-numeric page_event
+    # value would throw and kill the section -- the CoverMe E1 defect. try_cast yields NULL
+    # instead, which simply fails the == 0 test. Verified against a non-numeric row locally.
+    pe = pick("post_page_event", "page_event")
+    pn = pick("post_pagename", "pagename")
+    if pe:
+        pv_flag = F.expr(f"try_cast({sql_col(pe)} as int)") == F.lit(0)
+        pv_basis = f"try_cast({pe} as int) == 0 (Adobe page-view marker)"
+    elif pn:
+        pv_flag, pv_basis = nonblank(pn), f"nonblank({pn}) (proxy -- no page_event column)"
+    else:
+        pv_flag, pv_basis = F.lit(True), "ALL HITS (no page_event and no pagename column)"
+
+    # NULLs coalesced positionally so distinct visit keys cannot collide (the NULL_SAFE_KEYS
+    # convention from cm_registry).
+    key_exprs = [F.coalesce(qcol(c).cast("string"), F.lit("~null~")) for c in key_cols]
+    key = [e.alias(c) for e, c in zip(key_exprs, key_cols)]
+    bucket = (F.when(F.col("pvs") == 0, "0")
+               .when(F.col("pvs") == 1, "1")
+               .when(F.col("pvs") == 2, "2")
+               .when(F.col("pvs") <= 5, "3-5")
+               .otherwise("6+"))
+
+    def per_visit(df):
+        return df.groupBy(*key).agg(F.count(F.lit(1)).alias("hits"),
+                                    F.sum(F.when(pv_flag, 1).otherwise(0)).alias("pvs"),
+                                    F.min("process_date").alias("visit_date"))
+
+    def shape(pv):
+        agg = pv.agg(F.count(F.lit(1)).alias("visits"),
+                     F.sum("pvs").alias("pvs"),
+                     F.avg((F.col("pvs") == 2).cast("double")).alias("eq2"),
+                     F.avg((F.col("pvs") == 0).cast("double")).alias("eq0")).collect()[0]
+        n = int(agg["visits"] or 0)
+        dist = {r["b"]: int(r["count"])
+                for r in pv.groupBy(bucket.alias("b")).count().collect()}
+        daily = (pv.groupBy("visit_date")
+                   .agg(F.count(F.lit(1)).alias("visits"),
+                        F.sum("pvs").alias("pvs"),
+                        F.avg((F.col("pvs") == 2).cast("double")).alias("share_eq2"))
+                   .orderBy("visit_date").collect())
+        return {
+            "visits": n,
+            "pv_per_visit": (float(agg["pvs"] or 0) / n) if n else None,
+            "share_pv_eq_0": float(agg["eq0"] or 0.0),
+            "share_pv_eq_2": float(agg["eq2"] or 0.0),
+            "bucket_dist": dist,
+            "daily": [{"date": str(r["visit_date"])[:10], "visits": int(r["visits"]),
+                       "pv_per_visit": (float(r["pvs"] or 0) / int(r["visits"])) if r["visits"] else None,
+                       "share_eq2": float(r["share_eq2"] or 0.0)} for r in daily],
+        }
+
+    d = WIN.filter(F.col("rsid") == F.lit(PIPELINE_RSID))
+    payload = {"window": [START_DATE, MAX_DATE], "rsid": PIPELINE_RSID,
+               "visit_key": key_cols, "pv_basis": pv_basis,
+               "suite_all": shape(per_visit(d))}
+    if EVAR105:
+        c105 = F.lower(qcol(EVAR105).cast("string"))
+        payload["segment_scope"] = shape(per_visit(
+            d.filter(c105.contains("ca-retirement") & c105.contains("gwam"))))
+
+    ecid = pick("mcvisid", "post_mcvisid")
+    if ecid:
+        rows = (d.groupBy("process_date")
+                 .agg(F.countDistinct(qcol(ecid)).alias("ecid"),
+                      F.countDistinct(F.concat_ws(":", *key_exprs[:2])).alias("pair"))
+                 .orderBy("process_date").collect())
+        payload["visitor_grain"] = {
+            "ecid_column": ecid,
+            "daily": [{"date": str(r["process_date"])[:10], "ecid": int(r["ecid"]),
+                       "pair": int(r["pair"])} for r in rows],
+            "note": ("Quantifies a divergence nobody had measured: gold counts visitors as "
+                     "countDistinct(mcvisid) (gold_lib.py:94) -- the ECID the SME named -- while "
+                     "the EDA notebooks count the post_visid pair "
+                     "(gwam_canada_retirement_eda.py:1320). Registry entry gwam_pw_visitors."),
+        }
+    else:
+        payload["visitor_grain"] = {"ecid_column": None,
+                                    "note": "no mcvisid column in this feed -- ECID grain unmeasurable"}
+
+    payload["note"] = (
+        "Profiles the SME's 2026-07-29 anomaly signals before they are declared. share_pv_eq_0 IS "
+        "the 'page views per visit < 1' signal (registry gwam_pw_pv_per_visit): a daily ratio can "
+        "only drop below 1 if zero-page-view visits exist. share_pv_eq_2 plus its daily series IS "
+        "the duplication signal (registry gwam_pw_pv_per_visit_dup2), where the SME's concern is "
+        "CONSISTENCY at 2 rather than the level -- read the daily spread, not the average. Both "
+        "metrics are blocked on doc-19 G2 (SeriesSpec has no numerator/denominator) and doc-20 Q6 "
+        "(which page-view basis is meant -- see pv_basis above).")
+    emit("visit_shape", payload)
+
+
+run_section("visit_shape", c12_visit_shape)
 
 # COMMAND ----------
 

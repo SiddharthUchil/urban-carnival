@@ -10,7 +10,35 @@
 > CoverMe precedent [17](17-coverme-eda-readiness.md) / [18](18-coverme-sme-questions.md). The
 > send-ready questionnaire is [20 — GWAM SME Questions](20-gwam-sme-questions.md).
 
-**Status:** Written 2026-07-28 pre-probe; **revised 2026-07-29 with the probe results — G1 is closed.**
+> ### ↺ REVISION 2026-07-29 (later the same day) — the scope narrowed to ONE channel
+>
+> **The SME (Abhisekh) has ruled: "Currently we are only going with *Public Website* in scope."**
+> Everything below was written to assess four channels. It is kept — the per-suite evidence is what
+> makes a future re-widening cheap — but read it knowing that **three of the four channels are now
+> `deferred`**, and that this ruling changes the *shape* of the readiness verdict, not just its
+> scale. Specifically:
+>
+> - **§2.3's D8 conflict is DISSOLVED, not resolved.** Both channels that needed login traffic left
+>   scope. D8 was never adjudicated and stands unchanged; the conflict returns verbatim if scope
+>   re-widens. Calling it "the single biggest blocker" is no longer accurate.
+> - **§2.2's argument for the segment scope model collapses.** Its load-bearing claim was that *the
+>   other three channels cannot be expressed by URL at all*. With only the public website in scope,
+>   segment-vs-URL is a straight +1,436 / −60,594 row trade — see the ↺ note in that section.
+> - **The `manucustomer.prod` access request is MOOT** — the programme's longest-lead item retires.
+> - **§3's gates re-rank:** G4 (no channel dimension) and G3 (error columns) go moot; **G2 becomes
+>   critical**, because the SME's new anomaly signals are per-visit *ratios* and `SeriesSpec` cannot
+>   express one.
+> - **Two questions were answered and two are new.** Q5 ("what is marketing?") is answered — see the
+>   new **§2.5.1**. Q3 is partly answered and spawns **Q3b** (the `wealth-ca` / `pvt-wealth` brand
+>   variants). Q6 (page views vs hits) is **escalated**, since the new signals divide by that
+>   numerator.
+> - **Three new anomaly signals arrived** — see the new **§1.1**.
+>
+> Registry effect: [metric-registry.yaml](metric-registry.yaml) **v0.5.0** — 5 `candidate`
+> public-website entries (3 traffic + 2 new signal seeds), 14 `deferred`.
+
+**Status:** Written 2026-07-28 pre-probe; **revised 2026-07-29 with the probe results — G1 is closed**;
+**re-scoped to a single channel later on 2026-07-29 (banner above).**
 `gwam_channel_discovery` ran on Databricks (`generated_at` 2026-07-29T02:00:54, window
 2026-04-29 → 2026-07-28, 90 days, table `gwam_prod_catalog.inv_typed_common.adobe_hit_data`,
 1,198 columns). **11 SHAREABLE sections emitted, `run_manifest.skipped == {}`, `complete: true`** —
@@ -63,6 +91,16 @@ Three consequences, in order of how much they change the plan:
    it is absent from all 16 rsids. This is no longer a modelling question. It is a **data-access
    request**, and it is the longest-lead item on the list, so it should be started now rather than
    at build time.
+   > **↺ 2026-07-29 (single-channel ruling): withdraw this request.** ManulifeID is out of scope,
+   > so the longest-lead item on the programme retires without ever being started. Keep the finding:
+   > if scope re-widens, the access request is still the first thing to file.
+
+> **↺ 2026-07-29 — this headline is now historical.** Locating three of the four suites was the
+> right answer to the question being asked on 2026-07-28. Under the single-channel ruling the
+> operative line is the *last* paragraph of this section, not the first: **`manulifeglobalprod`'s
+> 138 days of history is the whole baseline story**, because it is the only suite in scope. The
+> 68.9% mobile mass and the 322M-row `manugrs` suite are no longer "traffic we have never touched"
+> in a way that matters to this programme — they are simply out of scope.
 
 The `manulifeglobalprod` history is the quiet risk: **138 days**, first day 2026-03-10 (the
 discrepancy [12 §](12-eda-findings-analysis.md) already flagged). It clears the ≥90-day baseline gate,
@@ -97,8 +135,33 @@ straight against it.
 scope, giving **17 (metric × channel) pairs**. The alternative reading — `1` as a priority rank — would
 change the deliverable, so it is asked rather than assumed.
 
+> **↺ 2026-07-29 — only the Public Website column survives.** The 17-pair reading collapses to
+> **three live pairs**: Page Views, Visits, Visitors on the public website. Errors and both sign-in
+> metrics leave scope entirely with their channels, which also makes Q4 moot for them — there is no
+> longer a question about whether four channels alert independently. The table stays as received.
+
 **Two things the table is silent on** and which no query can recover: alert thresholds/severity per
 channel, and whether the four channels alert independently or roll up to one Canada-Retirement number.
+
+### 1.1 ↺ New — three anomaly signals the SME suggested (2026-07-29)
+
+Alongside the scope ruling he named three things worth watching. These are **not** in the matrix
+above; they arrived as observations about what tends to indicate a problem on this site, and they are
+the first metric suggestions we have received that came from operational instinct rather than a
+report-suite inventory. All three are seeded in
+[metric-registry.yaml](metric-registry.yaml) `gwam_channel_metrics`.
+
+| SME wording | What it means for us | Status |
+|---|---|---|
+| "Unique ECID - unique visitor" | **Already covered.** `gwam_pw_visitors` resolves to `countDistinct(mcvisid)` ([gold_lib.py:94](../../databricks/src/gold_lib.py)) and `mcvisid` *is* the ECID. ⚠ But it exposes a grain divergence: the EDA notebooks count the `post_visid` pair instead ([gwam_canada_retirement_eda.py:1320](../../eda/gwam_canada_retirement_eda.py)), so EDA and gold can disagree on the same day. Probe **C12** now measures the gap. | ✅ exists; grain to settle |
+| "Page view per visit (if page view < 1 could be anomaly)" | New metric `gwam_pw_pv_per_visit`. Note what the test really detects: a daily ratio can only fall **below 1** if visits exist containing **no page view at all**, so this is a zero-page-view-visit detector. C12 reports that share directly. | 🔴 blocked on **G2** + Q6 |
+| "If all pages are consistently at 2 (sometimes an indicator of duplication) especially when we see consistently 2" | New metric `gwam_pw_pv_per_visit_dup2` — the share of visits with **exactly** 2 page views. His concern is **consistency**, not level: an unusually *stable* point mass. No current scorer (robust-z, level-shift, ECOD, rules) expresses "unusually stable", so this needs a new rule kind, not a threshold. | 🔴 blocked on **G2** + Q6 + new detector kind |
+
+Both new metrics are per-visit **ratios**, which is why **G2 is now the critical gate** rather than a
+tidy-up item: `SeriesSpec` has no numerator/denominator fields
+([registry.py:68-83](../../detect/registry.py)). And both divide by "page views", so **Q6 — page
+views or hits? — has gone from a labelling question to a blocking one.** Probe C12 profiles every
+available basis and reports which it used (`pv_basis`) rather than picking silently.
 
 ---
 
@@ -170,6 +233,22 @@ low** — and the real reason to adopt the segment model is that **the other thr
 expressed by URL at all**. Adopting it is a decision about the other three channels, priced on the
 first.
 
+> **↺ 2026-07-29 — that argument is now void, and this is the most consequential single change the
+> ruling makes.** The segment model's justification was *entirely* the other three channels; the
+> public-website numbers were only ever the price tag. With those channels deferred, there is no
+> remaining case built on coverage — segment-vs-URL is now a bare trade: **gain 1,436 rows
+> (undercounted, pending the C3 re-run), lose 60,594**, for a full `mode=backfill` with gold
+> truncated. On those numbers the honest recommendation is **stay on URL scope** unless the SME
+> wants the eVar105 brand tag as the *definition* of Canada Retirement for governance reasons
+> rather than coverage ones — which is exactly what [20](20-gwam-sme-questions.md) Q3 asks. Note
+> the two facts that used to be secondary and are now the whole reason to consider switching: the
+> brand tag is the SME's own definition, and it is stable against URL restructuring.
+>
+> One thing the ruling does **not** change: the re-run is still worth doing. The null-guard bug it
+> fixes affected NULL-URL rows, which are app-shaped — so on a web-only suite the correction should
+> be small. "Should be" is the reason to measure rather than assume, and the re-run now rides along
+> with the new C11/C12 sections anyway.
+
 Two further findings constrain how far the segment model generalises:
 
 - **`manugrs` has eVar105 populated at 0.0001%** — effectively unpopulated (a handful of rows out of
@@ -193,7 +272,16 @@ Two hard constraints on acting on any of it:
   rate at exactly 0.000** (`verdict=app_or_mixed`). Note also that **`mobileappid` is 0.000 populated
   on every suite**, so the obvious app discriminator is unusable — pagename is the only handle (C8).
 
-### 2.3 ⚠️ The D8 conflict — the single biggest blocker
+### 2.3 ⚠️ The D8 conflict — ↺ **DISSOLVED 2026-07-29** (was: the single biggest blocker)
+
+> **↺ 2026-07-29.** This section described the programme's largest open question. It is no longer
+> open, and it is important to be precise about *why*: **nobody ruled on D8.** The single-channel
+> ruling removed both channels that needed login traffic — ManulifeID *is* the sign-in system and Web
+> Member *is* the authenticated portal — so the two business rules stopped pointing in opposite
+> directions. D8 stands exactly as written, `SCOPE_LOGIN_HOST_EXCLUDE` keeps subtracting its six
+> hosts, and **the conflict returns verbatim the moment scope re-widens to a signed-in channel.**
+> Read the rest of this section as the analysis to reach for if that happens, not as a live blocker.
+> The ~94% figure below is why it would still be worth an escalation then.
 
 **D8** ([16 §1](16-e2e-production-blueprint.md)) is a business rule dated **2026-07-20**: *"Individual-login
 traffic is out of anomaly scope."* It is encoded as `SCOPE_LOGIN_HOST_EXCLUDE`
@@ -227,11 +315,18 @@ gated on the same ruling. It does not create a workaround; it raises the cost of
 
 ### 2.4 Metrics
 
+> **↺ 2026-07-29 — only the first three rows are still in scope.** Errors and both sign-in metrics
+> left scope with their channels, so the analysis below them is preserved as evidence rather than as
+> work. Concretely: **Q7 and Q8 are withdrawn, not answered**, along with the follow-up query and the
+> `event154/155/156` lead. **G3 goes moot** (Errors was already `0` for the public website in the SME
+> matrix). What survives and *hardens* is the Page Views row — see §1.1: two new anomaly signals
+> divide by that numerator, so Q6 is now blocking.
+
 | Metric | Exists? | Detail |
 |---|---|---|
-| Page Views | 🟡 Approximately | We compute `hits_total` = row count ([gold_lib.py:149-154](../../databricks/src/gold_lib.py)) and surface it as page views. Adobe's *page views* are narrower than *hits*. Which the SME means changes the number ([20](20-gwam-sme-questions.md) Q6). |
+| Page Views | 🟡 Approximately | We compute `hits_total` = row count ([gold_lib.py:149-154](../../databricks/src/gold_lib.py)) and surface it as page views. Adobe's *page views* are narrower than *hits*. Which the SME means changes the number ([20](20-gwam-sme-questions.md) Q6). ↺ **2026-07-29: this ambiguity is now load-bearing** — the pv-per-visit signals are ratios over it. Probe C12 reports which basis it used. |
 | Visits | ✅ | `visits_total` = distinct `concat(post_visid_high, post_visid_low, visit_num)`. |
-| Visitors | ✅ | `visitors_total` = distinct `mcvisid`. |
+| Visitors | ✅ | `visitors_total` = distinct `mcvisid`. ↺ **2026-07-29: the SME named "unique ECID" as a signal, which is exactly this** — `mcvisid` is the ECID. But the EDA notebooks count the `post_visid` pair instead, so the two layers can disagree; C12 measures the gap (§1.1). |
 | Errors | 🟢 **Buildable** (C5) | ↺ was "🔴 Nothing". The error eVars are **populated at scale on the channels that need them**: on `manugrs` eVar181 **52.0%** (12.2M rows) / eVar182 **69.9%** (16.4M) / eVar184 **61.3%** (14.4M); on mobile eVar184 **17.9%** (**37.6M rows** — the largest error footprint anywhere). ⚠ **eVar183 is effectively absent from the Canada channels** — 0.00% on `manugrs`, 0.14% on mobile — so it is a John Hancock field, not ours. Remaining work is **G3** + Q7 (field of record, and errors-vs-affected-visits). See the attribution caveat below before quoting any example value. |
 | Sign in % rate completion | 🔴 **Not buildable from the assumed fields** (C6) | ↺ was "🟡 engine ready, inputs missing" — the inputs are now known to be *absent*. **eVar122 and eVar135 are 0% populated on `manugrs` and on mobile.** eVar122's entire footprint is John Hancock (2.77% of `jhfswamjhreupeprod`), where its values **duplicate eVar182 exactly** — so eVar122 carries error descriptions there, not ordered login steps. eVar135 is an auth-method enum (`email` 23.7M / `mfa` 145k / `biometrics` 1k / `username/password` 17), not an attempt/success marker. **The remaining path is pagename-based** (C8): `mfid:sign-in` → `grs:id-flow:member:account-selection` on `manugrs`, or `CIAM Sign In` (9.27M) on mobile. That needs an SME definition (Q8), and G2 still blocks *declaring* the ratio. |
 | Sign in Error | 🟡 **Likely buildable, not yet proven** (C5/C6) | ↺ was "🔴 Nothing". Sign-in failure strings are present in the window (`Username & Password, Invalid, Attempt` 1,054,850 · `Your password is required.` 800,213 · `Username & Password, Invalid, Locked` 462,428) and eVar181 carries `N/A_CAS_INVALID_CREDENTIALS` / `N/A_CAS_USER_LOCKED`. **But none of these can be attributed to a Canada channel from this probe** — see the caveat below. Same G3 + Q7 dependency as Errors, plus one confirming query. |
@@ -310,6 +405,42 @@ about one channel, not four. `ref_type` is 100% populated everywhere but is a co
 `6` 46.7M, `2` 5.3M) with no dictionary in this feed — usable as a fallback only if the SME can
 supply the code meanings.
 
+> **↺ 2026-07-29 — this section predicted its own resolution correctly.** It reduced Q5 to "a single
+> decision about one channel"; the ruling then removed the other three channels, and the SME answered
+> the decision. See §2.5.1.
+
+#### 2.5.1 ↺ **ANSWERED — marketing = the `CID` query-string parameter** (Abhisekh, 2026-07-29)
+
+Verbatim: *"We are capturing **CID campaign identifier — query string**. Campaign ID. It is the
+standard query string parameter appended to marketing URLs."*
+
+That is a clear business answer, and it does **not** immediately give us an implementable rule. Two
+gaps sit between the answer and a shipped filter, and it is worth being explicit that neither is a
+business question:
+
+**(1) Is `post_campaign` the same thing as `cid=`?** Our C10 candidate is Adobe's `post_campaign`
+column (**57.03%** populated on `manulifeglobalprod`), which is Adobe's *tracking code* — normally
+populated *from* a query parameter like `cid`, but that mapping is a report-suite configuration we
+have not seen. Nothing in our data proves the two agree. **New probe section C11** tests it directly,
+and it is deliberately built to expect an asymmetry rather than equality: Adobe **persists** a
+campaign value across the whole visit, while `cid=` appears only on the landing hit. So
+`campaign_only >> cid_only` is the healthy result. The two figures to read are **`cid_only` ≈ 0**
+(nothing carries CID that the column misses) and a high **`agreement_when_both`**.
+
+**(2) We strip query strings by policy.** This is the harder one. The pipeline projects
+`post_page_url` and the EDA notebooks strip `?`-onward explicitly, on the stated grounds that session
+tokens live in query strings ([15 §](15-consolidated-eda-report.md), and
+[ADR-0007 §](adr/adr-0007-identity-privacy-layer.md)). The SME's rule lives in exactly the substring
+our privacy posture discards. So implementing it means **either** extracting `cid` at ingest and
+keeping only that (not the raw query string), **or** relying on `post_campaign` as the proxy if C11
+vindicates it. The first needs an **ADR-0007 amendment**; the second needs nothing new. That decision
+is tracked in [16](16-e2e-production-blueprint.md)'s backlog.
+
+Until one of those lands, the three public-website metrics count **all** traffic, marketing included —
+which is a documented deviation from the SME's "ideally non-marketing" qualifier, not an oversight.
+Worth noting the qualifier's own hedge: "ideally" suggests he would accept unfiltered counts as a
+starting point, which is what we will ship first.
+
 ### 2.6 "Canada Retirement App Pages v2" — reconstructible from pagename (C8)
 
 The Mobile channel's segment is an Adobe segment *name*, which we cannot implement. C8 profiled
@@ -339,6 +470,16 @@ artifact of the search term, not evidence of absent retirement traffic.
 Numbered **G1–G6**. Deliberately *not* the `E1–E4` series: that namespace belongs to CoverMe in
 [17 §3](17-coverme-eda-readiness.md) and reusing it would collide across products.
 
+> **↺ 2026-07-29 — the gates re-rank under the single-channel ruling.** The ordering below was written
+> when four channels were in scope; that inverted two of the priorities.
+>
+> | Gate | Was | Now |
+> |---|---|---|
+> | **G2** SeriesSpec ratio | nice-to-have; only sign-in completion needed it | 🚩 **CRITICAL** — both new anomaly signals are per-visit ratios and cannot be *declared* without it. The one gate genuinely on the critical path. |
+> | **G3** error columns | actionable, cheapest of three | **MOOT** — Errors was already `0` for the public website in the SME matrix, and the channels that needed it are deferred. Do not widen bronze for eVar181/182/184. |
+> | **G4** channel dimension | blocked on the D8 ruling | **MOOT** — one channel needs no channel dimension. This also means the re-baseline risk it carried disappears. |
+> | **G1, G5, G6** | — | unchanged. G6 (scope tests) matters *more*, since scope is what the SME just changed. |
+
 | # | Gap | Evidence | Fix | Impact if unfixed |
 |---|---|---|---|---|
 | **G1** | ✅ **CLOSED 2026-07-29.** The discovery probe has been run. | [`eda/gwam_channel_discovery.py`](../../eda/gwam_channel_discovery.py) executed on Databricks; export [`gwam_channel_discovery.html`](../../gwam_channel_discovery.html). `generated_at` 2026-07-29T02:00:54, 11 sections, **`skipped == {}`**, `complete: true`. | Done — results folded into §0, §2.1-2.6 and §4. Three pre-probe claims were **corrected**, not just filled in (suite count, delimiter, segment-vs-URL direction). | — |
@@ -354,6 +495,27 @@ Numbered **G1–G6**. Deliberately *not* the `E1–E4` series: that namespace be
 
 Ranked by how hard each blocks the build. The send-ready version is [20 — GWAM SME Questions](20-gwam-sme-questions.md);
 this table is the technical agenda behind it.
+
+> **↺ 2026-07-29 — most of this agenda cleared in one message.** Of the twelve items, **seven are
+> withdrawn** because the channels they concerned left scope (items 1, 2a, 7, 8, 9, 10, 11), **one is
+> answered** (item 5 — marketing = CID, §2.5.1), **one is partly answered and spawns a new question**
+> (item 3's brand-tag half → **new item 13 / Q3b**), and **one is escalated** (item 6, page views —
+> now blocking, §1.1). Items 2b, 4 and 12 shrink to the public website. What remains genuinely open is
+> a short list: **Q3b, Q3 sign-off, Q6, Q12**.
+>
+> | # | New status | Why |
+> |---|---|---|
+> | 1 (D8) | ⬜ **Withdrawn** | Both signed-in channels deferred — the conflict dissolved without a ruling (§2.3) |
+> | 2a (`manucustomer.prod` access) | ⬜ **Withdrawn** | ManulifeID out of scope; longest-lead item retires |
+> | 2b (ratify rsids) | 🟡 Shrunk | Only `manulifeglobalprod` matters now, and it was never in doubt |
+> | 3 (segment scope) | 🚩 **Open, re-priced** | Now a bare +1,436 / −60,594 trade; the coverage argument is gone (§2.2) |
+> | **13 / Q3b** (NEW) | 🚩 **Open** | Are `wealth-ca` / `pvt-wealth` inside Canada Retirement? Probe C3 sizes them; predicate HELD at parts-match meanwhile |
+> | 4 (1/0 reading) | 🟡 Shrunk | Moot for the deferred metrics; no multi-channel roll-up question left |
+> | 5 (marketing) | ✅ **Answered** | CID query parameter — §2.5.1. What remains is mechanical (C11 + the ADR-0007 question) |
+> | 6 (page views) | 🚩 **Escalated** | Was a labelling question; now the denominator of two new signals (§1.1) |
+> | 7, 8 (errors, sign-in ratio) | ⬜ **Withdrawn** | Those metrics left scope with their channels |
+> | 9, 10, 11 (ManulifeID split, instance, App Pages v2) | ⬜ **Withdrawn** | Mobile and ManulifeID deferred |
+> | 12 (thresholds, owners) | 🟡 Shrunk | Five metrics on one channel instead of 17 on four |
 
 | # | What we need clarified | Why it blocks | Our current assumption | Resolving artifact |
 |---|---|---|---|---|
@@ -374,6 +536,23 @@ this table is the technical agenda behind it.
 ---
 
 ## 5. Gap to the full build (roadmap, post-SME)
+
+> **↺ 2026-07-29 — re-sequenced.** The roadmap below is written around four channels and a blocking
+> ruling; neither applies. The current sequence is short:
+>
+> 1. **Run the extended probe** (C3 re-run + brand-variant sizing + C11 + C12). One Databricks run,
+>    13 sections. This is the only thing gating the two new metrics' thresholds.
+> 2. **G2** — port `numerator`/`denominator` + governance fields from `CmSeriesSpec` to GWAM's
+>    `SeriesSpec`. Now the critical path, not a tidy-up.
+> 3. **G6** — scope-predicate tests. Do this *before* touching scope, which is exactly what item 3
+>    would do.
+> 4. **Decide item 3** (URL vs segment scope) on the re-run numbers, then a single
+>    `mode=backfill` if it flips.
+> 5. **Marketing exclusion** — only after C11, and only via the ADR-0007 decision (§2.5.1).
+>
+> Dropped from the sequence entirely: G3, G4, per-channel bronze scope, mobile-app ingestion, the
+> access request. Step D below is no longer "nothing here is startable today" — steps 1–3 are all
+> startable now.
 
 **A. Close what data can close — ✅ done 2026-07-29.** G1 ran clean; §0 and §2.1-2.6 now carry results
 rather than ⏳ markers, and three pre-probe claims were corrected. What remains in §4 is there because
@@ -426,6 +605,32 @@ sharper and smaller: **one business ruling (D8), one access request (`manucustom
 definition we cannot infer (sign-in completion).** The critical path is no longer discovery — it is
 those three, plus G2/G3/G6, which are all now unblocked and independent of any ruling.
 
+> ### ↺ Revised bottom line (2026-07-29, post-ruling)
+>
+> **All three of those named blockers are gone** — and none of them was solved. The D8 ruling was
+> never made, the access request retires unfiled, and sign-in completion left scope. That is worth
+> stating plainly rather than reading as progress: **scope narrowing removed the questions instead of
+> answering them**, and each one returns intact if the scope re-widens.
+>
+> What the programme actually looks like now:
+>
+> | Area | Status |
+> |---|---|
+> | Scope definition | ✅ **Settled** — `manulifeglobalprod` + eVar105 parts-match (`ca-retirement` + `gwam`), public website only |
+> | Page Views / Visits / Visitors | ✅ **Engine ready today** — the three metrics exist and run |
+> | Marketing exclusion | 🟡 **Defined, not implementable** — CID rule known; needs C11 + an ADR-0007 decision (§2.5.1) |
+> | Brand-variant scope (Q3b) | 🚩 **Open** — `wealth-ca` / `pvt-wealth` unclassified; predicate held meanwhile |
+> | Page-view numerator (Q6) | 🚩 **Open and now blocking** — two new signals divide by it |
+> | New anomaly signals | 🔴 **Blocked on G2** — `SeriesSpec` cannot declare a ratio |
+> | Baseline history | 🟡 **138 days** — clears the 90-day gate with the least margin of any suite, and it is now the *only* suite |
+> | Governance | 🟡 v0.5.0 — 5 candidate / 14 deferred; pin still open (G5) |
+>
+> **The honest summary: this product is closer to shippable than it has ever been.** Three of its five
+> metrics work today against a settled scope. The remaining work is one engineering gate (G2), one
+> probe run, and two SME answers — none of which is procurement-shaped or cross-team. The thing to
+> watch is no longer coverage but **baseline thinness**: 138 days on the only suite in scope, and any
+> scope flip consumes that margin.
+
 ---
 
 ## 7. Verification / how to confirm this is done
@@ -444,5 +649,46 @@ those three, plus G2/G3/G6, which are all now unblocked and independent of any r
 3. **D8 is still in force in code.** `git diff databricks/conf/settings.py` is empty; `SCOPE_LOGIN_HOST_EXCLUDE`
    is unchanged. This document flags the conflict; it does not resolve it.
 4. **Registry seeded, tests green.** `pytest tests/ -q` passes, including `test_gwam_channel_seed_counts`
-   (17 candidate entries) and the untouched `test_gold_parity` (35 GWAM series, Spark↔pandas).
+   (↺ **19 entries at v0.5.0** — 5 candidate + 14 deferred, partition asserted by
+   `test_gwam_status_partition`) and the untouched `test_gold_parity` (35 GWAM series, Spark↔pandas).
 5. **Doc 20 reads as an email.** No repo jargon, no unexplained eVar numbers, blockers first.
+
+### ↺ Added 2026-07-29 — verifying the single-channel revision
+
+6. **The extended probe run.** Re-run [`gwam_channel_discovery.py`](../../eda/gwam_channel_discovery.py)
+   on Databricks and confirm **13 `BEGIN SHAREABLE` blocks** — which the manifest reports as
+   **`n_sections: 12`**, because `c_run_manifest` counts `RESULTS` before emitting itself (the
+   11-block run above reported `n_sections: 10` the same way; asserting `n_sections == 13` reads as
+   a vanished section when nothing is wrong) — plus `skipped == {}` and `complete: true`. Verify with
+   `python scripts/decode_databricks_export.py <export.html> --expect-sections 12`, which also
+   re-hashes every block against the manifest and flags stdout truncation. Then read, in order:
+   - `evar105_census.brand_variant_sizing` → the Q3b numbers. Expect `overlap_with_ca_retirement` ≈ 0
+     on both variants; a large overlap would mean they are *already* inside our predicate and Q3b is
+     moot.
+   - `evar105_census.scope_sizing_on_pipeline_rsid.segment_only` → the corrected GAIN figure. On a
+     web-only suite the null-guard fix should move it little; a large jump would mean
+     `manulifeglobalprod` carries more URL-less hits than C2's 1.000 URL rate implied.
+   - `cid_vs_campaign` → `cid_only` and `agreement_when_both`. These decide whether the marketing rule
+     can use `post_campaign` or needs the raw query string (§2.5.1).
+   - `visit_shape.suite_all.share_pv_eq_0` and `.share_pv_eq_2`, plus the `daily` series → the
+     thresholds for the two new signals, and whether the "consistently 2" pattern is actually present.
+   - `visit_shape.visitor_grain` → how far ECID and visid-pair visitor counts diverge day to day.
+7. **The probe's new sections respect the privacy posture.** `cid_vs_campaign` emits counts only — grep
+   its payload for `http` and for any query-string value; both must come back empty. It reads raw URLs
+   transiently but nothing raw reaches the shareable block. Mechanically:
+   `python scripts/decode_databricks_export.py <export.html> --grep http --grep-sections cid_vs_campaign`
+   (exits non-zero on a hit).
+8. **No production code moved.** `git diff databricks/ detect/registry.py` shows nothing but comment and
+   version-pin changes. The ruling changed scope *documentation* and the registry; bronze/silver/gold
+   logic and the GWAM detector are untouched in this pass by design.
+
+---
+
+## Revision log
+
+| Date | Change |
+|---|---|
+| 2026-07-28 | Written pre-probe. Four-channel scope recorded as the spec of record; G1–G6 defined; 12-item SME agenda. |
+| 2026-07-29 (early) | Probe C1–C10 run clean → **G1 closed**. Three pre-probe claims corrected: three of four suites located (not zero), delimiter is `":"` not `" : "`, and segment scope is *narrower* than URL scope (so it closes no French gap). Errors/Sign-in Errors reclassified from "nothing" to buildable. |
+| 2026-07-29 (audit) | C3 null-guard bug found — `segment_only` (+1,436) is an undercount for NULL-URL rows; code fixed, figures flagged pending re-run. |
+| **2026-07-29 (later, SME ruling)** | **Scope narrowed to the Public Website channel only.** D8 conflict dissolved (not resolved); `manucustomer.prod` access request moot; segment-scope justification collapsed; G3/G4 moot and **G2 promoted to critical**; Q5 answered (marketing = CID) with two new implementation gaps; **new §1.1** (three SME anomaly signals) and **new §2.5.1** (the CID rule); **new Q3b** (`wealth-ca` / `pvt-wealth`); Q6 escalated to blocking. Registry → **v0.5.0** (5 candidate / 14 deferred + 2 new signal seeds); probe gains C3 variant sizing, **C11** and **C12**. |

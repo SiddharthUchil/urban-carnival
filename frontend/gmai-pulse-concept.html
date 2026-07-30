@@ -658,8 +658,16 @@ function esc(s) {
 // Traffic shares seeded from the real rsid census (13-month sweep); segment = the
 // eVar105 scope discriminator (CA / JH / GWAM / Asia). status "onboarding" tiles show
 // the multi-region expansion path — mapped, not yet monitored.
+// GRS Mobile: share corrected 56.9 -> 68.9 by the full-history census (probe C1, 2026-07-29).
+// NOTE ON SCOPE: this tile set illustrates the multi-property vision and deliberately does NOT
+// track the GWAM alerting scope, which the SME narrowed to the Public Website channel only on
+// 2026-07-29 (doc-16 D11). Under that ruling GRS Mobile is deferred, but it keeps status "live"
+// here because the demo seeds an anomaly against it (see ANOMALIES) and an "onboarding" tile
+// renders as "not yet monitored" — the two would contradict each other. If this concept ever
+// becomes the real console, drive `status` from the registry's candidate/deferred partition
+// instead of hardcoding it.
 const PROPERTIES = [
-  { id: "grs-mobile", name: "GRS Mobile App",        rsid: "manufingbrsmobileapp.prod", region: "Canada", segment: "GWAM", share: 56.9, status: "live", base: 610000 },
+  { id: "grs-mobile", name: "GRS Mobile App",        rsid: "manufingbrsmobileapp.prod", region: "Canada", segment: "GWAM", share: 68.9, status: "live", base: 610000 },
   { id: "gwam-ca",    name: "GWAM CA Retirement",    rsid: "manulifeglobalprod",        region: "Canada", segment: "GWAM", share: 3.1,  status: "live", base: 52000 },
   { id: "coverme",    name: "CoverMe",               rsid: "adobe_coverme · URL scope", region: "Canada", segment: "CA",   share: 2.4,  status: "live", base: 35000 },
   { id: "manusec",    name: "Manulife Securities",   rsid: "manusecurities",            region: "Canada", segment: "CA",   share: 0.7,  status: "live", base: 7600 },
