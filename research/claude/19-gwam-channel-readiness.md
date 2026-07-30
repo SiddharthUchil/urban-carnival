@@ -31,7 +31,9 @@
 > - **Two questions were answered and two are new.** Q5 ("what is marketing?") is answered — see the
 >   new **§2.5.1**. Q3 is partly answered and spawns **Q3b** (the `wealth-ca` / `pvt-wealth` brand
 >   variants). Q6 (page views vs hits) is **escalated**, since the new signals divide by that
->   numerator.
+>   numerator. ↺ **Q3b was answered 2026-07-30 — both variants ruled OUT of Canada Retirement, which
+>   confirms the predicate this document had held, so no re-baseline follows. Q6 is now the only open
+>   SME answer on the critical path.**
 > - **Three new anomaly signals arrived** — see the new **§1.1**.
 >
 > Registry effect: [metric-registry.yaml](metric-registry.yaml) **v0.5.0** — 5 `candidate`
@@ -541,7 +543,8 @@ this table is the technical agenda behind it.
 > answered** (item 5 — marketing = CID, §2.5.1), **one is partly answered and spawns a new question**
 > (item 3's brand-tag half → **new item 13 / Q3b**), and **one is escalated** (item 6, page views —
 > now blocking, §1.1). Items 2b, 4 and 12 shrink to the public website. What remains genuinely open is
-> a short list: **Q3b, Q3 sign-off, Q6, Q12**.
+> a short list: **Q3b, Q3 sign-off, Q6, Q12**. ↺ **2026-07-30: Q3b is answered (both brand variants
+> ruled OUT), leaving Q3 sign-off, Q6, Q12.**
 >
 > | # | New status | Why |
 > |---|---|---|
@@ -549,7 +552,7 @@ this table is the technical agenda behind it.
 > | 2a (`manucustomer.prod` access) | ⬜ **Withdrawn** | ManulifeID out of scope; longest-lead item retires |
 > | 2b (ratify rsids) | 🟡 Shrunk | Only `manulifeglobalprod` matters now, and it was never in doubt |
 > | 3 (segment scope) | 🚩 **Open, re-priced** | Now a bare +1,436 / −60,594 trade; the coverage argument is gone (§2.2) |
-> | **13 / Q3b** (NEW) | 🚩 **Open** | Are `wealth-ca` / `pvt-wealth` inside Canada Retirement? Probe C3 sizes them; predicate HELD at parts-match meanwhile |
+> | **13 / Q3b** (NEW) | ✅ **CLOSED 2026-07-30** — was 🚩 Open | Are `wealth-ca` / `pvt-wealth` inside Canada Retirement? **Both ruled OUT** (Abhisekh, 2026-07-30). Probe C3 had sized them (+250,355 / +9,690, zero overlap); the ruling **confirms the HELD parts-match predicate**, so nothing re-baselines and the +19.3% swing is retired |
 > | 4 (1/0 reading) | 🟡 Shrunk | Moot for the deferred metrics; no multi-channel roll-up question left |
 > | 5 (marketing) | ✅ **Answered** | CID query parameter — §2.5.1. What remains is mechanical (C11 + the ADR-0007 question) |
 > | 6 (page views) | 🚩 **Escalated** | Was a labelling question; now the denominator of two new signals (§1.1) |
@@ -607,7 +610,8 @@ this table is the technical agenda behind it.
 >    ADR-0007 amendment is no longer one of two options — it is the only one.
 >
 > Net: the sequence is now **G6, then two SME answers (Q3b, Q6), then the ADR-0007 decision.** Nothing
-> engineering-side is blocked on anyone.
+> engineering-side is blocked on anyone. ↺ **2026-07-30: Q3b is answered, so the sequence is G6, then
+> Q6, then the ADR-0007 decision.**
 
 **A. Close what data can close — ✅ done 2026-07-29.** G1 ran clean; §0 and §2.1-2.6 now carry results
 rather than ⏳ markers, and three pre-probe claims were corrected. What remains in §4 is there because
@@ -696,14 +700,15 @@ those three, plus G2/G3/G6, which are all now unblocked and independent of any r
 > | Scope definition | ✅ **Settled** — unchanged |
 > | Page Views / Visits / Visitors | ✅ **Engine ready today** — unchanged |
 > | Marketing exclusion | 🔴 **Harder than it looked** — was 🟡. C11 **rejected** `post_campaign` as the proxy (agreement 0.762 suite / 0.537 segment), so the zero-cost path is gone and an **ADR-0007 amendment is the only route** (§2.5.1) |
-> | Brand-variant scope (Q3b) | 🚩 **Open, now sized** — `wealth-ca` +250,355 rows, `pvt-wealth` +9,690, **zero overlap** with ca-retirement, so both are purely additive (§7 item 6) |
+> | Brand-variant scope (Q3b) | ✅ **ANSWERED 2026-07-30** — was 🚩. The sizing (`wealth-ca` +250,355 / **+19.3%**, `pvt-wealth` +9,690, **zero overlap**) went to the SME, who ruled **both OUT of Canada Retirement**. That **confirms the predicate we held**, so nothing re-baselines; the cost is that ~250k records/90 days are now unwatched by explicit decision (§7 item 6) |
 > | Page-view numerator (Q6) | 🚩 **Open, now priced** — the two bases give 2.885 vs 1.343 on this scope; the "consistently 2" signal is meaningful under one and not the other |
 > | New anomaly signals | 🟡 **Blocked on Q6 only** — was 🔴 blocked on G2. ⚠ C12 found the SME's literal "< 1" test **never fires** (88-day floor 1.2236); `share_pv_eq_0` = 3.25% is the detectable quantity (§1.1) |
 > | Baseline history | 🟡 **138 days** — unchanged |
 > | Governance | 🟡 v0.6.0 — 5 candidate / 14 deferred; pin still open (G5) |
 >
 > **G2 is closed**, so the "one engineering gate, one probe run, two SME answers" of 2026-07-29 is now
-> **two SME answers** (Q3b, Q6) plus one architectural decision (the ADR-0007 amendment). The probe
+> **two SME answers** (Q3b, Q6) plus one architectural decision (the ADR-0007 amendment) — ↺ **and
+> Q3b came back the same day, leaving exactly one SME answer (Q6) and the ADR-0007 decision**. The probe
 > also did something better than fill blanks: it **falsified two working assumptions** — that
 > `post_campaign` could stand in for CID, and that the SME's "< 1" test would fire at all. Both would
 > have shipped as silent no-ops. Baseline thinness remains the thing to watch.
@@ -747,6 +752,10 @@ those three, plus G2/G3/G6, which are all now unblocked and independent of any r
      the expected result — they are additive (+19.3% / +0.7%), not already inside our predicate, so
      Q3b is live rather than moot. Both are present in the data, correcting the earlier assumption
      that they were unseen.
+     ↺ **Q3b ANSWERED 2026-07-30 (Abhisekh): neither is part of Canada Retirement.** The sizing did its
+     job — it turned a "we don't recognise these" into a priced either/or, and the SME ruled both
+     **out**. The predicate stays exactly as held (`ca-retirement` + `gwam` parts-match), so this probe
+     section closes a question **without triggering the re-baseline it was measuring the cost of**.
    - `evar105_census.scope_sizing_on_pipeline_rsid` → segment 1,298,417 vs URL-broad 1,415,399;
      `segment_only` **1,352** (the GAIN) and `url_only` **64,079** (the LOSS). The null-guard fix
      moved the gain little, as predicted for a web-only suite — switching to segment scope is a net
