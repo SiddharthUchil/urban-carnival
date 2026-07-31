@@ -77,6 +77,12 @@ HMAC_SECRET_SCOPE = "gmai_pulse"
 HMAC_SECRET_KEY = "identity_hmac_key"
 IDENTITY_COLS = ["mcvisid", "post_visid_high", "post_visid_low"]
 
+# Same contract as conf/settings.PSEUDONYMIZE_DEFAULT -- see the note there. Off means
+# IDENTITY_COLS land in silver in the clear (ADR-0007 deviation, announced by the silver task);
+# reversing it re-baselines nothing because the hash is deterministic, and costs a silver+gold
+# rebuild from bronze with no source re-read.
+PSEUDONYMIZE_DEFAULT = True
+
 # date_time carries America/Toronto wall-clock (constant -4/-5h offset vs hit_time_gmt,
 # EDA S10). Pinned as the session timezone in silver so timestamp casts stay deterministic.
 TIMEZONE = "America/Toronto"
@@ -87,11 +93,13 @@ DOMAIN = "coverme"
 class CmSettings:
     """Resolved run configuration + fully-qualified table names."""
 
-    def __init__(self, catalog, mode="incremental", start_date=None, repo_root=None):
+    def __init__(self, catalog, mode="incremental", start_date=None, repo_root=None,
+                 pseudonymize=PSEUDONYMIZE_DEFAULT):
         self.catalog = catalog
         self.mode = mode  # "incremental" | "backfill"
         self.start_date = start_date or BACKFILL_START
         self.repo_root = repo_root
+        self.pseudonymize = pseudonymize
 
     @property
     def bronze(self):
@@ -124,6 +132,12 @@ def _widget(dbutils, name, default):
     return v if v not in (None, "") else default
 
 
+def _flag(dbutils, name, default):
+    """Read a boolean widget. Only explicit false tokens turn it off (see conf/settings._flag)."""
+    raw = _widget(dbutils, name, "true" if default else "false")
+    return str(raw).strip().lower() not in ("false", "0", "no")
+
+
 def resolve(dbutils=None):
     """Build CmSettings from job parameters / notebook widgets.
 
@@ -134,8 +148,10 @@ def resolve(dbutils=None):
     mode = _widget(dbutils, "mode", "incremental")
     start_date = _widget(dbutils, "start_date", BACKFILL_START)
     repo_root = _widget(dbutils, "repo_root", "")
+    pseudonymize = _flag(dbutils, "pseudonymize", PSEUDONYMIZE_DEFAULT)
 
-    s = CmSettings(catalog, mode=mode, start_date=start_date, repo_root=(repo_root or None))
+    s = CmSettings(catalog, mode=mode, start_date=start_date, repo_root=(repo_root or None),
+                   pseudonymize=pseudonymize)
     if s.catalog == CATALOG_PLACEHOLDER:
         raise ValueError(
             "target_catalog is unset. Set the 'target_catalog' job parameter (or notebook "

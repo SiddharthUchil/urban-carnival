@@ -26,13 +26,22 @@ print("silver window >=", start)
 
 # COMMAND ----------
 # Identity HMAC key (fail loudly if unprovisioned -- privacy gate, see databricks/README.md).
-try:
-    hmac_key = dbutils.secrets.get(scope=HMAC_SECRET_SCOPE, key=HMAC_SECRET_KEY)
-except Exception as e:
-    raise RuntimeError(
-        f"identity HMAC secret {HMAC_SECRET_SCOPE}/{HMAC_SECRET_KEY} not found. "
-        "Provision it (databricks/README.md) before running silver."
-    ) from e
+# Skipped entirely when the run passes pseudonymize=false; see conf/settings.PSEUDONYMIZE_DEFAULT.
+hmac_key = None
+if s.pseudonymize:
+    try:
+        hmac_key = dbutils.secrets.get(scope=HMAC_SECRET_SCOPE, key=HMAC_SECRET_KEY)
+    except Exception as e:
+        raise RuntimeError(
+            f"identity HMAC secret {HMAC_SECRET_SCOPE}/{HMAC_SECRET_KEY} not found. "
+            "Provision it (databricks/README.md) before running silver, or run with "
+            "pseudonymize=false to land identity columns in the clear."
+        ) from e
+else:
+    print("WARNING: pseudonymize=false -- ADR-0007 DEVIATION. These columns land in silver "
+          f"in the clear: {', '.join(IDENTITY_COLS)}. Gold is unaffected (the hash is "
+          "deterministic, so distinct counts are identical either way); reversing this is a "
+          "silver+gold rebuild from bronze with no source re-read.")
 
 # COMMAND ----------
 pred = F.col(PARTITION_COL) >= F.lit(start)
@@ -41,8 +50,9 @@ b = spark.table(s.bronze).where(pred).select(*SILVER_COLUMNS)
 conf = (b.withColumn("event_ts", sl.event_ts_expr())
           .withColumn("post_event_list", sl.normalize_event_list_expr("post_event_list"))
           .drop("date_time", "hit_time_gmt"))
-for c in IDENTITY_COLS:
-    conf = conf.withColumn(c, sl.pseudonymize_expr(c, hmac_key))
+if s.pseudonymize:
+    for c in IDENTITY_COLS:
+        conf = conf.withColumn(c, sl.pseudonymize_expr(c, hmac_key))
 conf = conf.cache()
 
 # COMMAND ----------
