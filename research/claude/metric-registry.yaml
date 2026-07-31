@@ -1,6 +1,6 @@
 # GMAI-Pulse Phase-1 Metric Registry
 # ------------------------------------------------------------------
-# version: 0.6.1 (2026-07-30)
+# version: 0.7.0 (2026-07-30)
 # generated_from: new_data/data_profile_summary.json (profiler v0.1.0, run 2026-07-02)
 # seed_source: CoverMe data dictionary rows where Notes == "Anomaly Detection"
 #              -> confirmed counts: 9 (data_feed_columns) + 8 (post_eVar) + 12 (post_event_list) = 29
@@ -20,6 +20,31 @@
 # bytes+sha1. What remains is purely SME: Q3b and Q6. ↺ 2026-07-30 (later): Q3b is ANSWERED,
 # so the promotion gate now rests on Q6 ALONE. The partition itself is unchanged — every GWAM
 # entry stays `candidate` / `deferred` with `owner: TBD`.
+#
+# v0.7.0 (2026-07-30) makes the Q6 page-view basis a CONFIG CONSTANT instead of a build
+# blocker. Q6 cannot be settled by data — probe C12 already measured both bases (2.885 vs
+# 1.343 pv/visit on this scope) and what remains is purely "which does the SME mean" — so
+# rather than wait, both bases are now BUILT behind databricks/conf/settings.PAGE_VIEW_BASIS
+# ∈ {all_hits, adobe_pv}, shipped at `all_hits`. What changed:
+#   - `all_hits` makes page_views_total IDENTICAL to hits_total by construction, so merging
+#     this re-baselines NOTHING. Verified: all 35 pre-existing series are value-identical to
+#     the pre-change KPI frame, column order preserved.
+#   - The page-view engine now exists on BOTH builders (detect/kpis.py + gold_lib.py): a new
+#     `page_views` source, and a `visit_pv_bucket` / kind=point_mass source that emits the
+#     per-visit page-view bucket shares. `point-mass-share` therefore HAS an engine now —
+#     the "no engine at all" note below is superseded.
+#   - `post_page_event` was NOT in conf/bronze_columns.py, so neither Q6 answer was
+#     computable in the pipeline. It is now carried (bronze + silver + both NEEDED_COLS).
+#     ⚠ It must be BACKFILLED into bronze history before `adobe_pv` can be used.
+#   - STATUS IS DELIBERATELY UNCHANGED. All three entries stay `candidate`: Q6 is still
+#     unanswered and a candidate metric must not alert. detect/registry.SCORED_SERIES
+#     excludes the whole page-view family from detection for exactly that reason (and
+#     because under all_hits, scoring page_views_total would fire every hits anomaly twice).
+#     Built and inspectable, not alerting. Answering Q6 = flip the constant, backfill, re-run
+#     calibration, then promote.
+#   - Detector impact measured, not assumed: the injected-scenario eval report is unchanged
+#     from before this work — 5/5 recall, identical detectors and delays, business FP
+#     113/4906 = 0.02303, operational 0/4596.
 #
 # v0.6.1 records the doc 20 Q3b ruling (Abhisekh, 2026-07-30): the `wealth-ca` and `pvt-wealth`
 # brand variants are NOT part of Canada Retirement. This CONFIRMS the predicate that was already
@@ -71,7 +96,7 @@
 # ------------------------------------------------------------------
 
 meta:
-  version: 0.6.1
+  version: 0.7.0
   updated: 2026-07-30
   default_grain: daily          # hourly reserved — enable only after >=30-day feed confirms volume
   domains: [coverme, gwam_retirement]
@@ -565,11 +590,18 @@ post_event_list:     # exactly 12 entries (seed count 12)
 #
 #    decode_rule values here extend the CoverMe vocabulary: hit-count, visit-distinct,
 #    visitor-distinct, error-count, completion-ratio, ratio, point-mass-share. The first
-#    three map onto existing gold_lib sources (hits/visits/visitors). completion-ratio and
-#    ratio map onto the existing `ratio` kind (gold_lib.py:168-175) but cannot yet be
-#    DECLARED, because GWAM's SeriesSpec has no numerator/denominator fields (doc 19 G2).
-#    point-mass-share has no engine at all: it tests a single bucket of a distribution,
-#    which none of the current scorers (robust-z, level-shift, ECOD, rules) expresses.
+#    three map onto existing gold_lib sources (hits/visits/visitors).
+#    ↺ 2026-07-30 (v0.7.0) — the two "not yet buildable" notes here are BOTH superseded:
+#      - completion-ratio / ratio: DECLARABLE since G2 closed (SeriesSpec carries
+#        numerator/denominator) and now actually DECLARED — see gwam_pw_pv_per_visit.
+#      - point-mass-share: HAS AN ENGINE now. A `visit_pv_bucket` source with kind=point_mass
+#        aggregates to visit grain and emits each bucket's share of visits, in both builders
+#        (detect/kpis.py + databricks/src/gold_lib.py), parity-tested under both bases.
+#        NOTE what this does and does not give you: the VALUE is built and scoreable by the
+#        existing detectors, but the SME's actual dup2 signal is "unusually STEADY at 2",
+#        which is a low-dispersion test that robust-z / level-shift / ECOD / rules still do
+#        not express. That detector remains unbuilt — deliberately, since its calibration
+#        depends on which basis Q6 selects (C12 baseline: cv 0.122 suite / 0.099 segment).
 # ------------------------------------------------------------------
 gwam_channel_metrics:   # 19 entries (3 traffic x 4 channels + 3 errors + 2 sign-in + 2 anomaly signals)
 
@@ -626,6 +658,12 @@ gwam_channel_metrics:   # 19 entries (3 traffic x 4 channels + 3 errors + 2 sign
                                     # 2.885 (hits/visit, derived) vs 1.343 (Adobe page-view marker). The SME's
                                     # "consistently 2" signal is meaningful under one and not the other, so Q6 is
                                     # not a labelling question — it decides whether dup2 can fire at all.
+                                    # ↺ 2026-07-30 (v0.7.0) NO LONGER BLOCKING THE BUILD. Both bases are built
+                                    # behind settings.PAGE_VIEW_BASIS; `hit-count` above describes the shipped
+                                    # branch ("all_hits"), under which page_views_total == hits_total exactly.
+                                    # The Q6 answer selects a constant, it no longer gates construction. To adopt
+                                    # the Adobe basis: backfill post_page_event into bronze history, flip the
+                                    # constant, full mode=backfill with gold truncated, re-run calibration.
     grain: daily
     direction: context_dependent
     owner: TBD
@@ -680,8 +718,12 @@ gwam_channel_metrics:   # 19 entries (3 traffic x 4 channels + 3 errors + 2 sign
   # plus status/direction/owner, detect/kpis.py resolves kind=ratio in a second pass matching
   # gold_lib, and tests/test_gold_parity.py pins pandas/Spark agreement including the
   # zero-denominator day. A per-visit ratio is now DECLARABLE.
-  # BOTH remain blocked on doc 20 Q6 alone, which defines the page-view numerator — an SME
-  # answer, not engineering. Probe C12 profiled the distributions first so thresholds are set
+  # ↺ 2026-07-30 (v0.7.0) — and now DECLARED AND BUILT. Both are computed on every run, under
+  # both bases, from local series `pv_per_visit` and `pv_bucket_share_{0,1,2,3_5,6plus}`.
+  # They are NOT scored: detect/registry.SCORED_SERIES excludes the page-view family while Q6
+  # is open, so they are inspectable in gold without raising alerts. Q6 is therefore no longer
+  # a BUILD blocker — it is a PROMOTION blocker, which is the correct kind.
+  # Probe C12 profiled the distributions first so thresholds are set
   # from data rather than from a guess; the baselines are recorded on each entry below.
   # Baselines are 88 days, rsid manulifeglobalprod, window 2026-05-01..2026-07-30, and are
   # measured on the ADOBE PAGE-VIEW basis (try_cast(post_page_event as int) == 0). If Q6 comes
@@ -705,11 +747,21 @@ gwam_channel_metrics:   # 19 entries (3 traffic x 4 channels + 3 errors + 2 sign
                                     # The quantity that IS detectable is share_pv_eq_0 = 3.25% suite / 2.38% segment,
                                     # which is a level worth alerting on and moves independently of the mean.
                                     # Do not set a "< 1" threshold; see doc 20 Q6 for the question put to the SME.
+                                    # ↺ 2026-07-30 (v0.7.0) BUILT. `pv_per_visit` (page_views_total / visits_total)
+                                    # and `pv_bucket_share_0` — the zero-page-view share, which is the detectable
+                                    # form of this signal — are emitted on every run under both bases.
+                                    # ⚠ GRAIN NOTE: the bucket shares are computed DATE-FIRST (group by
+                                    # (date, visit key)) so the denominator is exactly visits_total. C12 grouped by
+                                    # visit key alone and assigned each visit to min(process_date), so visits
+                                    # spanning midnight bucket differently. The small deviation from C12's numbers
+                                    # below is BY DESIGN — do not "correct" it, that would desynchronise the shares
+                                    # from the visits_total they divide by.
     grain: daily
     direction: context_dependent    # the SME flags the LOW side; the enum has no lower_is_bad, and a spike is
                                     # independently interesting, so context_dependent is the honest reading
     owner: TBD
-    status: candidate               # blocked on Q6 (G2 closed 2026-07-30)
+    status: candidate               # BUILT but not scored — Q6 still selects the numerator, and a candidate
+                                    # metric must not alert (detect/registry.SCORED_SERIES)
   - metric_id: gwam_pw_pv_per_visit_dup2
     name: Exactly-2-Page-View Visit Share — Public Website (duplication indicator)
     domain: gwam_retirement
@@ -721,6 +773,11 @@ gwam_channel_metrics:   # 19 entries (3 traffic x 4 channels + 3 errors + 2 sign
     decode_rule: point-mass-share   # share of visits with EXACTLY 2 page views. The SME's signal is CONSISTENCY at 2,
                                     # not the level — i.e. an unusually stable point mass, which no current scorer
                                     # expresses (see section header). Needs a new rule kind, not a new threshold.
+                                    # ↺ 2026-07-30 (v0.7.0) — HALF DONE, and the half matters. The VALUE is built:
+                                    # `pv_bucket_share_2` is emitted every run by the new visit_pv_bucket engine.
+                                    # The DETECTOR is not: firing on abnormally LOW dispersion is still unexpressed
+                                    # by robust-z / level-shift / ECOD / rules. Deferred deliberately — calibrating
+                                    # it before Q6 means calibrating it twice, since the basis moves the cv.
                                     # ↺ 2026-07-30 C12 BASELINE: share_pv_eq_2 = 11.67% suite / 12.66% segment.
                                     # Because the signal is about STABILITY, the dispersion is the figure that
                                     # matters, not the level: daily range 0.0768–0.1350, sd 0.0140, cv 0.122 (suite);
@@ -730,7 +787,8 @@ gwam_channel_metrics:   # 19 entries (3 traffic x 4 channels + 3 errors + 2 sign
     grain: daily
     direction: higher_is_bad
     owner: TBD
-    status: candidate               # blocked on Q6 + a new detector kind (G2 closed 2026-07-30)
+    status: candidate               # BUILT but not scored — blocked on Q6 for the numerator AND on the
+                                    # low-dispersion detector kind, which is still unbuilt (see decode_rule)
 
   # ---- Web Member — rsid manugrs ("GRS+", data-confirmed; SME to ratify); scope = eVar185 platform tag ----
   # ↺ DEFERRED 2026-07-29 — the SME (Abhisekh) narrowed the alerting scope to the Public Website

@@ -10,6 +10,15 @@
 
 **Source:** `data/synth/clean.parquet` — 1,142,361 rows × 120 columns (120 populated).
 
+> **↺ 2026-07-30 — one column changed.** `post_page_event` used to profile as `0` on 100% of
+> rows, i.e. every hit was a page view. That made Adobe's page-view basis arithmetically
+> identical to counting every hit, so the doc-20-Q6 page-view code could not be tested at all:
+> `share_pv_eq_0` was pinned at exactly zero and both bases agreed by construction. The
+> generator now assigns page views **per visit** (`synth/generate.PV_MIX`), calibrated to probe
+> C12's real-world mix, so the fixture can falsify the basis. **Only this column changed** —
+> the generator burns the same RNG draw it used to consume, so every other column and all 35
+> pre-existing KPI series are bit-identical to the previous fixture.
+
 
 ## Former shape-only identifiers — now RAW
 
@@ -92,7 +101,7 @@ These columns were emitted shape-only (cardinality/null only, no values) under t
 | `post_evar200` | 100.0 | 49,053 | `<syn:post_evar200:00000:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx>` (8.69%) |
 | `post_event_list` | 100.0 | 451 | `10004,10005,10006,10007,10008,10036,10037,10044,10099,10043,10000,10001,10002,10...<trunc>` (30.98%) |
 | `post_java_enabled` | 100.0 | 1 | `post_java_enabled_v0` (100.0%) |
-| `post_page_event` | 100.0 | 1 | `0` (100.0%) |
+| `post_page_event` | 100.0 | 2 | `0` (88.19%), `1` (11.81%) |
 | `post_page_url` | 100.0 | 39 | `www.manulife.com | depth=6 | /ca` (65.18%) |
 | `post_pagename` | 100.0 | 73 | `ca-ret:personal:overview` (57.49%) |
 | `post_pagename_no_url` | 100.0 | 72 | `post_pagename_no_url_v0` (20.65%) |

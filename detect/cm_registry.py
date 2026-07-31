@@ -40,8 +40,11 @@ from registry import slug
 # so a GWAM-only change bumps it too: v0.4.0 added the gwam_channel_metrics section and
 # touched nothing CoverMe. v0.5.0 deferred 14 of those GWAM entries to the SME's
 # single-channel ruling and recorded the 2026-07-29 CoverMe rulings in meta only. The
-# CoverMe series definitions below are unchanged from v0.3.0.
-REGISTRY_VERSION = "0.6.1"
+# CoverMe series definitions below are unchanged from v0.3.0. v0.6.1 recorded the doc 20 Q3b
+# ruling. v0.7.0 makes the GWAM page-view basis a config constant (settings.PAGE_VIEW_BASIS)
+# and adds the page_views / visit_pv_bucket sources to gold_lib -- CoverMe declares neither,
+# so its 53 series are untouched and the new gold_lib branches are inert for this registry.
+REGISTRY_VERSION = "0.7.0"
 
 # --- Gold build parameters (consumed by cm_03_gold_kpis via gold_lib) ---
 DATE_COL = "hit_date"

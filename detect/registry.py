@@ -56,6 +56,20 @@ TOP_PAGENAMES = [
 ]
 TOP_LANGUAGES = ["45", "39", "38"]
 
+# Per-visit page-view buckets. Labels and edges match probe C12's c12_visit_shape()
+# (eda/gwam_channel_discovery.py) so the emitted shares stay comparable to the published
+# baselines: 0pv 3.3% / 1pv 78.8% / 2pv 11.7% / 3-5pv 5.2% / 6+ 1.1%.
+#
+# Two of these back governed metrics (research/claude/metric-registry.yaml): bucket "0" is
+# gwam_pw_pv_per_visit's real signal -- the SME's "page views per visit < 1" test cannot fire
+# (C12: 88-day floor 1.2236), because visits with zero page views are diluted by the 78.8%
+# with exactly one; counting them directly is the detectable form. Bucket "2" is
+# gwam_pw_pv_per_visit_dup2, the duplication indicator. The other three are emitted because
+# the five shares must sum to 1.0, which is a cheap and strong parity invariant.
+PV_BUCKETS = ["0", "1", "2", "3-5", "6+"]
+# Explicit, not slug(): slug("6+") collapses to "6", which reads as the 6-page bucket.
+PV_BUCKET_SUFFIX = {"0": "0", "1": "1", "2": "2", "3-5": "3_5", "6+": "6plus"}
+
 
 def slug(value: str) -> str:
     """Stable column-safe slug of a dimension value (matches evaluate.py's mapping)."""
@@ -72,10 +86,16 @@ class SeriesSpec:
     kind=ratio references two sibling metric_ids (numerator/denominator), mirroring
     CmSeriesSpec. Both builders resolve it in a second pass -- kpis.build_kpis and
     gold_lib.build_kpis_spark -- and yield 0.0 where the denominator is 0.
+
+    kind=point_mass (source=visit_pv_bucket) is the share of VISITS whose page-view count
+    falls in the bucket named by dim_value. It is not kind=share: share divides a hit count
+    by hits_total on a dimension value, whereas this aggregates to visit grain first. Kept a
+    separate kind so the share path stays untouched.
     """
     metric_id: str
-    kind: str            # count | rate | share | ratio
+    kind: str            # count | rate | share | ratio | point_mass
     source: str          # hits | visits | visitors | event | pagename | language
+                         #   | page_views | visit_pv_bucket
     event_id: str | None = None
     dim: str | None = None
     dim_value: str | None = None
@@ -112,10 +132,36 @@ def _build_series() -> list[SeriesSpec]:
     for value in TOP_LANGUAGES:
         series.append(SeriesSpec(f"language_share_{slug(value)}", "share", "language",
                                  dim="language", dim_value=value))
+    # Page-view basis series (doc 20 Q6). APPENDED, never interleaved: SERIES order is
+    # gold_lib's column order, so keeping the 35 originals in place is what lets the
+    # "all_hits is inert" check compare column-for-column against the pre-change baseline.
+    series.append(SeriesSpec("page_views_total", "count", "page_views"))
+    series.append(SeriesSpec("pv_per_visit", "ratio", "page_views",
+                             numerator="page_views_total", denominator="visits_total"))
+    for b in PV_BUCKETS:
+        series.append(SeriesSpec(f"pv_bucket_share_{PV_BUCKET_SUFFIX[b]}",
+                                 "point_mass", "visit_pv_bucket", dim_value=b))
     return series
 
 
 SERIES: list[SeriesSpec] = _build_series()
+
+# Series the detectors actually SCORE. The page-view family is built into every KPI frame --
+# gold carries it, so answering doc 20 Q6 is a config flip rather than a schema change -- but
+# it is deliberately not scored yet, for two independent reasons:
+#
+#   1. Governance. research/claude/metric-registry.yaml holds all three page-view entries at
+#      status=candidate precisely because Q6 (which basis the SME means) is unanswered, and a
+#      candidate metric must not raise alerts.
+#   2. Arithmetic. While PAGE_VIEW_BASIS is "all_hits", page_views_total is IDENTICAL to
+#      hits_total by construction. Scoring it would fire every hits anomaly a second time and
+#      pad the false-positive denominator with a perfectly correlated duplicate -- the FP rate
+#      would look better while the alert stream got worse.
+#
+# Promoting them is the Q6 follow-up: once the basis is settled, drop the source from
+# PAGE_VIEW_SOURCES and re-run the calibration.
+PAGE_VIEW_SOURCES = ("page_views", "visit_pv_bucket")
+SCORED_SERIES: list[SeriesSpec] = [s for s in SERIES if s.source not in PAGE_VIEW_SOURCES]
 
 # Dimensions checked by the coverage rule for blank-rate jumps and unseen high-share values.
 RULE_DIMS = ["post_pagename", "language", "ref_type", "connection_type", "browser", "va_closer_id"]

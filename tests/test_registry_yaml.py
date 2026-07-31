@@ -8,7 +8,10 @@ rule is ratified in meta with no series change; v0.6.0 records the 2026-07-30 ex
 evidence -- C3/C11/C12 -- and closes doc 19 gate G2, again with no series change; v0.6.1
 records the doc 20 Q3b ruling of 2026-07-30 -- the wealth-ca / pvt-wealth brand variants are
 NOT part of Canada Retirement, which CONFIRMS the predicate that was already held, so once
-more no series changes and nothing re-baselines);
+more no series changes and nothing re-baselines; v0.7.0 makes the doc 20 Q6 page-view basis a
+config constant -- both bases are now BUILT behind settings.PAGE_VIEW_BASIS, shipped at
+"all_hits" where page_views_total == hits_total, so once again no GWAM entry changes status
+and nothing re-baselines. Q6 stops being a build blocker and becomes a promotion blocker);
 detect/cm_registry.py is its Python binding. Enforces the yaml's own validation_rules
 block plus the code pin, so REGISTRY_VERSION and the copied status/direction/owner
 governance fields cannot drift silently.
@@ -51,7 +54,7 @@ def entries(registry):
 
 
 def test_version_pin(registry):
-    assert str(registry["meta"]["version"]) == REGISTRY_VERSION == "0.6.1"
+    assert str(registry["meta"]["version"]) == REGISTRY_VERSION == "0.7.0"
 
 
 def test_per_sheet_counts(registry):

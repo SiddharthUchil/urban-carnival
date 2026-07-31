@@ -529,7 +529,7 @@ Numbered **G1–G6**. Deliberately *not* the `E1–E4` series: that namespace be
 | **G3** | **No error or sign-in columns reach bronze/silver.** Now **actionable** — C5/C6 determined which columns are worth carrying. | [bronze_columns.py](../../databricks/conf/bronze_columns.py) — `DETECTOR_COLUMNS` / `SILVER_COLUMNS` carry no eVar181-184, eVar122, eVar135. | Add **`post_evar181`, `post_evar182`, `post_evar184`** — the three populated at scale on the Canada channels (12.2M / 16.4M / 14.4M rows on `manugrs`; 37.6M on mobile for eVar184). **Do NOT add `post_evar183`** (0.00% on `manugrs`, 0.14% on mobile — a John Hancock field) **or eVar122/eVar135** (0% on both Canada suites). Carrying any of those three costs bronze width for near-guaranteed nulls. | Errors and Sign-in Errors are unbuildable regardless of any SME ruling. |
 | **G4** | **Scope has no channel dimension.** `SCOPE_RSID` is a single string and the predicate is one rsid AND a URL match. | [settings.py:19](../../databricks/conf/settings.py), [01_bronze_ingest.py:62-101](../../databricks/src/01_bronze_ingest.py). | Per-channel scope config (rsid + its own segment predicate), and a `channel` column carried to gold so metrics break down by it. **Blocked on the D8 ruling** — do not build until §4 item 1 lands. | A four-channel product cannot be expressed. Note this is also the change that re-baselines everything (§2.2). |
 | **G5** | **GWAM has no registry pin or drift test.** CoverMe has both. | [test_registry_yaml.py](../../tests/test_registry_yaml.py) covers only the three CoverMe sheets; `detect/registry.py` has no `REGISTRY_VERSION`. | Pin GWAM's binding to the YAML and add a drift guard, mirroring `test_series_governance_matches_yaml`. Seeded 2026-07-28 by `test_gwam_channel_seed_counts`. | GWAM metric definitions can drift from the governed registry silently — the exact failure the CoverMe test was written to prevent. |
-| **G6** | **No test covers the scope constants.** | Nothing asserts `SCOPE_RSID`, `SCOPE_URL_MODE`, `SCOPE_SUITE_MODE`, or `SCOPE_LOGIN_HOST_EXCLUDE`. CoverMe's equivalent predicate *is* tested ([test_cm_silver.py](../../tests/test_cm_silver.py) `test_scope_expr_include_minus_exclude`). | Add scope-predicate unit tests before touching scope. | The single highest-consequence config in the repo (§2.2 re-baseline) is unguarded — precisely the wrong thing to change untested. |
+| **G6** ✅ **CLOSED 2026-07-30** | ~~No test covers the scope constants.~~ | Was: nothing asserted `SCOPE_RSID`, `SCOPE_URL_MODE`, `SCOPE_SUITE_MODE`, or `SCOPE_LOGIN_HOST_EXCLUDE`. | **Done** — [test_scope_gwam.py](../../tests/test_scope_gwam.py), 8 tests: the mode toggles and identifiers are pinned with failure messages naming what a flip costs, all six ruled login hosts are asserted excluded under real Spark `LIKE` (incl. FR `portail.manuvie.ca`, which a `%portal%` pattern would miss), `en_only` selection is checked positively and negatively, and the inert `broad` branch is pinned known-good. `PAGE_VIEW_BASIS` is guarded from birth. | **Residual gap, stated plainly:** the GWAM predicate is built inline in `01_bronze_ingest.py`, which cannot be imported (`dbutils` at module level), so unlike CoverMe the test pins the *constants* and re-composes the patterns rather than exercising the production expression object. A change to the notebook's composition logic would still slip through. Closing that means extracting the predicate into an importable helper like `cm_silver_lib.scope_expr` — worth doing, not done here. |
 
 ---
 
@@ -695,16 +695,41 @@ those three, plus G2/G3/G6, which are all now unblocked and independent of any r
 > The probe run and the engineering gate are both done. **Everything still open is an SME answer** —
 > there is no engineering work left on the critical path, which is a first for this programme.
 >
+> ### ↺ Corrected and superseded, 2026-07-30 (later the same day)
+>
+> **"No engineering work left on the critical path" was wrong by one column.** `post_page_event`
+> — Adobe's page-view marker, and the only way to compute the `adobe_pv` branch of Q6 — was
+> **not in [`conf/bronze_columns.py`](../../databricks/conf/bronze_columns.py)**. Neither answer
+> to Q6 was implementable in the pipeline, so the gate was not purely an SME one. It is carried
+> now (bronze + silver + both KPI builders), but note it must be **backfilled into bronze
+> history** before `adobe_pv` can actually be used.
+>
+> **And Q6 no longer blocks the build at all.** Since C12 had already priced both bases and no
+> further query can settle "which does the SME mean", the basis became a config constant rather
+> than a precondition — `settings.PAGE_VIEW_BASIS ∈ {all_hits, adobe_pv}`, shipped at
+> `all_hits`, under which `page_views_total == hits_total` exactly and nothing re-baselines
+> (verified: all 35 pre-existing series value-identical, and the injected-scenario eval report
+> is unchanged — 5/5 recall, business FP 113/4906 = 0.02303). Both anomaly-signal metrics are
+> now **built and inspectable but not scored** (`detect/registry.SCORED_SERIES`), because a
+> `candidate` metric must not alert. **Q6 is now a promotion blocker, not a build blocker** —
+> and `share_pv_eq_0`, the quantity §1.1 identified as the detectable form of the SME's "< 1"
+> test, exists as a real series for the first time.
+>
+> Two things this did **not** solve, so they do not get quietly dropped: the dup2 signal still
+> needs a **low-dispersion detector** that no current scorer expresses (deferred — its
+> calibration depends on which basis Q6 picks, so building it now means building it twice), and
+> the **marketing/CID exclusion** still needs the ADR-0007 amendment.
+>
 > | Area | Status |
 > |---|---|
 > | Scope definition | ✅ **Settled** — unchanged |
 > | Page Views / Visits / Visitors | ✅ **Engine ready today** — unchanged |
 > | Marketing exclusion | 🔴 **Harder than it looked** — was 🟡. C11 **rejected** `post_campaign` as the proxy (agreement 0.762 suite / 0.537 segment), so the zero-cost path is gone and an **ADR-0007 amendment is the only route** (§2.5.1) |
 > | Brand-variant scope (Q3b) | ✅ **ANSWERED 2026-07-30** — was 🚩. The sizing (`wealth-ca` +250,355 / **+19.3%**, `pvt-wealth` +9,690, **zero overlap**) went to the SME, who ruled **both OUT of Canada Retirement**. That **confirms the predicate we held**, so nothing re-baselines; the cost is that ~250k records/90 days are now unwatched by explicit decision (§7 item 6) |
-> | Page-view numerator (Q6) | 🚩 **Open, now priced** — the two bases give 2.885 vs 1.343 on this scope; the "consistently 2" signal is meaningful under one and not the other |
-> | New anomaly signals | 🟡 **Blocked on Q6 only** — was 🔴 blocked on G2. ⚠ C12 found the SME's literal "< 1" test **never fires** (88-day floor 1.2236); `share_pv_eq_0` = 3.25% is the detectable quantity (§1.1) |
+> | Page-view numerator (Q6) | 🟡 **Open, priced, and no longer blocking the build** — was 🚩. The two bases give 2.885 vs 1.343 on this scope; both are now built behind `PAGE_VIEW_BASIS`, shipped at `all_hits` (zero re-baseline). Q6 now selects a constant and promotes the metrics; it no longer gates construction |
+> | New anomaly signals | 🟢 **Built, not scored** — was 🟡 blocked on Q6. Both are emitted every run under either basis; `share_pv_eq_0` (§1.1's detectable quantity, C12 = 3.25%) is now a real series. They do not alert until Q6 promotes them. ⚠ dup2 additionally needs a low-dispersion detector that still does not exist |
 > | Baseline history | 🟡 **138 days** — unchanged |
-> | Governance | 🟡 v0.6.0 — 5 candidate / 14 deferred; pin still open (G5) |
+> | Governance | 🟡 **v0.7.0** — 5 candidate / 14 deferred, unchanged by the Q6 work (built ≠ promoted); pin still open (G5) |
 >
 > **G2 is closed**, so the "one engineering gate, one probe run, two SME answers" of 2026-07-29 is now
 > **two SME answers** (Q3b, Q6) plus one architectural decision (the ADR-0007 amendment) — ↺ **and

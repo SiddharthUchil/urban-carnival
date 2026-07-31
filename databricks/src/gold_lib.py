@@ -26,11 +26,25 @@ from pyspark.sql import functions as F
 
 # Same columns detect/kpis.py reads (NEEDED_COLS).
 NEEDED_COLS = [
-    "process_date", "post_event_list", "post_pagename", "language",
+    "process_date", "post_event_list", "post_pagename", "post_page_event", "language",
     "mcvisid", "post_visid_high", "post_visid_low", "visit_num",
 ]
 
 _OTHER = "__other__"   # event_dim bucket label for values not claimed by a spec
+_PVB = "_pvb_"         # prefix for per-visit page-view bucket pivot columns
+
+
+def _pv_int(page_view_basis):
+    """0/1 per hit: does this hit count as a page view under ``page_view_basis``?
+
+    try_cast, NEVER cast -- Databricks runs ANSI mode and one non-numeric post_page_event
+    would throw and kill the job (the CoverMe E1 defect). try_cast yields NULL, which simply
+    fails the == 0 test. detect/kpis._pv_flag matches this with errors="coerce".
+    """
+    if page_view_basis == "all_hits":
+        return F.lit(1)
+    flag = F.expr("try_cast(post_page_event as int)") == F.lit(0)
+    return F.when(flag, F.lit(1)).otherwise(F.lit(0))
 
 
 def _evd_key(spec):
@@ -63,6 +77,7 @@ def build_kpis_spark(df, event_ids, series,
                      visit_key_cols=("post_visid_high", "post_visid_low", "visit_num"),
                      visitor_key_cols=None,
                      event_basis="hits",
+                     page_view_basis="all_hits",
                      null_safe_keys=False):
     """Return a wide DataFrame ``[date_col] + [metric_id...]`` matching build_kpis().
 
@@ -74,9 +89,17 @@ def build_kpis_spark(df, event_ids, series,
     token occurrences. ``null_safe_keys`` opts the composite visit/visitor keys into the
     NULL-positional handling documented on ``_key_expr`` (CoverMe passes True; the GWAM
     default stays False for parity).
+
+    ``page_view_basis`` selects what "page views" counts -- doc 20 Q6, unanswered by the
+    SME. "all_hits" (the default) makes page_views_total identical to hits_total, so it
+    re-baselines nothing; "adobe_pv" counts only Adobe's page-view marker. Production
+    passes databricks/conf/settings.PAGE_VIEW_BASIS. It affects page_views_total,
+    pv_per_visit, and every per-visit bucket share.
     """
     if event_basis not in ("hits", "visits"):
         raise ValueError(f"unknown event_basis: {event_basis!r}")
+    if page_view_basis not in ("all_hits", "adobe_pv"):
+        raise ValueError(f"unknown page_view_basis: {page_view_basis!r}")
     d = df.select(*(needed_cols or NEEDED_COLS)).withColumn("date", F.to_date(date_col))
 
     # Gap-free calendar derived from the data itself (pure DataFrame ops -- no local
@@ -132,6 +155,32 @@ def build_kpis_spark(df, event_ids, series,
         base = base.join(evd.groupBy("date").pivot("_k", keys).agg(agg), "date", "left")
         base = base.fillna(0, subset=keys)
 
+    # Page-view basis series (doc 20 Q6). Only aggregated if the registry declares them, so
+    # registries without page-view specs (CoverMe) pay nothing.
+    pv_int = _pv_int(page_view_basis)
+    if any(s.source == "page_views" and s.kind == "count" for s in series):
+        base = base.join(d.groupBy("date").agg(F.sum(pv_int).alias("page_views_total")),
+                         "date", "left").fillna(0, subset=["page_views_total"])
+
+    # Per-visit page-view buckets, DATE-FIRST: grouping by (date, visit key) makes the
+    # denominator exactly visits_total. Probe C12 grouped by visit key alone and assigned
+    # each visit to min(process_date), so visits spanning midnight bucket differently there
+    # -- these shares deviate from C12's published figures by design (see detect/kpis.py).
+    pvb_specs = [s for s in series if s.source == "visit_pv_bucket"]
+    if pvb_specs:
+        buckets = [s.dim_value for s in pvb_specs]
+        keys = [f"{_PVB}{b}" for b in buckets]
+        per_visit = (d.withColumn("_vk", vkey).groupBy("date", "_vk")
+                     .agg(F.sum(pv_int).alias("pvs")))
+        bkt = (F.when(F.col("pvs") == 0, F.lit(f"{_PVB}0"))
+                .when(F.col("pvs") == 1, F.lit(f"{_PVB}1"))
+                .when(F.col("pvs") == 2, F.lit(f"{_PVB}2"))
+                .when(F.col("pvs") <= 5, F.lit(f"{_PVB}3-5"))
+                .otherwise(F.lit(f"{_PVB}6+")))
+        base = base.join(per_visit.withColumn("_b", bkt)
+                         .groupBy("date").pivot("_b", keys).count(), "date", "left")
+        base = base.fillna(0, subset=keys)
+
     # One left join per tracked dimension value (mirrors pandas' per-value groupby count).
     share_specs = [s for s in series if s.kind == "share"]
     for i, s in enumerate(share_specs):
@@ -159,6 +208,11 @@ def build_kpis_spark(df, event_ids, series,
                        F.col(f"`{s.event_id}`") / F.col("hits_total")).otherwise(F.lit(0.0))
         elif s.source == "event_dim":
             c = F.col(f"`{_evd_key(s)}`")
+        elif s.source == "page_views" and s.kind == "count":
+            c = F.col("page_views_total")
+        elif s.source == "visit_pv_bucket" and s.kind == "point_mass":
+            c = F.when(F.col("visits_total") > 0,
+                       F.col(f"`{_PVB}{s.dim_value}`") / F.col("visits_total")).otherwise(F.lit(0.0))
         elif s.kind == "share":
             cnt = F.col(f"_share_cnt_{share_idx[id(s)]}")
             c = F.when(F.col("hits_total") > 0, cnt / F.col("hits_total")).otherwise(F.lit(0.0))

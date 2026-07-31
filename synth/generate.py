@@ -97,6 +97,60 @@ def _assign_visits(rng, n_hits, n_visits, n_visitors):
     return visitor_of_visit, within_visitor_rank, sizes, hit_of_visit, page_num, vpv
 
 
+# Per-visit page-view mix measured by probe C12 (public website, 88 days, doc 20 Q6):
+# 0pv 3.3% / 1pv 78.8% / 2pv 11.7% / 3-5pv 5.2% / 6+ 1.1%. The spec profile records
+# post_page_event as "0" on 100% of rows, which would make the adobe_pv basis identical to
+# all_hits and pin share_pv_eq_0 at exactly zero -- i.e. every page-view test would pass
+# vacuously. These shares exist so the fixture can falsify the basis code.
+#
+# MEASURED CEILING -- the "6+" target is not reachable and is not a bug. Synthetic visit
+# sizes come from a multinomial split of hits across visits, whose tail is far thinner than
+# real traffic: P(size>=6) is 0.006% and the largest visit is 6 hits, so at most ~0.01% of
+# visits can hold 6 page views against the 1.1% asked for. Achieved mix is
+# 3.3 / 78.7 / 12.6 / 5.4 / 0.01 -- bucket 2 runs slightly rich because visits assigned a
+# high target get clipped down into it. Both GOVERNED buckets (0 and 2, per
+# research/claude/metric-registry.yaml) land on target; only the ungoverned tail misses.
+# Do not "fix" this by widening the visit-size distribution: that would move all 35 existing
+# series and destroy the property that regenerating changes post_page_event and nothing else.
+PV_MIX = {"0": 0.033, "2": 0.117, "3-5": 0.052, "6+": 0.011}   # "1" takes the remainder
+# Dedicated seed: page-view assignment draws from its OWN generator so it does not advance
+# the main per-day RNG stream. That keeps every other synthetic column bit-identical to the
+# pre-change fixture, so regenerating changes post_page_event and nothing else.
+PV_SEED = 20260730
+
+
+def _page_view_counts(day, sizes):
+    """Per-visit page-view count reproducing PV_MIX as closely as the visit sizes allow.
+
+    A visit cannot have more page views than hits, so the target counts are allocated to
+    the LARGEST visits first (random within equal sizes) rather than drawn independently
+    and clipped -- independent draws would collapse toward bucket 1, because most synthetic
+    visits are 1-2 hits, and would silently undershoot the mix.
+
+    Zero-page-view visits are allocated from the remainder: those are visits that record
+    activity but no page, which is the real signal behind the SME's "page views per visit
+    < 1" suggestion (doc 20 Part 4 item 2).
+    """
+    rng = np.random.default_rng(PV_SEED + day.toordinal())
+    n = len(sizes)
+    order = np.lexsort((rng.random(n), -sizes))    # size desc, random tiebreak
+    pv = np.ones(n, dtype=np.int64)
+
+    i = 0
+    for label, hi, lo in (("6+", 9, 6), ("3-5", 6, 3)):
+        take = order[i:i + int(round(PV_MIX[label] * n))]
+        pv[take] = rng.integers(lo, hi, size=len(take))
+        i += len(take)
+    take = order[i:i + int(round(PV_MIX["2"] * n))]
+    pv[take] = 2
+    i += len(take)
+
+    rest = order[i:]
+    n0 = min(int(round(PV_MIX["0"] * n)), len(rest))
+    pv[rest[rng.choice(len(rest), size=n0, replace=False)]] = 0
+    return np.minimum(pv, sizes)
+
+
 def _dim_series(rng, dim, n):
     idx = rng.choice(len(dim.choices), size=n, p=dim.probs)
     return np.asarray(dim.choices, dtype=object)[idx]
@@ -176,6 +230,7 @@ def generate_day(spec, day, hits, visits, visitors, rng, pool, ua_pool, row_offs
     n_visits = len(sizes)
     n_visitors = len(vpv)
     n = hits
+    pv_of_visit = _page_view_counts(day, sizes)
 
     # Map local visitors -> distinct global pool indices; advance lifetime visit counters.
     selected = rng.choice(pool.size, size=n_visitors, replace=False)
@@ -235,6 +290,17 @@ def generate_day(spec, day, hits, visits, visitors, rng, pool, ua_pool, row_offs
                 cols[name] = np.full(n, "0", dtype=object)
             elif name == "hit_source":
                 cols[name] = np.full(n, "1", dtype=object)
+            elif name == "post_page_event":
+                # The discarded draw is deliberate, NOT dead code: it advances the shared
+                # per-day RNG exactly as before so every column generated after this one is
+                # bit-identical to the pre-change fixture. Without it the stream shifts and
+                # regenerating silently perturbs all 35 existing series.
+                _dim_series(rng, spec.dims[name], n)
+                # Visit-level, not an iid per-hit draw: the first pv hits of each visit are
+                # page views ("0"), the rest link-tracks ("1"). An iid draw could not
+                # produce zero-page-view VISITS, which is the whole point (see PV_MIX).
+                cols[name] = np.where(page_num <= pv_of_visit[hit_of_visit],
+                                      "0", "1").astype(object)
             else:
                 cols[name] = _dim_series(rng, spec.dims[name], n)
         elif c.top_values:

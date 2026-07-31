@@ -24,7 +24,7 @@ import _bootstrap  # noqa: F401,E402  OpenMP guard: must precede numpy/pyarrow/d
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
-from registry import SERIES, THRESHOLDS, RULES, EVENT_IDS  # noqa: E402
+from registry import SERIES, SCORED_SERIES, THRESHOLDS, RULES, EVENT_IDS  # noqa: E402
 from kpis import build_kpis  # noqa: E402
 from univariate import detect_univariate, detect_level_shifts, VOLUME_SOURCES  # noqa: E402
 from multivariate import detect_multivariate  # noqa: E402
@@ -97,11 +97,16 @@ def _denominators(kpis: pd.DataFrame, series=SERIES, thresholds=THRESHOLDS, rule
 
 def run_detection(input_path: Path, method: str = "ecod", seed: int = 7):
     """Build KPIs and run all detectors. Returns (kpis, anomalies_df, meta)."""
+    # Built on the FULL registry (gold carries the page-view family) but scored on
+    # SCORED_SERIES only -- see registry.SCORED_SERIES for why Q6-blocked metrics must not
+    # raise alerts, and why page_views_total would otherwise duplicate hits_total exactly.
     kpis = build_kpis(input_path)
 
-    uni = detect_univariate(kpis)
-    shifts = detect_level_shifts(kpis)
-    mv = detect_multivariate(kpis, method=method, seed=seed)
+    uni = detect_univariate(kpis, series=SCORED_SERIES)
+    shifts = detect_level_shifts(kpis, series=SCORED_SERIES)
+    # SCORED_SERIES for the feature matrix too: under all_hits, page_views_total duplicates
+    # hits_total, and a duplicated column silently double-weights that dimension in ECOD.
+    mv = detect_multivariate(kpis, method=method, seed=seed, series=SCORED_SERIES)
     rul = run_rules(input_path, kpis)
 
     stamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
@@ -115,10 +120,12 @@ def run_detection(input_path: Path, method: str = "ecod", seed: int = 7):
                  else pd.DataFrame(columns=COLS))
     anomalies = anomalies.sort_values(["date", "metric_id", "detector"]).reset_index(drop=True)
 
-    meta = _denominators(kpis)
+    meta = _denominators(kpis, series=SCORED_SERIES)
     meta["method"] = method
     meta["seed"] = seed
     meta["series"] = [s.metric_id for s in SERIES]
+    meta["scored_series"] = [s.metric_id for s in SCORED_SERIES]
+    meta["built_not_scored"] = [s.metric_id for s in SERIES if s not in SCORED_SERIES]
     meta["counts_by_detector"] = (
         anomalies["detector"].value_counts().to_dict() if len(anomalies) else {}
     )

@@ -76,6 +76,26 @@ SCOPE_LOGIN_HOST_EXCLUDE = [
     "%portail.manuvie.ca%",       # FR member portal
 ]
 
+# Page-view basis -- what "Page Views" counts. Open question doc 20 Q6 (research/claude):
+# the SME has not said whether they mean Adobe's Page Views metric or every tracked hit.
+#
+# "all_hits"  page_views == hits_total. Reproduces today's numbers EXACTLY -- the metrics we
+#             ship already count every interaction, so this branch is a no-op by construction.
+# "adobe_pv"  count of hits carrying Adobe's own page-view marker,
+#             try_cast(post_page_event as int) == 0.
+#
+# try_cast, NEVER cast: Databricks runs ANSI mode, so one non-numeric post_page_event value
+# would throw and kill the job -- that is the CoverMe E1 defect, and the same guard is
+# documented at eda/gwam_channel_discovery.py:918.
+#
+# KEEP "all_hits" until Q6 is answered. This is the honest default: it is what the shipped
+# metrics already mean, so merging this constant re-baselines nothing. Extended probe C12
+# priced the other branch on 88 days of the public website -- the two bases give 2.885
+# (all_hits) vs 1.343 (adobe_pv) page views per visit, so flipping MOVES EVERY page-view
+# series and both per-visit signals. Any flip must be a full mode=backfill with gold
+# truncated, exactly like SCOPE_URL_MODE.
+PAGE_VIEW_BASIS = "all_hits"
+
 # Report-suite scope mode. "current_only" ingests only the shipped suite (SCOPE_RSID);
 # "with_legacy" ALSO unions the pre-Storefront CA-Retirement suite `manugrs`, which carries
 # ~2.5 yr of marketing-site history (research/claude/14-manugrs-cross-suite-analysis.md).
