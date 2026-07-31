@@ -37,10 +37,13 @@ OVERVIEW_METRIC = "pagename_share_ca-ret-personal-overview"
 MAX_BUSINESS_FP_RATE = 0.03
 
 
-def _hit(day, mc, vh, vl, vn, events, page, lang):
+def _hit(day, mc, vh, vl, vn, events, page, lang, page_event="0"):
+    # page_event defaults to "0" (Adobe's page-view marker) so the pre-existing assertions
+    # below are unaffected: under that fixture every hit is a page view.
     return {
         "process_date": pd.Timestamp(day), "post_event_list": events,
-        "post_pagename": page, "language": lang, "mcvisid": mc,
+        "post_pagename": page, "post_page_event": page_event,
+        "language": lang, "mcvisid": mc,
         "post_visid_high": vh, "post_visid_low": vl, "visit_num": vn,
     }
 
@@ -67,6 +70,49 @@ def test_kpi_builder_tiny_frame(tmp_path):
     assert k["event_10036_rate"].round(4).tolist() == [0.0, 0.0, round(2 / 3, 4)]
     assert k[OVERVIEW_METRIC].round(4).tolist() == [1.0, 0.0, round(2 / 3, 4)]
     assert k["language_share_45"].round(4).tolist() == [1.0, 0.0, round(2 / 3, 4)]
+
+    # Page-view family (doc 20 Q6). Every hit here carries page_event="0", so the default
+    # all_hits basis and the adobe_pv basis agree -- page_views_total tracks hits_total.
+    assert list(k["page_views_total"]) == [2, 0, 3]
+    # 02-01: one visit of 2 page views. 02-03: visit B has 2, visit C has 1.
+    assert k["pv_per_visit"].tolist() == [2.0, 0.0, 1.5]
+    assert k["pv_bucket_share_2"].tolist() == [1.0, 0.0, 0.5]
+    assert k["pv_bucket_share_1"].tolist() == [0.0, 0.0, 0.5]
+    # The gap day has no visits to divide, so every share is 0.0 -- never NaN.
+    assert k["pv_bucket_share_0"].tolist() == [0.0, 0.0, 0.0]
+
+
+def test_kpi_builder_page_view_basis_splits_hits(tmp_path):
+    """adobe_pv counts only page_event==0, which can leave a visit with ZERO page views.
+
+    That visit is what the SME's "page views per visit < 1" suggestion was really pointing
+    at (doc 20 Part 4 item 2) -- probe C12 showed the ratio itself never dips below 1.22, so
+    the zero-page-view SHARE is the detectable form.
+    """
+    hits = [
+        # visit A: 1 page view + 1 link-track -> 1 pv
+        _hit("2026-02-01", "A", 1, 1, 1, "20", OVERVIEW, "45", page_event="0"),
+        _hit("2026-02-01", "A", 1, 1, 1, "20", OVERVIEW, "45", page_event="1"),
+        # visit B: link-tracks only -> 0 pv, the zero-page-view visit
+        _hit("2026-02-01", "B", 2, 2, 1, "20", OVERVIEW, "45", page_event="1"),
+        # visit C: a non-numeric value must try_cast to NULL, not raise, and not count
+        _hit("2026-02-01", "C", 3, 3, 1, "20", OVERVIEW, "45", page_event="bogus"),
+    ]
+    p = tmp_path / "basis.parquet"
+    pd.DataFrame(hits).to_parquet(p, index=False)
+
+    allh = kpis_mod.build_kpis(p, page_view_basis="all_hits")
+    adobe = kpis_mod.build_kpis(p, page_view_basis="adobe_pv")
+
+    assert list(allh["page_views_total"]) == [4]      # every hit counts
+    assert list(adobe["page_views_total"]) == [1]     # only the single page_event="0"
+
+    # 3 visits: A=1pv, B=0pv, C=0pv ("bogus" is not a page view).
+    assert adobe["pv_bucket_share_0"].tolist() == [pytest.approx(2 / 3)]
+    assert adobe["pv_bucket_share_1"].tolist() == [pytest.approx(1 / 3)]
+    assert adobe["pv_per_visit"].tolist() == [pytest.approx(1 / 3)]
+    # all_hits can never produce a zero-page-view visit: every visit has at least one hit.
+    assert allh["pv_bucket_share_0"].tolist() == [0.0]
 
 
 def test_rules_zero_volume():

@@ -25,7 +25,11 @@
 >   re-baselines — the 19% swing is off the table for good.
 > - **Q6** — the page-views-vs-hits choice is bigger than a labelling question: the two definitions
 >   give **2.9** and **1.3** pages per visit on your channel, and your "consistently at 2" instinct
->   only makes sense under one of them.
+>   only makes sense under one of them. ↺ **Later the same day: we stopped waiting on this.**
+>   We have built both definitions and made the live one a setting, so Q6 no longer holds up any
+>   work — it decides which number we show and when we start alerting, not whether we can build.
+>   Nothing you have seen has changed; today's setting is the definition our existing numbers
+>   already used.
 > - **Your "page views per visit < 1" suggestion cannot fire.** In 88 days the figure never dropped
 >   below **1.22**. We propose measuring the thing you meant a different way — see **Q6**.
 > - **Q5 (already answered, no action)** — we verified your CID rule against the field we hold and
@@ -365,8 +369,9 @@ type, or a specific set of pages? Any rule we can apply consistently works.
 > would rather tell you that than quietly ship a number that does not match your definition. Your
 > wording — "*ideally* non-marketing" — suggests that is an acceptable starting point; tell us if not.
 
-**Q6. "Page Views" — Adobe page views, or every hit?** 🚩 *(↺ escalated 2026-07-29 — now blocks two
-metrics)*
+**Q6. "Page Views" — Adobe page views, or every hit?** 🟡 *(↺ escalated 2026-07-29; ↺ **de-escalated
+2026-07-30** — still open, but it no longer blocks any build. It now decides which definition goes
+live and when the two new signals start alerting.)*
 We currently count **every tracked interaction**, which includes things like link clicks and is a
 larger number than Adobe's "Page Views" metric. Which do you want? This one materially changes the
 number you'd see on a dashboard.
@@ -385,6 +390,22 @@ number you'd see on a dashboard.
 > |---|---|---|
 > | Pages per visit, Canada Retirement | **2.89** | **1.34** |
 > | Pages per visit, whole report suite | 1.86 | 1.32 |
+>
+> **↺ One thing changed on our side, 2026-07-30 — you are no longer holding us up.** We had
+> been treating this as something we needed answered before we could build. On reflection that
+> was our problem to solve, not yours: we have now built **both** versions, and which one is
+> live is a single setting we can change in an afternoon. Today it is set to the "every
+> interaction" definition, because that is what our existing numbers already mean, so nothing
+> you have seen has shifted.
+>
+> **What that changes for you:** nothing about the question, and nothing about the urgency of
+> your answer — but it does mean you can take the time to get it right rather than pick quickly
+> to unblock us. It also means we could show you both versions side by side on real data before
+> you decide, if that would help. Say the word.
+>
+> The one thing still genuinely waiting on you is **switching these two signals on**. We will
+> not alert you on a number whose definition you have not confirmed, so they are running
+> quietly and we are watching them, but they are not raising anything yet.
 >
 > **This is why the definition matters more than we realised.** Your "consistently at 2" instinct
 > lands almost exactly on the left-hand number — under the "every interaction" definition a typical
@@ -553,6 +574,12 @@ page view at all**. That is a number that moves on its own, and it is the same t
 at. **We would like to build that instead of the "< 1" test** — see Q6, where we have asked you
 directly. Still depends on your Q6 answer for the definition.
 
+> **↺ Built, 2026-07-30.** We have gone ahead and built the zero-page-view count, because it is
+> the version of your idea that can actually fire. It runs on every update. As with the
+> duplication signal, it is **recording but not alerting** — we will not raise something at you
+> until you have confirmed the definition. If you would rather we alert on it now with the
+> current definition and adjust later, that is a one-line change; just tell us.
+
 **3. "If all pages are consistently at 2 — sometimes an indicator of duplication, especially when we
 see consistently 2."**
 🟡 **Building it, and this one is the most interesting.** We read your emphasis on *consistently* as
@@ -568,6 +595,14 @@ for the "unusually steady" part. Also depends on Q6.
 > variation" looks like, so a stretch where the number goes unnaturally flat is something we can now
 > detect rather than guess at. No change to your suggestion — we just need your Q6 answer before we
 > can set the check.
+>
+> **↺ Now being measured continuously (2026-07-30, later).** This number is computed on every
+> run and we can look at its history whenever you want. Being straight about what is and is not
+> done: we are **recording** it, we are not yet **alerting** on it. Your signal is that the
+> number stops moving, and every detector we currently run looks for numbers that move too
+> much — so "unusually steady" needs a new kind of check that we have not built. We have
+> deliberately held off, because how steady is "too steady" depends on your Q6 answer, and
+> building it first would mean building it twice.
 
 **A question back on this one:** have you seen the doubling before, and if so **where** — a particular
 set of pages, a particular period, after a tag release? If you can point us at even one known instance,

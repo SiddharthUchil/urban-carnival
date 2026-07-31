@@ -26,6 +26,9 @@ KEY_COLUMNS = [
 DETECTOR_COLUMNS = [
     "post_event_list",
     "post_pagename",
+    "post_page_event",  # Adobe page-view marker (0 = page view). Carried so the
+                        # PAGE_VIEW_BASIS="adobe_pv" branch is computable at all; inert while
+                        # the basis stays "all_hits". Read with try_cast, never cast (ANSI).
     "language",
     "mcvisid",
     "post_visid_high",

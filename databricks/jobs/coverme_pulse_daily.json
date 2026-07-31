@@ -7,17 +7,18 @@
   "timeout_seconds": 7200,
   "max_concurrent_runs": 1,
   "parameters": [
-    {"name": "target_catalog", "default": "__SET_ME__"},
+    {"name": "target_catalog", "default": "usdo_aa_catalog"},
     {"name": "mode", "default": "incremental"},
     {"name": "start_date", "default": "2023-02-28"},
-    {"name": "repo_root", "default": ""}
+    {"name": "repo_root", "default": ""},
+    {"name": "pseudonymize", "default": "false"}
   ],
   "job_clusters": [
     {
       "job_cluster_key": "gmai_pulse_cluster",
       "new_cluster": {
-        "spark_version": "16.4.x-scala2.12",
-        "node_type_id": "__SET_ME_NODE_TYPE__",
+        "spark_version": "__DBR_SPARK_VERSION__",
+        "node_type_id": "__NODE_TYPE_ID__",
         "num_workers": 1,
         "data_security_mode": "SINGLE_USER",
         "custom_tags": {"project": "gmai-pulse"}
@@ -37,7 +38,7 @@
       "task_key": "freshness_guard",
       "job_cluster_key": "gmai_pulse_cluster",
       "notebook_task": {
-        "notebook_path": "/Repos/__SET_ME__/anomoly-detection/databricks/src/cm_00_freshness_guard",
+        "notebook_path": "/Repos/__GIT_FOLDER_OWNER__/GMAI-PULSE-DATABRICKS/databricks/src/cm_00_freshness_guard",
         "source": "WORKSPACE"
       },
       "max_retries": 2,
@@ -48,7 +49,7 @@
       "depends_on": [{"task_key": "freshness_guard"}],
       "job_cluster_key": "gmai_pulse_cluster",
       "notebook_task": {
-        "notebook_path": "/Repos/__SET_ME__/anomoly-detection/databricks/src/cm_01_bronze_ingest",
+        "notebook_path": "/Repos/__GIT_FOLDER_OWNER__/GMAI-PULSE-DATABRICKS/databricks/src/cm_01_bronze_ingest",
         "source": "WORKSPACE"
       },
       "max_retries": 2,
@@ -59,7 +60,7 @@
       "depends_on": [{"task_key": "bronze"}],
       "job_cluster_key": "gmai_pulse_cluster",
       "notebook_task": {
-        "notebook_path": "/Repos/__SET_ME__/anomoly-detection/databricks/src/cm_02_silver_conform",
+        "notebook_path": "/Repos/__GIT_FOLDER_OWNER__/GMAI-PULSE-DATABRICKS/databricks/src/cm_02_silver_conform",
         "source": "WORKSPACE"
       },
       "max_retries": 2,
@@ -70,7 +71,7 @@
       "depends_on": [{"task_key": "silver"}],
       "job_cluster_key": "gmai_pulse_cluster",
       "notebook_task": {
-        "notebook_path": "/Repos/__SET_ME__/anomoly-detection/databricks/src/cm_03_gold_kpis",
+        "notebook_path": "/Repos/__GIT_FOLDER_OWNER__/GMAI-PULSE-DATABRICKS/databricks/src/cm_03_gold_kpis",
         "source": "WORKSPACE"
       },
       "max_retries": 2,

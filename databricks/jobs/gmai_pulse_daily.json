@@ -7,21 +7,41 @@
   "timeout_seconds": 7200,
   "max_concurrent_runs": 1,
   "parameters": [
-    {"name": "target_catalog", "default": "__SET_ME__"},
-    {"name": "mode", "default": "incremental"},
-    {"name": "start_date", "default": "2026-02-01"},
-    {"name": "repo_root", "default": ""}
+    {
+      "name": "target_catalog",
+      "default": "usdo_aa_catalog"
+    },
+    {
+      "name": "mode",
+      "default": "incremental"
+    },
+    {
+      "name": "start_date",
+      "default": "2026-02-01"
+    },
+    {
+      "name": "repo_root",
+      "default": ""
+    },
+    {
+      "name": "pseudonymize",
+      "default": "false"
+    }
   ],
   "job_clusters": [
     {
       "job_cluster_key": "gmai_pulse_cluster",
       "new_cluster": {
-        "spark_version": "16.4.x-scala2.12",
-        "node_type_id": "__SET_ME_NODE_TYPE__",
+        "spark_version": "__DBR_SPARK_VERSION__",
+        "node_type_id": "__NODE_TYPE_ID__",
         "num_workers": 1,
         "data_security_mode": "SINGLE_USER",
-        "spark_env_vars": {"OMP_NUM_THREADS": "1"},
-        "custom_tags": {"project": "gmai-pulse"}
+        "spark_env_vars": {
+          "OMP_NUM_THREADS": "1"
+        },
+        "custom_tags": {
+          "project": "gmai-pulse"
+        }
       }
     }
   ],
@@ -31,14 +51,16 @@
     "pause_status": "PAUSED"
   },
   "email_notifications": {
-    "on_failure": ["__ALERT_EMAIL__"]
+    "on_failure": [
+      "__ALERT_EMAIL__"
+    ]
   },
   "tasks": [
     {
       "task_key": "freshness_guard",
       "job_cluster_key": "gmai_pulse_cluster",
       "notebook_task": {
-        "notebook_path": "/Repos/__SET_ME__/anomoly-detection/databricks/src/00_freshness_guard",
+        "notebook_path": "/Repos/__GIT_FOLDER_OWNER__/GMAI-PULSE-DATABRICKS/databricks/src/00_freshness_guard",
         "source": "WORKSPACE"
       },
       "max_retries": 2,
@@ -46,10 +68,14 @@
     },
     {
       "task_key": "bronze",
-      "depends_on": [{"task_key": "freshness_guard"}],
+      "depends_on": [
+        {
+          "task_key": "freshness_guard"
+        }
+      ],
       "job_cluster_key": "gmai_pulse_cluster",
       "notebook_task": {
-        "notebook_path": "/Repos/__SET_ME__/anomoly-detection/databricks/src/01_bronze_ingest",
+        "notebook_path": "/Repos/__GIT_FOLDER_OWNER__/GMAI-PULSE-DATABRICKS/databricks/src/01_bronze_ingest",
         "source": "WORKSPACE"
       },
       "max_retries": 2,
@@ -57,10 +83,14 @@
     },
     {
       "task_key": "silver",
-      "depends_on": [{"task_key": "bronze"}],
+      "depends_on": [
+        {
+          "task_key": "bronze"
+        }
+      ],
       "job_cluster_key": "gmai_pulse_cluster",
       "notebook_task": {
-        "notebook_path": "/Repos/__SET_ME__/anomoly-detection/databricks/src/02_silver_conform",
+        "notebook_path": "/Repos/__GIT_FOLDER_OWNER__/GMAI-PULSE-DATABRICKS/databricks/src/02_silver_conform",
         "source": "WORKSPACE"
       },
       "max_retries": 2,
@@ -68,10 +98,14 @@
     },
     {
       "task_key": "gold",
-      "depends_on": [{"task_key": "silver"}],
+      "depends_on": [
+        {
+          "task_key": "silver"
+        }
+      ],
       "job_cluster_key": "gmai_pulse_cluster",
       "notebook_task": {
-        "notebook_path": "/Repos/__SET_ME__/anomoly-detection/databricks/src/03_gold_kpis",
+        "notebook_path": "/Repos/__GIT_FOLDER_OWNER__/GMAI-PULSE-DATABRICKS/databricks/src/03_gold_kpis",
         "source": "WORKSPACE"
       },
       "max_retries": 2,
@@ -79,13 +113,23 @@
     },
     {
       "task_key": "detect",
-      "depends_on": [{"task_key": "gold"}],
+      "depends_on": [
+        {
+          "task_key": "gold"
+        }
+      ],
       "job_cluster_key": "gmai_pulse_cluster",
       "notebook_task": {
-        "notebook_path": "/Repos/__SET_ME__/anomoly-detection/databricks/src/04_detect",
+        "notebook_path": "/Repos/__GIT_FOLDER_OWNER__/GMAI-PULSE-DATABRICKS/databricks/src/04_detect",
         "source": "WORKSPACE"
       },
-      "libraries": [{"pypi": {"package": "pyod==2.0.5"}}],
+      "libraries": [
+        {
+          "pypi": {
+            "package": "pyod==2.0.5"
+          }
+        }
+      ],
       "max_retries": 1,
       "min_retry_interval_millis": 900000
     }

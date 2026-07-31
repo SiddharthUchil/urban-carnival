@@ -76,6 +76,26 @@ SCOPE_LOGIN_HOST_EXCLUDE = [
     "%portail.manuvie.ca%",       # FR member portal
 ]
 
+# Page-view basis -- what "Page Views" counts. Open question doc 20 Q6 (research/claude):
+# the SME has not said whether they mean Adobe's Page Views metric or every tracked hit.
+#
+# "all_hits"  page_views == hits_total. Reproduces today's numbers EXACTLY -- the metrics we
+#             ship already count every interaction, so this branch is a no-op by construction.
+# "adobe_pv"  count of hits carrying Adobe's own page-view marker,
+#             try_cast(post_page_event as int) == 0.
+#
+# try_cast, NEVER cast: Databricks runs ANSI mode, so one non-numeric post_page_event value
+# would throw and kill the job -- that is the CoverMe E1 defect, and the same guard is
+# documented at eda/gwam_channel_discovery.py:918.
+#
+# KEEP "all_hits" until Q6 is answered. This is the honest default: it is what the shipped
+# metrics already mean, so merging this constant re-baselines nothing. Extended probe C12
+# priced the other branch on 88 days of the public website -- the two bases give 2.885
+# (all_hits) vs 1.343 (adobe_pv) page views per visit, so flipping MOVES EVERY page-view
+# series and both per-visit signals. Any flip must be a full mode=backfill with gold
+# truncated, exactly like SCOPE_URL_MODE.
+PAGE_VIEW_BASIS = "all_hits"
+
 # Report-suite scope mode. "current_only" ingests only the shipped suite (SCOPE_RSID);
 # "with_legacy" ALSO unions the pre-Storefront CA-Retirement suite `manugrs`, which carries
 # ~2.5 yr of marketing-site history (research/claude/14-manugrs-cross-suite-analysis.md).
@@ -128,6 +148,18 @@ HMAC_SECRET_KEY = "identity_hmac_key"
 # Identity fields pseudonymized (deterministically -> distinct counts preserved) at Silver.
 IDENTITY_COLS = ["mcvisid", "post_visid_high", "post_visid_low"]
 
+# Pseudonymization is ON unless a run explicitly turns it off via the `pseudonymize` job
+# parameter. Off means IDENTITY_COLS land in silver in the clear -- an ADR-0007 deviation the
+# silver task announces loudly. It is deliberately a per-run parameter rather than a constant
+# so the deviation is visible in the job config rather than buried in code.
+#
+# Reversing it is cheap and re-baselines nothing: silver_lib.pseudonymize_expr is a
+# deterministic keyed hash, so every distinct count in gold (visits, visitors) is identical
+# either way. Turning it back on needs the secret provisioned and a silver+gold rebuild FROM
+# BRONZE -- no source re-read, no threshold recalibration. Bronze is unaffected in both
+# directions (it always carries the raw values).
+PSEUDONYMIZE_DEFAULT = True
+
 # --- Detector ---
 DETECT_METHOD = "ecod"
 DETECT_SEED = 7
@@ -137,11 +169,13 @@ DOMAIN = "gwam_retirement"
 class Settings:
     """Resolved run configuration + fully-qualified table names."""
 
-    def __init__(self, catalog, mode="incremental", start_date=None, repo_root=None):
+    def __init__(self, catalog, mode="incremental", start_date=None, repo_root=None,
+                 pseudonymize=PSEUDONYMIZE_DEFAULT):
         self.catalog = catalog
         self.mode = mode  # "incremental" | "backfill"
         self.start_date = start_date or BACKFILL_START
         self.repo_root = repo_root
+        self.pseudonymize = pseudonymize
 
     @property
     def bronze(self):
@@ -186,19 +220,32 @@ def _widget(dbutils, name, default):
     return v if v not in (None, "") else default
 
 
+def _flag(dbutils, name, default):
+    """Read a boolean widget. Only explicit false tokens turn it off.
+
+    Deliberately asymmetric: a typo ("flase", "off", "") reads as True. For a privacy
+    control the protective branch is the one a mistake should land on.
+    """
+    raw = _widget(dbutils, name, "true" if default else "false")
+    return str(raw).strip().lower() not in ("false", "0", "no")
+
+
 def resolve(dbutils=None):
     """Build Settings from job parameters / notebook widgets.
 
     Job-level parameters surface to notebooks as widgets, so target_catalog / mode /
-    start_date / repo_root are all read the same way. Fails fast if target_catalog is
-    still the placeholder (ADR-0006: one governed compute plane, explicit catalog).
+    start_date / repo_root / pseudonymize are all read the same way. Fails fast if
+    target_catalog is still the placeholder (ADR-0006: one governed compute plane,
+    explicit catalog).
     """
     catalog = _widget(dbutils, "target_catalog", CATALOG_PLACEHOLDER)
     mode = _widget(dbutils, "mode", "incremental")
     start_date = _widget(dbutils, "start_date", BACKFILL_START)
     repo_root = _widget(dbutils, "repo_root", "")
+    pseudonymize = _flag(dbutils, "pseudonymize", PSEUDONYMIZE_DEFAULT)
 
-    s = Settings(catalog, mode=mode, start_date=start_date, repo_root=(repo_root or None))
+    s = Settings(catalog, mode=mode, start_date=start_date, repo_root=(repo_root or None),
+                 pseudonymize=pseudonymize)
     if s.catalog == CATALOG_PLACEHOLDER:
         raise ValueError(
             "target_catalog is unset. Set the 'target_catalog' job parameter (or notebook "

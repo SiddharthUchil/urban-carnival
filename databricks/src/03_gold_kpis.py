@@ -2,7 +2,7 @@
 # MAGIC %md
 # MAGIC # GMAI-Pulse — Task 3/4: Gold KPI build
 # MAGIC Registry-driven daily KPI series (plan D5). Full rebuild from silver each run — the
-# MAGIC matrix is tiny (~157 days x 35 series), so a rebuild guarantees consistency with the
+# MAGIC matrix is tiny (~157 days x 42 series), so a rebuild guarantees consistency with the
 # MAGIC trailing-overlap reprocessing. Stored long: `process_date, metric_id, value`.
 # MAGIC The build logic is a faithful PySpark port of `detect/kpis.build_kpis` (see gold_lib),
 # MAGIC unit-tested for exact parity in `tests/test_gold_parity.py`.
@@ -11,7 +11,7 @@
 import common
 common.setup_paths(dbutils)   # adds repo_root/detect so `registry` imports
 
-from conf.settings import resolve
+from conf.settings import PAGE_VIEW_BASIS, resolve
 import gold_lib
 from registry import SERIES, EVENT_IDS
 
@@ -21,7 +21,8 @@ if not common.gate(dbutils):
 
 # COMMAND ----------
 silver = spark.table(s.silver)                 # full history: gold is a full rebuild (D5)
-wide = gold_lib.build_kpis_spark(silver, EVENT_IDS, SERIES)
+wide = gold_lib.build_kpis_spark(silver, EVENT_IDS, SERIES,
+                                 page_view_basis=PAGE_VIEW_BASIS)
 long = gold_lib.melt_to_long(wide)
 
 # COMMAND ----------
