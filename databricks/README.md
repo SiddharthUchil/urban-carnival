@@ -36,6 +36,10 @@ scheduled daily **06:00 America/Toronto**, created **PAUSED**.
 | `jobs/coverme_pulse_daily.json` | CoverMe Databricks Jobs definition |
 | `../detect/cm_registry.py` | CoverMe series registry, pinned to `research/claude/metric-registry.yaml` v0.4.0 (CoverMe entries SME-confirmed at v0.3.0) |
 
+> **Standing up the layers for the first time? Follow [`RUNBOOK.md`](RUNBOOK.md), not this file.**
+> That is the click-by-click running order for `usdo_aa_catalog`. This README is the reference
+> doc — what each piece *is*, and why. Read it when the runbook says something surprising.
+
 ## This deployment (bound 2026-07-31)
 The repo shipped for a year with `target_catalog = __SET_ME__` and no named workspace. Those
 names are now real, and the job JSONs carry them:
