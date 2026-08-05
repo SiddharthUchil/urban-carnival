@@ -17,18 +17,22 @@
 -- WHAT IS AND IS NOT CHECKABLE HERE, because of the column policy:
 --   * `rsid` and `post_page_url` exist in BRONZE only (conf/bronze_columns.py
 --     KEY_COLUMNS). Silver drops them, so every scope check below reads bronze.
---   * `page_url` is in NEITHER layer -- it is used to filter at read time in
---     `broad` mode but never landed. Under the shipped `en_only` mode the scope
---     predicate is `post_page_url LIKE ...` anyway, so checks 3 and 4 test the
---     real predicate. If SCOPE_URL_MODE is ever flipped to `broad`, check 4
---     becomes partially blind (D4: post_page_url is ~36.4% blank).
+--   * `page_url` is in NEITHER layer -- the shipped `broad` mode (D12,
+--     2026-08-04) filters on coalesce(page_url, post_page_url) at read time
+--     but never lands page_url, so check 4 is partially blind (D4:
+--     post_page_url is ~36.4% blank): it quantifies URL drift as REVIEW
+--     rather than replaying the predicate as a hard FAIL. Only the D8
+--     login-host rule keeps a FAIL verdict. An exact bronze-side replay
+--     becomes possible only once page_url is landed (doc-16 5.2 item 2).
 -- ============================================================================
 USE CATALOG ${target_catalog};
 
 -- ---------------------------------------------------------------------------
 -- 1. BRONZE volume and partition coverage
 --    README expects ~1,151,474 rows over ~157 process_date partitions from
---    2026-02-01.
+--    2026-02-01. That figure is the en_only baseline: under the shipped
+--    `broad` mode (D12) FR traffic is admitted too, so rows_total should land
+--    ABOVE it -- the <500k FAIL floor still holds either way.
 --
 --    This check also SETTLES doc-16 backlog #4, an open discrepancy: the
 --    unfiltered 2026-07-20 inventory put manulifeglobalprod's first day at
@@ -105,33 +109,46 @@ SELECT '3. suite scope' AS check_name,
 FROM gmai_pulse_bronze.adobe_hit_gwam_ca_ret;
 
 -- ---------------------------------------------------------------------------
--- 4. SCOPE held: URL predicate and the D8 login-host exclusion
---    en_only scope is `post_page_url LIKE '%manulife.com/ca/en/personal/
---    group-plans/group-retirement%'`. The six D8 hosts are subtracted in EVERY
---    url/suite mode (01_bronze_ingest.py) -- defense in depth, since widening
---    scope would otherwise pull in ~94% of the manugrs suite as login traffic.
+-- 4. SCOPE held: URL predicate (broad, D12) and the D8 login-host exclusion
+--    The live scope (D12, 2026-08-04) is SCOPE_URL_LIKE_BROAD --
+--    '%/group-retirement%' OR '%/regimes-collectifs%' -- matched on
+--    coalesce(page_url, post_page_url) at read time, minus
+--    SCOPE_URL_LIKE_EXCLUDE and the six D8 hosts. Bronze lands only
+--    post_page_url (~36.4% blank), so this check CANNOT replay the predicate
+--    exactly: a row admitted via page_url may show a blank or divergent
+--    post_page_url here. Off-pattern and noise counts are therefore REVIEW
+--    (quantified drift), not FAIL. The D8 login-host rule keeps its hard FAIL
+--    -- it applies in EVERY url/suite mode (01_bronze_ingest.py), and a
+--    login-host page URL cannot legitimately reach bronze in any mode.
 --    Note portail.manuvie.ca: the exclusion is an explicit host list, not a
 --    '%portal%' pattern, precisely because the French host would not match one.
+--    D14 (2026-08-04): that list is matched against the PAGE url only -- never
+--    against link-target columns such as post_evar194.
 -- ---------------------------------------------------------------------------
 WITH u AS (
   SELECT lower(coalesce(post_page_url, '')) AS url
   FROM gmai_pulse_bronze.adobe_hit_gwam_ca_ret
 )
-SELECT '4. url scope + D8 login exclusion' AS check_name,
-       count_if(url LIKE '%manulife.com/ca/en/personal/group-plans/group-retirement%') AS in_scope_rows,
-       count_if(url NOT LIKE '%manulife.com/ca/en/personal/group-plans/group-retirement%') AS off_pattern_rows,
+SELECT '4. url scope (broad) + D8 login exclusion' AS check_name,
+       count_if(url LIKE '%/group-retirement%' OR url LIKE '%/regimes-collectifs%') AS in_scope_rows,
+       count_if(url = '') AS blank_url_rows,
+       count_if(url <> '' AND url NOT LIKE '%/group-retirement%'
+            AND url NOT LIKE '%/regimes-collectifs%') AS off_pattern_nonblank_rows,
+       count_if(url LIKE '%adobeaemcloud.com%' OR url LIKE '%/ph/%') AS noise_host_rows,
        count_if(url LIKE '%portal.manulife.ca%' OR url LIKE '%id.manulife.ca%'
              OR url LIKE '%grsmembers.manulife.com%' OR url LIKE '%gsrs1.manulife.com%'
              OR url LIKE '%viproom.manulife.com%' OR url LIKE '%portail.manuvie.ca%') AS d8_login_rows,
-       count_if(url LIKE '%adobeaemcloud.com%' OR url LIKE '%/ph/%') AS noise_host_rows,
        CASE
          WHEN count_if(url LIKE '%portal.manulife.ca%' OR url LIKE '%id.manulife.ca%'
                     OR url LIKE '%grsmembers.manulife.com%' OR url LIKE '%gsrs1.manulife.com%'
                     OR url LIKE '%viproom.manulife.com%' OR url LIKE '%portail.manuvie.ca%') > 0
-           THEN 'FAIL: D8 login-host traffic leaked into bronze -- business rule violated'
-         WHEN count_if(url NOT LIKE '%manulife.com/ca/en/personal/group-plans/group-retirement%') > 0
-           THEN 'FAIL: rows outside the en_only URL predicate -- SCOPE_URL_MODE may have flipped'
-         ELSE 'PASS'
+           THEN 'FAIL: D8 login-host traffic leaked into bronze -- business rule violated in every mode'
+         WHEN count_if(url LIKE '%adobeaemcloud.com%' OR url LIKE '%/ph/%') > 0
+           THEN 'REVIEW: SCOPE_URL_LIKE_EXCLUDE noise on post_page_url -- benign only if page_url (unlanded) admitted these rows; investigate before trusting KPIs'
+         WHEN count_if(url <> '' AND url NOT LIKE '%/group-retirement%'
+                   AND url NOT LIKE '%/regimes-collectifs%') > 0
+           THEN 'REVIEW: non-blank post_page_url outside SCOPE_URL_LIKE_BROAD -- expected ~0; page_url-vs-post divergence is the only benign source, a large count means the predicate drifted'
+         ELSE 'PASS: every non-blank post_page_url matches the broad patterns; no D8 or noise host present'
        END AS verdict
 FROM u;
 

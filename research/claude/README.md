@@ -62,10 +62,14 @@ when, why, and what to do"). The design rests on eight decisions:
    → [11](11-privacy-identity-governance.md), [ADR-0007](adr/adr-0007-identity-privacy-layer.md).
 
 > **↺ #1 blocker — CLEARED for both domains (2026-07-23/29).** Production hit-level history now exists:
-> GWAM 3.25 B rows / 883 days, CoverMe 57.7 M scoped rows / 1,211 days. The current top blocker is the
-> **D8-vs-D9 conflict** — the SME's four-channel scope needs the sign-in traffic the D8 login rule
-> excludes ([20 Q1](20-gwam-sme-questions.md), [16 §1 D8](16-e2e-production-blueprint.md)) — followed by
-> `manucustomer.prod` feed access (20 Q2) and segment-scope sign-off (20 Q3).
+> GWAM 3.25 B rows / 883 days, CoverMe 57.7 M scoped rows / 1,211 days. ↺ *2026-08-05:* the D8-vs-D9
+> conflict that used to sit here **dissolved without a ruling** when **D11** narrowed GWAM to the Public
+> Website channel (the `manucustomer.prod` request is retired; 20 Q2 withdrawn), and **D13** has since
+> redefined the GWAM scope to the SME's **16 link rules at qualified-visit grain** — probe C13–C18 ran
+> 2026-08-05 and **C17 cleared the gate** (median 1,599 qualified visits/day, at an accepted ~75%
+> phase-1 re-baseline; [21 §5](21-gwam-link-rule-scope.md)). Current top blockers: engineering —
+> **G7** (the GWAM scope predicate is not importable) and the **G3** bronze eVar projection
+> ([19 §3](19-gwam-channel-readiness.md)); SME — **Q20 → Q19 → Q21** ([20](20-gwam-sme-questions.md)).
 
 ## How to read this package
 
@@ -86,16 +90,17 @@ when, why, and what to do"). The design rests on eight decisions:
 | 13 | [13-global-serving-topology.md](13-global-serving-topology.md) | **Global serving topology** — React/AKS surface + BFF, Azure AI Foundry Gen-AI plane, unstructured data lane (ADLS Gen2 → AI Search), global access/residency |
 | 14 | [14-manugrs-cross-suite-analysis.md](14-manugrs-cross-suite-analysis.md) | **manugrs cross-suite analysis** — legacy vs current report suite, eVar overlap, geo/language profile · ⚠️ its 2026-02-01 cutover reading is corrected by doc-16 D7 (marketing site only; the suite is still live) |
 | 15 | [15-consolidated-eda-report.md](15-consolidated-eda-report.md) | Consolidated EDA report across both report suites (stakeholder-facing) · same cutover caveat as doc 14 · **rev. 2026-07-22**: EDDL dictionary folded in, privacy regime inverted, open questions refreshed, **§8b EDA exit criteria** added |
-| 16 | [16-e2e-production-blueprint.md](16-e2e-production-blueprint.md) | **End-to-end production blueprint & agent guidance — START HERE** — standing decisions D1–**D11**, EDDL eVar dictionary, 2-notebook EDA contract, URL scope inventory results, Databricks/jobs/AKS phases; supersedes older docs on conflict. Revised 2026-07-28: **D9** four-channel Canada-Retirement scope + **D10** segment-vs-URL re-baseline (both 🟡 proposed), and a ⚠️ conflict notice on D8 · revised 2026-07-29 (decision audit) · ↺ **revised 2026-07-29 (SME rulings): D11 — GWAM scope narrowed to the Public Website channel ONLY**, superseding D9, dissolving D8's conflict, re-pricing D10; marketing defined as the CID query parameter |
+| 16 | [16-e2e-production-blueprint.md](16-e2e-production-blueprint.md) | **End-to-end production blueprint & agent guidance — START HERE** — standing decisions D1–**D14**, EDDL eVar dictionary, 2-notebook EDA contract, URL scope inventory results, Databricks/jobs/AKS phases; supersedes older docs on conflict. Revised 2026-07-28: **D9** four-channel Canada-Retirement scope + **D10** segment-vs-URL re-baseline (both 🟡 proposed), and a ⚠️ conflict notice on D8 · revised 2026-07-29 (decision audit) · ↺ **revised 2026-07-29 (SME rulings): D11 — GWAM scope narrowed to the Public Website channel ONLY**, superseding D9, dissolving D8's conflict, re-pricing D10; marketing defined as the CID query parameter · ↺ **revised 2026-08-04/05: D12** (ingest flipped to `broad`; group-plans deliberately excluded), **D13** (scope = the SME's 16 link rules at qualified-visit grain), **D14** (the `evar194`/login-host trap, measured at 95.8%); D7 amended — phase-1 default is single-suite |
 | 17 | [17-coverme-eda-readiness.md](17-coverme-eda-readiness.md) | **CoverMe** EDA readiness & SME gap assessment — E1–E4 engineering must-fixes, the SME agenda, readiness verdict. E1 fixed and re-run verified 2026-07-27 · ↺ **2026-07-29**: item 5 (language) resolved, item 8 (missing days) root-caused to the Databricks migration, item 9 **PII cleared verbally** — the backfill job is no longer doc-gated |
 | 18 | [18-coverme-sme-questions.md](18-coverme-sme-questions.md) | **CoverMe** send-ready SME questionnaire, with Kerrian's rulings merged inline (Q1–Q10) · ↺ **2026-07-29**: Q4 language **answered** (domain rule approved; eVar149 the likely permanent field), Q7 PII/consent **answered** (no PII from Adobe; eVar65 = cookie consent), Q8 missing days **answered** (migration feed gap). Still ⏳: Q10 events 510-514, eVar148 verification |
-| 19 | [19-gwam-channel-readiness.md](19-gwam-channel-readiness.md) | **GWAM Canada Retirement** channel readiness & SME gap assessment — the 2026-07-28 four-channel scope table mapped cell-by-cell to the repo, G1–G6 engineering gates, SME agenda. ↺ **Probe run clean 2026-07-29 — G1 closed** · ↺ **re-scoped 2026-07-29 to the Public Website channel ONLY (D11)**: D8 conflict dissolved, `manucustomer.prod` request retired, G2 promoted to critical, **new §1.1** (three SME anomaly signals) + **§2.5.1** (the CID marketing rule) |
-| 20 | [20-gwam-sme-questions.md](20-gwam-sme-questions.md) | **GWAM Canada Retirement** SME questionnaire (Q1–Q12) with Abhisekh's answers merged inline. ↺ **2026-07-29**: Q1/Q2/Q7–Q11 **withdrawn** (their channels left scope), Q5 **answered** (marketing = CID query parameter), Q3 partly answered → **new Q3b** (`wealth-ca` / `pvt-wealth` brand variants), Q6 **escalated to blocking**, **new Part 4** (his three anomaly suggestions) · ↺ **2026-07-30: Q3b answered — both brand variants are OUT of Canada Retirement**, which confirms the predicate we had held, so no re-baseline; open list is now Q3, **Q6**, Q12 |
-| — | [metric-registry.yaml](metric-registry.yaml) | Versioned Phase-1 metric registry — **v0.6.1**: 29 CoverMe AD-tagged seeds (SME-confirmed; language/PII/data-gap rulings recorded in `meta`) + 19 GWAM entries — 5 `candidate` on the public website (3 traffic + 2 new anomaly-signal seeds), 14 `deferred` by the single-channel ruling. v0.6.0 folded in the 2026-07-30 extended-probe evidence (C3/C11/C12) and closed gate G2; **v0.6.1** records the Q3b ruling — brand variants out, predicate confirmed. Neither changed a series |
+| 19 | [19-gwam-channel-readiness.md](19-gwam-channel-readiness.md) | **GWAM Canada Retirement** channel readiness & SME gap assessment — the 2026-07-28 four-channel scope table mapped cell-by-cell to the repo, G1–G7 engineering gates, SME agenda. ↺ **Probe run clean 2026-07-29 — G1 closed** · ↺ **re-scoped 2026-07-29 to the Public Website channel ONLY (D11)**: D8 conflict dissolved, `manucustomer.prod` request retired, G2 promoted to critical, **new §1.1** (three SME anomaly signals) + **§2.5.1** (the CID marketing rule) · ↺ **2026-08-05: C13–C18 ran — C17 cleared** (median 1,599 qualified visits/day; ~75% re-baseline accepted as phase-1), **G7 raised** (scope predicate not importable), §6 verdict refreshed at registry v0.8.1 |
+| 20 | [20-gwam-sme-questions.md](20-gwam-sme-questions.md) | **GWAM Canada Retirement** SME questionnaire (Q1–Q12) with Abhisekh's answers merged inline. ↺ **2026-07-29**: Q1/Q2/Q7–Q11 **withdrawn** (their channels left scope), Q5 **answered** (marketing = CID query parameter), Q3 partly answered → **new Q3b** (`wealth-ca` / `pvt-wealth` brand variants), Q6 **escalated to blocking**, **new Part 4** (his three anomaly suggestions) · ↺ **2026-07-30: Q3b answered — both brand variants are OUT of Canada Retirement**, which confirms the predicate we had held, so no re-baseline; open list is now Q3, **Q6**, Q12 · ↺ **2026-08-04/05**: Part 5 adds **Q13–Q19** (the link-rule scope, from doc 21), the probe raised **Q20/Q21**, and Q6 is **de-escalated** (gates promotion, not the build); priority **Q20 → Q19 → Q21** |
+| 21 | [21-gwam-link-rule-scope.md](21-gwam-link-rule-scope.md) | **GWAM link-rule scope** — the SME's 16 link rules pinned verbatim, **D12/D13/D14** ratified, the C13–C18 probe design + **2026-08-05 results** (C17 gate cleared at median 1,599 qualified visits/day; ~75% re-baseline accepted as phase-1; D14 measured at 95.8%; six rules cannot carry a daily series), the privacy-grep fix, and the Q13–Q21 question set |
+| — | [metric-registry.yaml](metric-registry.yaml) | Versioned Phase-1 metric registry — **v0.8.1**: 29 CoverMe AD-tagged seeds (SME-confirmed; language/PII/data-gap rulings recorded in `meta`) + 19 GWAM entries — 5 `candidate` on the public website (3 traffic + 2 new anomaly-signal seeds), 14 `deferred` by the single-channel ruling. **v0.8.0** rebound the GWAM scope to D13's 16 link rules at qualified-visit grain; **v0.8.1** attaches the C13–C18 evidence and records the cleared C17 gate — nothing seeded, promoted or removed (Q13 still decides 8 vs 16) |
 | — | [adr/](adr/) | ADR-0001 ingestion (v2) · ADR-0002 models · ADR-0003 Gen-AI · ADR-0004 Akka · ADR-0005 Adaptive ML · ADR-0006 compute plane · ADR-0007 identity & privacy · **ADR-0008 serving topology & Gen-AI plane** |
 
 > **Namespace note:** "D1–D5" in doc 06 are *Mermaid diagram ids* and "D6/D7" in doc 13 continue that
-> *diagram/topology* numbering — both are unrelated to doc 16's *standing decisions* **D1–D10** (where
+> *diagram/topology* numbering — both are unrelated to doc 16's *standing decisions* **D1–D14** (where
 > D6 = AKS serving, D7 = concurrent suites). Same letters, different registries; resolve by source doc.
 > Do not renumber either scheme.
 
@@ -137,11 +142,13 @@ when, why, and what to do"). The design rests on eight decisions:
   [17 §4 item 9](17-coverme-eda-readiness.md)).
 - Open items needing business input: feed refresh cadence/SLA per domain, holiday/campaign calendars, the
   labeled incident set for evaluation ([02 §7](02-solution-architecture.md)), and owners for the **43
-  still-ungoverned** entries among the 48 registry metrics (v0.6.1: 29 CoverMe + 19 GWAM; only the 5
+  still-ungoverned** entries among the 48 registry metrics (v0.8.1: 29 CoverMe + 19 GWAM; only the 5
   CoverMe funnel events are `active` with an owner, and of the GWAM entries 5 are `candidate` and 14
-  `deferred`). Still with the SMEs: GWAM — page-views-vs-hits
-  ([20](20-gwam-sme-questions.md) Q6, the sole remaining gate on promoting any GWAM metric to
-  `active`) and the Q3 scope sign-off; ↺ the `wealth-ca` / `pvt-wealth` brand variants (Q3b) were
+  `deferred`). Still with the SMEs: GWAM — the link-rule question set **Q13–Q19**
+  ([20](20-gwam-sme-questions.md) Part 5) plus the probe-raised **Q20/Q21**, in priority order
+  **Q20 → Q19 → Q21**; Q6 (page-views-vs-hits) still gates promoting any GWAM metric to
+  `active` but no longer blocks the build, and the Q3 scope sign-off remains open; ↺ the
+  `wealth-ca` / `pvt-wealth` brand variants (Q3b) were
   **answered 2026-07-30 — both out of Canada Retirement**, confirming the held predicate.
   CoverMe — the identity of events
   510-514, eVar148 bot-detector verification, whether eVar149 becomes the permanent language field, and

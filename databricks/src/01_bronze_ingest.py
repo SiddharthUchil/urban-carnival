@@ -54,11 +54,11 @@ if pcol_type == "date":
 else:
     pred = F.col(PARTITION_COL) >= F.lit(start)   # string 'YYYY-MM-DD' compares lexically
 
-# URL scope. Default ("en_only") is the shipped English section root, applied to
-# post_page_url byte-for-byte as before. "broad" matches SCOPE_URL_LIKE_BROAD on the COMPLETE
+# URL scope. Default ("broad", D12 2026-08-04) matches SCOPE_URL_LIKE_BROAD on the COMPLETE
 # url (coalesce(page_url, post_page_url) -- post_page_url is ~37% blank, EDA S4b) and subtracts
-# SCOPE_URL_LIKE_EXCLUDE (Adobe AEM author hosts + non-CA /ph/ paths). Flip SCOPE_URL_MODE only
-# after a re-profile -- it changes the ingested population and re-baselines downstream.
+# SCOPE_URL_LIKE_EXCLUDE (Adobe AEM author hosts + non-CA /ph/ paths). "en_only" is the retired
+# pre-2026-08-04 English section root on post_page_url, kept as a reachable branch. Flip
+# SCOPE_URL_MODE only via a full backfill -- it changes the population and re-baselines downstream.
 if SCOPE_URL_MODE == "broad":
     from functools import reduce
     _urlc = F.lower(F.coalesce(F.col("page_url"), F.col("post_page_url")).cast("string"))

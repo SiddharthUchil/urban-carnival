@@ -33,6 +33,16 @@
 > Sections rewritten for this: §2 (widgets), §3 (scope), §4 (privacy), §5.3, §5.4, §5.8, §7, §8,
 > and the new **§8b (EDA exit criteria)**. Numeric findings from the profiling runs are unchanged.
 >
+> ↺ **Revised 2026-08-05 — the scope itself moved after this report was written.** Doc-16 **D12**
+> (2026-08-04) flipped `SCOPE_URL_MODE` to `broad` and **D13** redefined the Canada-Retirement
+> alerting scope as the SME's **16 link rules at qualified-visit grain**
+> ([21](21-gwam-link-rule-scope.md)); probe C13–C18 (2026-08-05) measured that population at ~25%
+> of the URL scope (median 1,599 qualified visits/day — accepted as the phase-1 re-baseline), and
+> **D14** forbids `post_evar194` from any URL coalesce (measured cost: 95.8% of rule-matching
+> hits). URL-scoped figures below remain correct for the population they describe, but that is no
+> longer the alerting population. The §2 widget rows were swept for this; the rest of the body is
+> the historical record.
+>
 > **Data runs.** Production `gwam_prod_catalog`. New suite confirmed 2026-07-09, re-run 2026-07-12
 > (adds the S4c URL audit). Legacy suite run 2026-07-10, independently re-run 2026-07-13 (all
 > figures reproduced). **Grain of record: daily.** **Privacy regime: ADR-0007 §5** (full-raw as of
@@ -668,7 +678,7 @@ the business signs off scope**, because flipping either re-baselines every KPI.
 | 2 | **Per-rsid live-eVar census cross-referenced against EDDL** | Resolves Q4 (same meaning per suite), doc-16 backlog #7 (eVar166/169 — cross-ref ↺ corrected from #4), and the eVar200/eVar162 conflicts in one pass. The unified dual-rsid profiler already emits `live_custom_dims` per rsid — this is a join, not a new run. | A table of `rsid × eVar × EDDL meaning × populated % × cardinality`, with mismatches flagged. |
 | 3 | ~~**Extend the sensitivity check to eVar semantics**~~ *↺ superseded 2026-07-29* | `is_sensitive()`/`DIRECT_IDENTIFIERS` and the emit-time scrubber were **deleted 2026-07-23** (doc-16 D2; ADR-0007 §5 revised to full-raw) — this criterion demanded work on code that no longer exists. Raw emission is sanctioned; export handling is governed by corporate policy, and the CoverMe-side consent question lives in doc 17 item 9. | Retired — no longer a gate. The privacy gate is ADR-0007 §5 + doc 17 item 9 sign-off. |
 | 4 | **Check `evar132/133/134` population explicitly** | Determines whether person-level identity exists (§5.8). Drives the PIA scope and possibly the whole privacy regime. | Census reports populated % for all three in both suites. |
-| 5 | **Stakeholder sign-off on scope** (Q1, Q2, Q10, Q15) | `SCOPE_URL_MODE` / `SCOPE_SUITE_MODE` are held deliberately — flipping either **re-baselines every KPI**, so it must happen before baselines are fit, not after. | Written confirmation of suite union, French inclusion, eVar107 handling, and the login-host list. |
+| 5 | **Stakeholder sign-off on scope** (Q1, Q2, Q10, Q15) | `SCOPE_URL_MODE` / `SCOPE_SUITE_MODE` are held deliberately — flipping either **re-baselines every KPI**, so it must happen before baselines are fit, not after. | Written confirmation of suite union, French inclusion, eVar107 handling, and the login-host list. ↺ **2026-08-04/05: overtaken — D12 flipped `SCOPE_URL_MODE` to `broad` (under the full-backfill protocol), D7-as-amended keeps `SCOPE_SUITE_MODE` at `current_only` for phase 1, and D13 redefined the alerting scope to the 16 link rules at qualified-visit grain; the live sign-off set is now Q20/Q19/Q21 + Q3 ([20](20-gwam-sme-questions.md), [21](21-gwam-link-rule-scope.md)).** |
 
 **What is already sufficient and needs no further EDA:** volume/history/seasonality (§5.2), the
 day-of-week and RRSP shape driving baseline design, data-quality posture (§5.7 — no bot filtering,

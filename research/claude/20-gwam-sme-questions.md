@@ -651,7 +651,9 @@ them rather than having to answer them.*
 
 ## Part 5 — ↺ Your link-click scope (new 2026-08-04)
 
-*Your 8 rules × English/French are recorded. These are the questions they raise. Q13, Q17 and Q19 are
+*Your 8 rules × English/French are recorded — verbatim, with the probe design and the 2026-08-05
+readings, in [21-gwam-link-rule-scope.md](21-gwam-link-rule-scope.md). These are the questions they
+raise. Q13, Q17 and Q19 are
 decisions we cannot make for you; Q15, Q16 and Q18 are transcription checks; Q14 is Q6 again.*
 
 > ### ↺ UPDATE 2026-08-05 — we measured your new scope, and it works

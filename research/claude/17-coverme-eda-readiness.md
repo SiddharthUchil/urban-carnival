@@ -200,7 +200,8 @@ the prerequisites are sound. The one engineering fix (**E1**) is **done and veri
 complete. **SME rulings landed 2026-07-27** (scope, targets + priority, funnel basis, bot rule —
 see [18](18-coverme-sme-questions.md)), so **the build is unblocked**: the critical path is now our
 own medallion + detector work, with only the **label follow-ups (events 510-514, language field —
-in progress with Kerrian)** and **governance sign-off (item 9)** still outstanding on the business
+in progress with Kerrian)** and ~~**governance sign-off (item 9)**~~ *(↺ cleared 2026-07-29 — see
+the revised bottom line below)* still outstanding on the business
 side. The biggest historical risk (no time-series) is gone.
 
 > ### ↺ Revised bottom line (2026-07-29)

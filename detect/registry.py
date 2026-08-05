@@ -101,7 +101,7 @@ class SeriesSpec:
     dim_value: str | None = None
     numerator: str | None = None
     denominator: str | None = None
-    # Governance (metric-registry.yaml v0.6.0): status in {active, candidate, deferred},
+    # Governance (metric-registry.yaml; fields introduced at v0.6.0): status in {active, candidate, deferred},
     # direction in {higher_is_good, higher_is_bad, context_dependent}. Ported from
     # CmSeriesSpec 2026-07-30 (doc 19 G2); GWAM entries are all owner: TBD today.
     status: str = "candidate"

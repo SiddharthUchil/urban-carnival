@@ -2,7 +2,8 @@
 # MAGIC %md
 # MAGIC # GMAI-Pulse CoverMe — Task 3/3: Gold KPI build
 # MAGIC Registry-driven daily KPI series from detect/cm_registry (pinned to
-# MAGIC metric-registry.yaml v0.4.0; CoverMe entries SME-confirmed at v0.3.0). Full rebuild
+# MAGIC metric-registry.yaml via cm_registry.REGISTRY_VERSION; CoverMe entries
+# MAGIC SME-confirmed at v0.3.0). Full rebuild
 # MAGIC from silver each run — the matrix is tiny
 # MAGIC (~1,200 days x 53 series). Metric semantics per Adobe datafeeds-calculate + the SME
 # MAGIC rulings of 2026-07-27: 4-part visit key, visid-pair visitors, VISIT-DISTINCT event

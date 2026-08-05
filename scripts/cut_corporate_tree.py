@@ -1,8 +1,8 @@
 """Cut the code-only subset for github.com/JHDevOps/GMAI-PULSE-DATABRICKS.
 
-Copies the runtime-necessary tree (55 git-tracked files) into a destination directory,
-leaving behind the research docs, EDA notebooks, HTML run exports, the frontend concept
-and the ~4 MB of binary artifacts.
+Copies the runtime-necessary tree (58 git-tracked files) into a destination directory,
+leaving behind the research docs, the other EDA notebooks, HTML run exports, the frontend
+concept and the ~4 MB of binary artifacts.
 
     python scripts/cut_corporate_tree.py ../GMAI-PULSE-DATABRICKS
 
@@ -11,10 +11,12 @@ Then, in the destination: git init && git add -A && git commit && git remote add
 WHY THIS EXISTS RATHER THAN A HAND-PICKED COPY: research/claude/metric-registry.yaml is a
 runtime dependency that does not look like one. detect/cm_registry.py pins
 REGISTRY_VERSION and tests/test_registry_yaml.py reads that file to enforce the pin, so a
-"code only" tree that drops all of research/ silently loses 20-odd tests. Everything else
-in research/ is genuinely prose and stays behind.
+"code only" tree that drops all of research/ silently loses 20-odd tests. Likewise
+eda/gwam_channel_discovery.py: it carries SME_LINK_RULES (the D13 scope of record), which
+tests/test_link_rules.py lifts via ast at collection time -- dropping all of eda/ makes
+those 14 tests error out. Everything else in research/ and eda/ stays behind.
 
-Verified 2026-07-31: the resulting tree runs 110 passed / 4 skipped standalone. The 4 skips
+Verified 2026-08-05: the resulting tree runs 126 passed / 4 skipped standalone. The 4 skips
 are the fixtures that need generated data (data/synth/*.parquet, gitignored) -- regenerate
 with `python -m synth.generate` if you want them, they are not a packaging failure.
 """
@@ -26,7 +28,8 @@ import sys
 from pathlib import Path
 
 INCLUDE_DIRS = ("databricks/", "detect/", "tests/", "synth/")
-INCLUDE_FILES = ("requirements.txt", ".gitignore", "research/claude/metric-registry.yaml")
+INCLUDE_FILES = ("requirements.txt", ".gitignore", "research/claude/metric-registry.yaml",
+                 "eda/gwam_channel_discovery.py")
 
 
 def main(dest: Path) -> int:
@@ -55,7 +58,7 @@ def main(dest: Path) -> int:
     for k in sorted(by_top):
         print(f"  {k:16s} {by_top[k]:3d}")
     print("\nnext: cd into it, git init, commit, and push to JHDevOps/GMAI-PULSE-DATABRICKS")
-    print("then verify with: python -m pytest tests/ -q   (expect 110 passed, 4 skipped)")
+    print("then verify with: python -m pytest tests/ -q   (expect 126 passed, 4 skipped)")
     return 0
 
 
