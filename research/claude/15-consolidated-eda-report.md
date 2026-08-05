@@ -146,9 +146,9 @@ Nine widgets are tuning knobs; **five define the population**: `rsid_list`, `url
 | 7 | `max_csv_lines` | `450` | Row cap on emitted daily CSV series. |
 | 8 | `top_events_k` | `6` | How many top events get their own daily series. |
 | 9 | `cache_sample` | `false` | Whether to persist the sample dataframe. |
-| 10 | **`rsid_list`** | `manugrs,manulifeglobalprod` | **Report suites to keep** — comma-separated, **both by default** (doc-16 D7). |
-| 11 | **`url_scope_mode`** | `broad` | `broad` = use `url_scope_list`; `en_only` = pin to the single English pattern for pipeline parity. |
-| 12 | **`url_scope_list`** | `%/group-retirement%,%/group-plans%,%/regimes-collectifs%` | **Authoritative URL include patterns** (SQL `LIKE`). Add URLs here. |
+| 10 | **`rsid_list`** | ↺ `manulifeglobalprod` | **Report suites to keep** — comma-separated. ↺ **Narrowed 2026-08-05** (was both suites; doc-16 **D7** amended): `manugrs` is `deferred` under D11, dead code while `SCOPE_SUITE_MODE = "current_only"`, and carries 0.0% `evar193`/`evar194` (probe C13). Dual-rsid still supported — type both in. |
+| 11 | **`url_scope_mode`** | `broad` | `broad` = use `url_scope_list`; `en_only` = the retired pre-2026-08-04 English root. ⚠ ↺ **Corrected 2026-08-05:** this row used to say `en_only` gives "pipeline parity". It does not, on two counts — D12 made `broad` the live branch, and the pipeline's `en_only` filters `post_page_url` **alone** while both notebooks always apply the D4 coalesce (36.41% blank). **Neither mode is byte-parity with production.** |
+| 12 | **`url_scope_list`** | `%/group-retirement%,%/group-plans%,%/regimes-collectifs%` | **Authoritative URL include patterns** (SQL `LIKE`). Add URLs here. ⚠ **Deliberately wider than the pipeline**, whose `SCOPE_URL_LIKE_BROAD` carries only the two non-`group-plans` patterns. The umbrella is kept visible so analysts can rule on **doc 20 Q21** (probe C15: ~70% of app-download clicks). Do not "fix" to match production. |
 | 13 | **`url_scope_exclude`** | `%adobeaemcloud.com%,%/ph/%` | URL patterns to drop (authoring host, Philippines). |
 | 14 | **`login_host_exclude`** | authenticated hosts | Member-portal / auth hosts excluded by business rule (doc-16 D8). |
 

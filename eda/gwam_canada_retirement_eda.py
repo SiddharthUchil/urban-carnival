@@ -105,8 +105,27 @@ dbutils.widgets.text("hourly_days", "35", "6. Days for hourly profile")
 dbutils.widgets.text("max_csv_lines", "450", "7. Max CSV lines per shareable block")
 dbutils.widgets.text("top_events_k", "12", "8. Top-K events for daily series")
 dbutils.widgets.text("cache_sample", "false", "9. Persist sample df (true/false)")
-dbutils.widgets.text("rsid_list", "manugrs,manulifeglobalprod", "10. rsid list (comma-sep, empty = off)")
-dbutils.widgets.dropdown("url_scope_mode", "broad", ["broad", "en_only"], "11. URL scope mode (en_only = pipeline parity)")
+# ↺ 2026-08-05: default NARROWED to manulifeglobalprod alone (was "manugrs,manulifeglobalprod").
+# Three independent grounds, any one of which is sufficient:
+#   1. D11 (2026-07-29) put only the Public Website channel in scope; manugrs is the Web Member
+#      channel and is `deferred` in the registry.
+#   2. settings.SCOPE_SUITE_MODE == "current_only", which makes the manugrs branch DEAD CODE in
+#      01_bronze_ingest.py. Only ~12 eVars are shared across the two suites, so eVar-derived
+#      series are NOT splice-safe -- profiling them together invites the cross-suite top_values
+#      attribution trap (a value from one suite read as evidence about the other).
+#   3. Probe C13 (2026-08-05) measured evar193/evar194 at 0.0% on manugrs -- it cannot carry the
+#      SME link rules at all, so it cannot be profiled against the D13 scope even in principle.
+# Dual-rsid remains fully SUPPORTED (doc 16 D7, amended) -- type "manugrs,manulifeglobalprod" back
+# in for deferred-channel evidence work. It is a widget edit, not a code change.
+dbutils.widgets.text("rsid_list", "manulifeglobalprod", "10. rsid list (comma-sep, empty = off)")
+# ⚠ NEITHER MODE IS EXACT PIPELINE PARITY -- the old label claimed en_only was, and that is wrong
+# twice over. (a) D12 flipped settings.SCOPE_URL_MODE to "broad" on 2026-08-04, so en_only is now
+# the RETIRED branch, not the shipped one. (b) Even against the old pipeline it never matched:
+# 01_bronze_ingest.py:69 filters `post_page_url` ALONE, while this notebook applies the D4
+# blank-guarded coalesce(page_url, post_page_url) in every mode -- and post_page_url is 36.41%
+# blank on this suite, so the two select materially different row sets.
+# "broad" is the closer of the two to production, but is still WIDER (see url_scope_list below).
+dbutils.widgets.dropdown("url_scope_mode", "broad", ["broad", "en_only"], "11. URL scope mode (broad = live ingest shape; en_only = retired 2026-08-04 root — neither is exact pipeline parity)")
 # ⚠ "%/group-plans%" IS HERE ON PURPOSE AND MUST NOT BE "FIXED" TO MATCH settings.py.
 # D12 (2026-08-04) removed it from settings.SCOPE_URL_LIKE_BROAD, so this widget is deliberately
 # WIDER than the pipeline -- a sanctioned D5 divergence, recorded in doc 16 D5. The reason is that
@@ -116,7 +135,7 @@ dbutils.widgets.dropdown("url_scope_mode", "broad", ["broad", "en_only"], "11. U
 # link clicks (/ca/en/personal/group-plans/resources/mobile), which is what raised Q21.
 # When Q21 is answered: if the umbrella is ruled IN, add it to settings.py; if ruled OUT, drop it
 # here. Either way both sides move in the SAME commit and the divergence closes.
-dbutils.widgets.text("url_scope_list", "%/group-retirement%,%/group-plans%,%/regimes-collectifs%", "12. URL include patterns — ADD URLS HERE (SQL LIKE, comma-sep)")
+dbutils.widgets.text("url_scope_list", "%/group-retirement%,%/group-plans%,%/regimes-collectifs%", "12. URL include patterns — ⚠ WIDER than the pipeline by design: %/group-plans% is EDA-only (doc 20 Q21) — ADD URLS HERE (SQL LIKE, comma-sep)")
 dbutils.widgets.text("url_scope_exclude", "%adobeaemcloud.com%,%/ph/%", "13. URL patterns to exclude")
 dbutils.widgets.text("login_host_exclude",
                      "%portal.manulife.ca%,%id.manulife.ca%,%grsmembers.manulife.com%,"
@@ -148,15 +167,29 @@ LOGIN_EXCLUDE  = _csv("login_host_exclude")
 
 # Scope modes (doc-16 D5). The `url_scope_list` widget is AUTHORITATIVE: whatever patterns
 # are visible there are the patterns that run, so adding a URL means editing that widget and
-# nothing else. `en_only` is the single override — it pins the one pattern the bronze
-# pipeline still ingests, so an EDA run can be compared like-for-like against production.
+# nothing else. `en_only` is the single override — it pins the retired pre-2026-08-04 root.
 #
-# The default list is language- AND domain-agnostic, so three patterns cover both suites
-# (manugrs on manulifeim.com, manulifeglobalprod on manulife.com) in EN and FR, including
-# every gap the 2026-07-20 URL scope inventory found: /ca/fr retirement (801,461 rows) via
-# %/group-retirement%, /ca/fr/particuliers/regimes-collectifs/* (183,698) via
-# %/regimes-collectifs%, and /ca/en/{business,advisor,personal}/group-plans/* (285,266+)
-# via %/group-plans%.
+# ⚠ CORRECTED 2026-08-05. This block used to say en_only "pins the one pattern the bronze
+# pipeline still ingests, so an EDA run can be compared like-for-like against production."
+# That is FALSE on both halves and the mistake is the dangerous kind — it invites someone to
+# select en_only believing they are reproducing production:
+#   - THE MODE: D12 flipped settings.SCOPE_URL_MODE to "broad" (2026-08-04). The pipeline no
+#     longer ingests the en_only root as its scope; en_only is now the retired branch.
+#   - THE COLUMN: 01_bronze_ingest.py:69 applies en_only to `post_page_url` ALONE, whereas this
+#     notebook coalesces (D4) in EVERY mode. post_page_url is 36.41% blank on this suite, so
+#     even against the OLD pipeline these selected different row sets. There has never been a
+#     mode of this notebook that is byte-parity with the pipeline.
+# Treat both modes as EDA scopes, not as production replicas. To approximate the live ingest,
+# use "broad" and remove %/group-plans% from the widget — that is the closest reachable state.
+#
+# The default list is language- AND domain-agnostic, covering EN and FR, including every gap the
+# 2026-07-20 URL scope inventory found: /ca/fr retirement (801,461 rows) via %/group-retirement%,
+# /ca/fr/particuliers/regimes-collectifs/* (183,698) via %/regimes-collectifs%, and
+# /ca/en/{business,advisor,personal}/group-plans/* (285,266+) via %/group-plans%.
+# ⚠ %/group-plans% is the DELIBERATE EDA-only widening (see the widget comment above): the
+# pipeline's SCOPE_URL_LIKE_BROAD carries only two patterns. It also covered the legacy
+# manulifeim.com suite back when rsid_list defaulted to both suites; under the phase-1
+# single-suite default that half is dormant but costs nothing.
 URL_SCOPE_EN_ONLY = ["%manulife.com/ca/en/personal/group-plans/group-retirement%"]
 URL_INCLUDE = URL_SCOPE_EN_ONLY if URL_SCOPE_MODE == "en_only" else _csv("url_scope_list")
 
