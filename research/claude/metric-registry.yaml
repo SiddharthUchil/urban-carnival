@@ -1,6 +1,6 @@
 # GMAI-Pulse Phase-1 Metric Registry
 # ------------------------------------------------------------------
-# version: 0.8.0 (2026-08-04)
+# version: 0.8.1 (2026-08-05)
 # generated_from: new_data/data_profile_summary.json (profiler v0.1.0, run 2026-07-02)
 # seed_source: CoverMe data dictionary rows where Notes == "Anomaly Detection"
 #              -> confirmed counts: 9 (data_feed_columns) + 8 (post_eVar) + 12 (post_event_list) = 29
@@ -21,6 +21,47 @@
 # so the promotion gate now rests on Q6 ALONE. The partition itself is unchanged — every GWAM
 # entry stays `candidate` / `deferred` with `owner: TBD`.
 #
+# v0.8.1 (2026-08-05) attaches the C13-C18 probe evidence to the scope change v0.8.0 recorded.
+# It is a PATCH, not a minor bump, and the reason matters: nothing here is a decision. No entry is
+# added, removed, promoted or re-scoped; every `scope_predicate` string is byte-identical to
+# v0.8.0. This is the same shape as v0.6.0 -- evidence replacing an expectation.
+#
+# ✅ THE GATE CLEARED. The v0.8.0 block below says "THE COST IS NOT YET KNOWN" and names C17 as the
+# gate. C17 ran (generated_at 2026-08-05T01:29:56, 88 days, manulifeglobalprod; 18/18 sections
+# matching the manifest bytes+sha1):
+#   - median_daily_qualified_visits = 1599  (min 368, max 3180, days_below_100 = 0, days_at_zero = 0)
+#   -> the qualified-visit population CAN carry daily anomaly detection. The "goes back to the SME
+#      before anything is built" branch did not trigger.
+#   - share_of_url_scope_retained = 0.250 -- all 42 gold series rebuild on ~25% of today's
+#     population, and 9,195 visits are qualified-ONLY, so this is a re-scope and not a narrowing.
+#     ACCEPTED AS THE PHASE-1 SCOPE (ruling 2026-08-05); re-widening is a later-phase decision.
+#   - identity_cardinality: post_visid_high = 1,688,658 distinct, so the 02_silver_conform.py:70-73
+#     visit-collapse warning does NOT fire. These visit counts are real, not visit_num artefacts.
+#
+# ⚠ STILL NOTHING SEEDED, and the probe STRENGTHENED that hold rather than releasing it. v0.8.0
+# deferred seeding pending "evidence C13-C18 has not yet produced". The evidence now exists and it
+# argues against a 16-series split: C14 volume shows 6 of the 16 language-split rules cannot
+# support a daily series (23-46 zero days out of 88) -- the 4 app-download rules, signin_advisor/fr
+# and find_advisor/fr. Four rules carry 88% of the population. Seeding 16 series today would ship
+# 6 that can never fire. Q13 is now a priced question, not an open one, but it is still the SME's.
+#
+# ⚠ TWO NEW SME QUESTIONS, both raised BY the run, both cases where our own rulings conflict:
+#   - Q20: 41.9% of signin_member/fr clicks fire on Manulife Wealth FR pages -- the `wealth-ca`
+#     brand that doc 20 Q3b ruled OUT of Canada Retirement on 2026-07-30. D13 says count them
+#     (they match a rule); Q3b says the page they fire on is not ours. Unresolved.
+#   - Q21: D12's deliberate exclusion of "%/group-plans%" costs ~70% of the app-download clicks
+#     (73.6% Apple EN, 67.1% Android EN) -- they live at /group-plans/resources/mobile.
+#
+# Q19 is now PRICED and the answer is NOT the convenient one: C18 shows the evar105 brand tag is
+# NOT redundant on top of the rules. ANDing them costs 8,957 of 121,303 qualified visits (7.4%),
+# concentrated in the app-download family (tagged_share 0.31-0.43) and signin_member/fr (0.567).
+# The tag cannot retire silently; the SME must rule.
+#
+# Q6/Q14 re-measured on the NEW population: 4.31 vs 1.65 pv/visit (was 2.885 vs 1.343 on the URL
+# scope -- those figures no longer apply). PAGE_VIEW_BASIS stays "all_hits"; still a promotion
+# blocker, not a build blocker.
+#
+# ------------------------------------------------------------------
 # v0.8.0 (2026-08-04) records a SCOPE CHANGE, which is why it is a minor bump and not a patch:
 # the Public Website scope is no longer an eVar105 brand tag, it is the SME's 16 link rules at
 # qualified-visit grain (doc-16 D13, doc 21). A visit is in scope if it contains >= 1 hit whose
@@ -129,8 +170,8 @@
 # ------------------------------------------------------------------
 
 meta:
-  version: 0.8.0
-  updated: 2026-08-04
+  version: 0.8.1
+  updated: 2026-08-05
   default_grain: daily          # hourly reserved — enable only after >=30-day feed confirms volume
   domains: [coverme, gwam_retirement]
   sme_confirmations:            # rulings from Kerrian (Business SME), email 2026-07-27; ↺ extended 2026-07-29
@@ -690,6 +731,11 @@ gwam_channel_metrics:   # 19 entries (3 traffic x 4 channels + 3 errors + 2 sign
   # untouched, so the 04_detect parity assertion holds for free). What is NOT tractable by
   # engineering is whether enough qualified visits exist per day to detect on. Probe C17 answers
   # that FIRST. Nothing here is built until it does.
+  # ↺ 2026-08-05 -- C17 ANSWERED IT: median 1,599 qualified visits/day, 0 days below 100, over 88
+  # days. The volume gate is CLEARED and the build is unblocked. What remains of this warning is
+  # only the first half: bronze still projects zero eVars, so the predicate is still not evaluable
+  # in the lake. Cost of the change, now known: share_of_url_scope_retained = 0.250 (all 42 series
+  # rebuild on ~25% of today's population) -- accepted as the PHASE-1 scope, re-widening deferred.
   #
   # ⚠⚠ post_evar194 MUST NEVER ENTER A URL COALESCE (doc-16 D14). Five of the eight rules point
   # at id.manulife.ca / portal.manulife.ca, both on SCOPE_LOGIN_HOST_EXCLUDE. That list is
@@ -834,7 +880,7 @@ gwam_channel_metrics:   # 19 entries (3 traffic x 4 channels + 3 errors + 2 sign
     domain: gwam_retirement
     channel: public_website
     report_suite_label: Manulife Global Prod
-    scope_predicate: "visit-qualified: visit contains >=1 hit whose evar194 matches one of the 16 SME link rules (8 rules x en/fr, doc 21)"   # ↺ 2026-08-04, was the evar105 parts-match (doc-16 D13). ⚠ This signal's baselines below were measured on the OLD scope and do not carry over — probe C17 must re-measure them on the qualified-visit population.
+    scope_predicate: "visit-qualified: visit contains >=1 hit whose evar194 matches one of the 16 SME link rules (8 rules x en/fr, doc 21)"   # ↺ 2026-08-04, was the evar105 parts-match (doc-16 D13). ⚠ This signal's baselines below were measured on the OLD scope and do not carry over — probe C17 must re-measure them on the qualified-visit population. ↺ 2026-08-05 C17 RE-MEASURED: on the qualified population the two Q6 bases give 4.31 (all_hits) vs 1.65 (adobe_pv) pv/visit, from daily medians of 6,886 hits / 2,643 adobe page views over 1,599 visits. The old-scope 2.885 / 1.343 figures are SUPERSEDED and must not be used to set thresholds. Recalibrate against these when the qualified-visit scope is actually built.
     source_sheet: sme_anomaly_signals
     source_ref: "SME 2026-07-29: Page view per visit (if page view < 1 could be anomaly)"
     decode_rule: ratio              # page_views / visits. A daily ratio can only fall below 1 if visits exist with
@@ -868,7 +914,7 @@ gwam_channel_metrics:   # 19 entries (3 traffic x 4 channels + 3 errors + 2 sign
     domain: gwam_retirement
     channel: public_website
     report_suite_label: Manulife Global Prod
-    scope_predicate: "visit-qualified: visit contains >=1 hit whose evar194 matches one of the 16 SME link rules (8 rules x en/fr, doc 21)"   # ↺ 2026-08-04, was the evar105 parts-match (doc-16 D13). ⚠ This signal's baselines below were measured on the OLD scope and do not carry over — probe C17 must re-measure them on the qualified-visit population.
+    scope_predicate: "visit-qualified: visit contains >=1 hit whose evar194 matches one of the 16 SME link rules (8 rules x en/fr, doc 21)"   # ↺ 2026-08-04, was the evar105 parts-match (doc-16 D13). ⚠ This signal's baselines below were measured on the OLD scope and do not carry over — probe C17 must re-measure them on the qualified-visit population. ↺ 2026-08-05 C17 RE-MEASURED: on the qualified population the two Q6 bases give 4.31 (all_hits) vs 1.65 (adobe_pv) pv/visit, from daily medians of 6,886 hits / 2,643 adobe page views over 1,599 visits. The old-scope 2.885 / 1.343 figures are SUPERSEDED and must not be used to set thresholds. Recalibrate against these when the qualified-visit scope is actually built.
     source_sheet: sme_anomaly_signals
     source_ref: "SME 2026-07-29: if all pages are consistently at 2, sometimes an indicator of duplication"
     decode_rule: point-mass-share   # share of visits with EXACTLY 2 page views. The SME's signal is CONSISTENCY at 2,

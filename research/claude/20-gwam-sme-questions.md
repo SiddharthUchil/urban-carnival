@@ -654,6 +654,36 @@ them rather than having to answer them.*
 *Your 8 rules × English/French are recorded. These are the questions they raise. Q13, Q17 and Q19 are
 decisions we cannot make for you; Q15, Q16 and Q18 are transcription checks; Q14 is Q6 again.*
 
+> ### ↺ UPDATE 2026-08-05 — we measured your new scope, and it works
+>
+> We said we would come back with volumes before building anything. Here they are, over the last 90
+> days of your Public Website traffic.
+>
+> **The headline: your scope is viable.** Counting a visit as "in scope" when it contains one of your
+> 16 link clicks gives us a **median of about 1,600 visits a day**, and there is **no day in the
+> window** where the number falls low enough to stop us detecting a problem. We were genuinely
+> unsure about this — it was the one thing that could have sent the whole approach back to you — and
+> it came back comfortably clear. **We can build on this.**
+>
+> **The one number you should push back on if it surprises you:** your new definition is much
+> narrower than what we watch today. Only about **a quarter** of the visits currently on our
+> dashboards would qualify under the link-rule scope. That is not a mistake and not a problem to
+> solve — it is what "in scope means clicked one of these links" *means*, and you asked for a
+> sharper definition than the address-based one we had. But it does mean **every historical
+> comparison resets**: for a few weeks after the switch, "is this normal?" has less history behind
+> it. We are treating this as the **phase-1** scope and expect to widen in later phases.
+>
+> **Two things we found that you did not ask about, and both need a ruling from you** — they are
+> **Q20** and **Q21** at the end of this section. In both cases the problem is that two of your own
+> earlier decisions point in opposite directions, so we genuinely cannot pick for you.
+>
+> **Three of your rules are effectively invisible.** The two app-download links and the French
+> "Find an Advisor" and "Sign in - Advisor" links get so few clicks per day (often zero) that an
+> alert on them would be meaningless. That is not a fault in the rules — it is just how much traffic
+> they get. See **Q13**.
+>
+> Everything below now has real numbers under it, marked **↺ What we found**.
+
 ---
 
 ### Q13. English and French — one alert per rule, or two?
@@ -673,6 +703,34 @@ you have a strong preference either way, tell us and we will follow it.
 > Link Name in *both* languages, so the only thing distinguishing EN from FR is a `?l=fr` / `&hl=fr`
 > in the URL. See **Q18**.
 
+> **↺ What we found (2026-08-05) — measured, and it points fairly clearly.**
+>
+> Typical clicks per day, and how many days in the last 88 had **none at all**:
+>
+> | Rule | English | French |
+> |---|---|---|
+> | Sign in - Member | ~1,060/day · 0 empty days | ~290/day · 0 empty days |
+> | Sign in to join | ~930/day · 0 empty days | ~75/day · 0 empty days |
+> | Sign up to join | ~470/day · 0 empty days | ~40/day · 0 empty days |
+> | Sign in - Sponsor | ~79/day · 0 empty days | ~23/day · **8 empty days** |
+> | Sign in - Advisor | ~22/day · 2 empty days | **~1/day · 43 empty days** |
+> | Find an Advisor | ~35/day · 0 empty days | **~3/day · 23 empty days** |
+> | Apple app download | **~37/day · 25 empty days** | **~0/day · 46 empty days** |
+> | Android app download | **~15/day · 29 empty days** | **~2/day · 39 empty days** |
+>
+> **Splitting by language costs you six usable signals.** The bolded rows cannot support a daily
+> alert in either arrangement — on roughly a third to a half of all days there is simply nothing to
+> measure, and an alert that cannot fire is worse than no alert because it looks like coverage.
+>
+> **Our recommendation:** watch the **top four rows as language-split** (they all carry it easily)
+> and the rest **combined**, or drop the app-download and advisor rules from alerting entirely and
+> keep them as reporting-only. We will follow whatever you prefer — but we would rather not ship you
+> six alerts that stay silent because there is no traffic behind them.
+>
+> One more thing worth knowing: **four rules do almost all the work.** Sign in - Member (EN),
+> Sign in to join (EN), Sign up to join (EN) and Sign in - Member (FR) together account for about
+> **88%** of all in-scope activity. The other twelve rules combined are the remaining 12%.
+
 ---
 
 ### Q14. ↺ Re-asking Q6 — "Page Views": Adobe page views, or every interaction?
@@ -691,6 +749,15 @@ qualifying visits, both definitions now make sense. Under the alternative readin
 considering, "page views of a link click" would have been meaningless. So this is back to being a
 straightforward choice of number.)*
 
+> **↺ Updated numbers (2026-08-05).** The 2.885 / 1.343 figures above were measured on the *old*
+> address-based scope and no longer apply. Re-measured on your new link-rule scope, the two
+> definitions give **4.31** versus **1.65** pages per visit — so the gap is now wider, not narrower:
+> the first is about **two and a half times** the second.
+>
+> Nothing else changes. Both are built and running today; this is still a straight choice of which
+> number goes on the dashboard. But the two answers are now far enough apart that we would not want
+> to guess on your behalf.
+
 ---
 
 ### Q15. One URL looks like it lost its last character in the spreadsheet
@@ -704,6 +771,12 @@ We think this is a copy/paste truncation in the spreadsheet rather than somethin
 **Please confirm** the intended value is `...ui_locales=en-CA`. We are matching that rule on a
 distinctive fragment of the URL rather than the whole string, so this does not block us either way —
 we would just rather have it right in the record.
+
+> **↺ The data agrees with us (2026-08-05).** We searched 90 days for the URL exactly as it appears
+> in your spreadsheet: **zero matches.** Searching instead for the distinctive fragment finds
+> **5,847** clicks. So the string as written does not exist on your site, which is what we would
+> expect from a truncation. We are proceeding on the assumption that `en-CA` is correct — a
+> confirmation from you closes it for the record, nothing more.
 
 ---
 
@@ -722,6 +795,15 @@ not do this — **Sign up to join** and **Sign in to join** both carry `fr-CA` a
 
 **Is this intended, or a tagging/site bug?** It matters because if it is a bug, an alert on that rule
 would be quietly monitoring a broken journey — and the more useful thing to do first is fix the link.
+
+> **↺ Confirmed real, not a spreadsheet artifact (2026-08-05).** We checked the live data: the
+> English destination inside the French link is genuinely there on the site. So this is a real
+> journey your French sponsors and advisors are taking, not a copy/paste error — **the question is
+> still yours to answer.**
+>
+> On our side it causes no problem: we read the language from the *outer* part of the address, so
+> both rules are correctly counted as French despite the English destination. It is the user
+> experience, not the measurement, that we would want someone to look at.
 
 ---
 
@@ -746,6 +828,16 @@ So two of your own rulings point opposite ways on this one rule. **Which wins?**
 We have not implemented the marketing exclusion yet, so nothing is broken today. We would rather
 settle it now than have the rule quietly change meaning later.
 
+> **↺ Good news — this one is cheap either way (2026-08-05).** We were treating this as one of the
+> two most important questions on the list. Having measured it, we would now **downgrade it**: the
+> French Find an Advisor link gets about **3 clicks a day**, with **23 days out of 88 at zero**. So
+> whichever way you rule, it moves almost nothing.
+>
+> Separately, that URL is also long enough to be **cut off** in Adobe's storage (it exceeds the
+> 255-character limit), which we have worked around. Between the truncation and the low volume, this
+> rule is not a good alerting candidate regardless of the marketing question — worth knowing before
+> you spend time on it.
+
 ---
 
 ### Q18. The app-download rules have no Link Name — is the URL alone the identifier?
@@ -761,6 +853,22 @@ both languages. Two things follow, and we would like both confirmed:
    uses to pick a display language, and in some setups they get appended by the browser rather than
    being two distinct buttons on the page. If it is really one button, we should treat it as one rule
    and not split it by language (see **Q13**).
+
+> **↺ Part 1 answered, part 2 still needs you (2026-08-05).**
+>
+> **On the identifier:** confirmed — the URL is all we have. In the live data the Link Name is empty
+> for about **96%** of app-download clicks, so there is nothing else to match on. We are matching on
+> the app-store address, and that works.
+>
+> **On the language split:** still genuinely open, and now worth less than it was. These two rules
+> are among the lowest-volume in your set (roughly 37 and 15 clicks a day in English; near-zero in
+> French, with 39–46 days out of 88 at zero). So even if they *are* two distinct buttons, splitting
+> them by language produces two signals neither of which can carry an alert. Our suggestion is to
+> treat each app as **one rule, both languages combined** — unless you know they are separately
+> tracked buttons and want them kept apart for reporting.
+>
+> See also **Q21** — most of these clicks happen on a page we currently exclude from the data we
+> collect, which is a bigger issue for these two rules than the language question.
 
 ---
 
@@ -781,9 +889,99 @@ This is not a technicality: option 2 is *stricter than either rule alone* and wo
 monitored population twice over. We are measuring how much the two definitions overlap and will bring
 you that number — but the decision is yours.
 
+> **↺ Here is that number (2026-08-05) — and the two definitions genuinely disagree.**
+>
+> We had half-expected the brand tag to be redundant once the link rules were in place, which would
+> have let it retire quietly. **It is not.** Choosing option 2 ("both apply") would remove about
+> **7.4%** of the visits your rules select — roughly **8,957 visits** out of 121,303 over 90 days.
+>
+> More useful than the total is **where** the disagreement sits, because it is very concentrated:
+>
+> | Rule | Share that is also brand-tagged |
+> |---|---|
+> | Most sign-in / sign-up rules | **92–99%** — effectively no disagreement |
+> | Sign in - Member (French) | **57%** |
+> | Android app download (EN / FR) | **43% / 60%** |
+> | Apple app download (EN / FR) | **37% / 31%** |
+>
+> So option 2 would mostly delete **the app-download rules and the French member sign-in** — which
+> are the very rules already struggling for volume (**Q13**). Our read: option 2 is the most
+> expensive choice and the one we would least recommend, but it is your call. Options 1 and 3 cost
+> nothing measurable.
+
 ---
 
-*Nothing in Part 5 blocks us this week: we are measuring the new scope first and will come back with
-volumes before building anything. The two we would most like answered are **Q17** and **Q19**, because
-they are the two where your own prior rulings and the new spec genuinely disagree — everything else we
-can proceed on with a stated assumption if you would rather not spend time on it.*
+### Q20. 🆕 Four in ten French member sign-ins happen on a page you told us is out of scope
+
+*New — this came out of the measurement, not the spreadsheet.*
+
+Your **Sign in - Member (French)** rule works well: about 290 clicks a day, every day. But when we
+looked at **which pages people are on** when they click it, **42%** of those clicks happen on
+**Manulife Wealth** French pages — `.../particuliers/patrimoine/patrimoine-manuvie/...` — rather
+than on the group-retirement pages.
+
+That creates a direct conflict with something you already ruled on. On **2026-07-30** you told us
+(Q3b) that **`wealth-ca` is not part of Canada Retirement**, and we acted on it — those pages are
+excluded from what we collect.
+
+So two of your decisions now point opposite ways on the same clicks:
+
+- **Your link rule says they count** — it is a member sign-in click, exactly the thing you asked us
+  to watch; but
+- **Your Q3b ruling says the page they happen on is not Canada Retirement.**
+
+**Which wins?**
+
+1. **Count them** — the click is what matters, wherever it happens. (We would need to widen what we
+   collect to include the Manulife Wealth French pages.)
+2. **Leave them out** — Canada Retirement means the retirement pages, so a sign-in click on a Wealth
+   page belongs to Wealth. (Your French member rule then measures roughly **58%** of what it looks
+   like it measures, which we would want noted on the dashboard.)
+
+We cannot pick this one for you — it is the same class of question as Q19, and it is the one on this
+list we would most like answered.
+
+---
+
+### Q21. 🆕 We excluded a section of the site, and it turns out to hold most of your app-download clicks
+
+*Also new from the measurement, and this one is partly our decision to undo.*
+
+When we widened our data collection to include French (so your French rules would work at all), we
+had a choice about how wide to go. We deliberately **left out** the broader `/group-plans/` section,
+because it also contains group-benefits, business and advisor content — three lines of business
+nobody had signed off on us monitoring. That looked like the cautious choice.
+
+**Having measured it, it was the expensive one for two of your rules.** The Apple and Android
+app-download buttons live at `/group-plans/resources/mobile` — inside the section we excluded:
+
+| Rule | Share of its clicks in the excluded section |
+|---|---|
+| Apple app download (English) | **74%** |
+| Android app download (English) | **67%** |
+
+So those two rules are currently seeing roughly a third of their real traffic. Combined with their
+already-low volume (**Q13**), they are not viable as alerts in this state.
+
+**Three options:**
+
+1. **Put `/group-plans/` back in** — the app rules work properly. Cost: we start collecting
+   group-benefits, business and advisor traffic, which needs your sign-off (this is the widening
+   we flagged as **Q3**).
+2. **Add just the mobile page** — a narrow exception for `/group-plans/resources/mobile` only. Gets
+   the app rules working without opening the umbrella. **This is what we would recommend.**
+3. **Leave it and drop the app rules from alerting** — keep them as reporting-only numbers.
+
+Nothing is broken today and nothing is blocked on this; we would just rather you knew the two app
+rules are currently under-counting than have you see the numbers later and wonder.
+
+---
+
+*Nothing in Part 5 blocks us: ↺ **we have now measured the new scope, and it works** — see the
+update at the top of this section. Building can start.*
+
+*↺ **The ones we would most like answered, in order: Q20, Q19, Q21.** All three are cases where your
+own decisions point in opposite directions and we genuinely cannot choose for you — Q20 and Q19 both
+change how many visits we monitor, and Q21 decides whether the app-download rules are worth keeping.
+**Q17 has been downgraded**: we had it on this list, but at ~3 clicks a day the answer barely matters.
+Everything else we can proceed on with a stated assumption if you would rather not spend the time.*

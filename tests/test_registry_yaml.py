@@ -54,7 +54,7 @@ def entries(registry):
 
 
 def test_version_pin(registry):
-    assert str(registry["meta"]["version"]) == REGISTRY_VERSION == "0.8.0"
+    assert str(registry["meta"]["version"]) == REGISTRY_VERSION == "0.8.1"
 
 
 def test_per_sheet_counts(registry):

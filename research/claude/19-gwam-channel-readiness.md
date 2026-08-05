@@ -30,11 +30,44 @@
 > - **§2.5.1's premise was wrong and is corrected in place** — the pipeline does **not** strip query
 >   strings; only the EDA notebooks do. The CID rule needs no ADR amendment.
 > - **§3 gains G7** (the scope predicate is not importable — promoted from G6's residual gap).
-> - **§4 gains Q13–Q19**, carried in [20](20-gwam-sme-questions.md) Part 5.
+> - **§4 gains Q13–Q19**, carried in [20](20-gwam-sme-questions.md) Part 5. ↺ **now Q13–Q21.**
 >
 > ⚠ **Nothing is built.** Probe sections C13–C18 exist and have **not been run**; **C17 is the gate**
 > — it measures whether the qualified-visit population can carry daily detection at all. Every
 > readiness verdict below (§6) is stale until it does.
+
+> ### ↺ REVISION 2026-08-05 — the probe ran, and **C17 cleared the gate**
+>
+> The banner immediately above is superseded on its central point: C13–C18 **have** now been run
+> (`generated_at 2026-08-05T01:29:56`, 88 days on `manulifeglobalprod`, 18/18 sections matching the
+> manifest bytes+sha1, source parity 41/41 cells). Full readings in
+> [21 §5](21-gwam-link-rule-scope.md).
+>
+> - **✅ C17 PASSES.** Median **1,599** qualified visits/day (min 368, max 3,180), **zero** days below
+>   100, **zero** days at zero. The qualified-visit scope can carry daily anomaly detection. The
+>   "goes back to the SME rather than into a pipeline" branch did **not** trigger.
+> - ⚠ **But it costs ~75% of the population.** `share_of_url_scope_retained = 0.250` — 121,303
+>   qualified visits against 448,306 under today's live URL scope. All 42 gold series rebuild on a
+>   quarter of the traffic and no historical threshold survives. **Accepted as the phase-1 scope**
+>   (2026-08-05 ruling); re-widening is a later-phase decision, not a correction of this one. Note
+>   9,195 visits are qualified-only, so this is a genuine re-scope rather than a subset.
+> - **D14 moved from prediction to measurement, and it is the strongest result in the run.** Folding
+>   `post_evar194` into a URL coalesce would silently delete **238,595 of 248,987 rule-matching hits
+>   (95.8%)** — `excl_by_page_url = 0` vs `excl_by_href = 100%` on all ten sign-in/sign-up rules —
+>   while gold still built and every series still populated. §2.3's D8 edge is now quantified.
+> - **Six of the sixteen rules cannot support a daily series** (23–46 zero days of 88): the four
+>   app-download rules, `signin_advisor/fr`, `find_advisor/fr`. Four rules carry 88% of the
+>   population. This is the concrete input to Q13.
+> - **Two new SME questions, raised by the run**: **Q20** (41.9% of FR member sign-in clicks fire on
+>   Manulife Wealth FR pages — the `wealth-ca` brand **Q3b ruled out**, so two of our own rulings
+>   disagree) and **Q21** (D12's `%/group-plans%` exclusion costs ~70% of app-download clicks).
+> - **A privacy gate was found unpassable and fixed**, not waived: doc 21 §4's `--grep "goto=http"`
+>   ran over all sections and necessarily failed on `link_evar_census`, whose job is to echo the
+>   SME's own rule URLs. Verified mechanically — all 7 `goto=http` strings are in `SME_LINK_RULES`,
+>   **0** discovered-unelided URLs — and the gate now carries `--grep-sections`.
+>
+> **§6's verdict is refreshed below rather than left stale.** Registry → **v0.8.1** (evidence only;
+> nothing seeded, promoted or removed — Q13 still decides 8 vs 16).
 
 > ### ↺ REVISION 2026-07-29 (later the same day) — the scope narrowed to ONE channel
 >
@@ -571,7 +604,7 @@ Numbered **G1–G6**. Deliberately *not* the `E1–E4` series: that namespace be
 
 | # | Gap | Evidence | Fix | Impact if unfixed |
 |---|---|---|---|---|
-| **G1** | ✅ **CLOSED 2026-07-29; extended run landed 2026-07-30.** The discovery probe has been run twice. | [`eda/gwam_channel_discovery.py`](../../eda/gwam_channel_discovery.py) executed on Databricks; export [`gwam_channel_discovery.html`](../../gwam_channel_discovery.html). Current run: `generated_at` **2026-07-30T08:28:42**, **12 sections** (13 SHAREABLE blocks), **`skipped == {}`**, `complete: true`, and **12/12 payloads match the manifest bytes+sha1** per [`scripts/decode_databricks_export.py`](../../scripts/decode_databricks_export.py). Supersedes the 2026-07-29T02:00:54 / 11-section run. | Done — the C1–C10 results are folded into §0, §2.1-2.6 and §4; the C3 re-run, C11 and C12 into §1.1, §2.5.1 and §7. Three pre-probe claims were **corrected**, not just filled in (suite count, delimiter, segment-vs-URL direction). | — |
+| **G1** | ✅ **CLOSED 2026-07-29; extended run 2026-07-30; link-rule run landed 2026-08-05.** The discovery probe has been run three times. | [`eda/gwam_channel_discovery.py`](../../eda/gwam_channel_discovery.py) executed on Databricks; export [`gwam_channel_discovery.html`](../../gwam_channel_discovery.html). **Current run: `generated_at` 2026-08-05T01:29:56, 18 sections (19 SHAREABLE blocks), `skipped == {}`, `complete: true`, 18/18 payloads match the manifest bytes+sha1** per [`scripts/decode_databricks_export.py`](../../scripts/decode_databricks_export.py); source parity independently confirmed at **41/41 cells** against the committed notebook. Supersedes the 2026-07-30T08:28:42 / 12-section run, which superseded 2026-07-29T02:00:54 / 11 sections. | Done — C1–C10 folded into §0, §2.1-2.6 and §4; C3 re-run, C11, C12 into §1.1, §2.5.1 and §7; **C13–C18 into [21](21-gwam-link-rule-scope.md) §2.0/§2.2/§2.4/§2.5/§5 and the 2026-08-05 banner above**. Across the three runs **seven** pre-probe claims were *corrected* rather than filled in — suite count, delimiter, segment-vs-URL direction, then the FR mojibake, the `token` uniqueness assumption, the unpassable privacy gate, and D14's cost. | — |
 | **G2** | ✅ **CLOSED 2026-07-30.** GWAM's `SeriesSpec` could not express a ratio or carry governance; the Spark engine supported `ratio` but the GWAM Python spec did not. | Was [registry.py:68-83](../../detect/registry.py) — `kind` was `count \| rate \| share`, with no `numerator`/`denominator` and no `status`/`direction`/`owner`, while `CmSeriesSpec` ([cm_registry.py:118-145](../../detect/cm_registry.py)) had all of them. | Done. The five fields are ported from `CmSeriesSpec`; [kpis.py](../../detect/kpis.py) gained the two-pass ratio arm it was missing (its `else` raised `ValueError`, so a declared ratio would have built in Spark and crashed in pandas); [test_gold_parity.py](../../tests/test_gold_parity.py) pins pandas/Spark agreement including a zero-denominator day. `gold_lib` needed **no** change, as predicted — [gold_lib.py:168-175](../../databricks/src/gold_lib.py) already resolved ratios by sibling `metric_id`. | — (was: "Sign in % rate completion" undeclarable, and GWAM metrics ungoverned). |
 | **G3** | **No error or sign-in columns reach bronze/silver.** Now **actionable** — C5/C6 determined which columns are worth carrying. | [bronze_columns.py](../../databricks/conf/bronze_columns.py) — `DETECTOR_COLUMNS` / `SILVER_COLUMNS` carry no eVar181-184, eVar122, eVar135. | Add **`post_evar181`, `post_evar182`, `post_evar184`** — the three populated at scale on the Canada channels (12.2M / 16.4M / 14.4M rows on `manugrs`; 37.6M on mobile for eVar184). **Do NOT add `post_evar183`** (0.00% on `manugrs`, 0.14% on mobile — a John Hancock field) **or eVar122/eVar135** (0% on both Canada suites). Carrying any of those three costs bronze width for near-guaranteed nulls. | Errors and Sign-in Errors are unbuildable regardless of any SME ruling. |
 | **G4** | **Scope has no channel dimension.** `SCOPE_RSID` is a single string and the predicate is one rsid AND a URL match. | [settings.py:19](../../databricks/conf/settings.py), [01_bronze_ingest.py:62-101](../../databricks/src/01_bronze_ingest.py). | Per-channel scope config (rsid + its own segment predicate), and a `channel` column carried to gold so metrics break down by it. **Blocked on the D8 ruling** — do not build until §4 item 1 lands. | A four-channel product cannot be expressed. Note this is also the change that re-baselines everything (§2.2). |
@@ -703,6 +736,34 @@ blocker text and the Synapse-era claims in docs 01/02/03/10/11 remain open.
 | Mobile-app ingestion | 🔴 **Net-new, and proven necessary** — mobile URL rate is exactly 0.000; `mobileappid` unusable; pagename `MPS %` is the handle (C2/C8, G4) |
 | ManulifeID channel | 🔴 **Blocked on data access** — suite has 0 rows in our feed (item 2a); the retirement split (item 9) cannot even be attempted until then |
 | Governance (GWAM registry pin + drift test) | 🟡 **Seeded** — 17 candidate entries at v0.4.0; binding pin still open (G5) |
+
+> ### ↺ §6 REFRESHED 2026-08-05 — post link-rule probe
+>
+> The table above is the 2026-07-28 four-channel assessment and is kept for history. Under D11
+> (Public Website only) and D13 (the 16 link rules at qualified-visit grain), this is the live
+> verdict:
+>
+> | Area | Status |
+> |---|---|
+> | Scope definition | ✅ **Settled and now measured** — `manulifeglobalprod` + **the 16 SME link rules at qualified-visit grain** (D13). Supersedes the eVar105 brand tag, ⚠ pending **Q19** — C18 proved the tag is *not* redundant (ANDing costs 7.4% of qualified visits), so this is a live either/or, not a formality. |
+> | **C17 volume gate** | ✅ **CLEARED** — median **1,599** qualified visits/day, min 368, **0** days below 100, **0** days at zero, over 88 days. The scope can carry daily detection. |
+> | Re-baseline cost | 🟡 **Priced and accepted for phase 1** — `share_of_url_scope_retained` **0.250**. All 42 gold series rebuild on ~25% of today's population; no historical threshold survives. Not a blocker, but the single largest planning fact in this document. |
+> | Page Views / Visits / Visitors | 🟢 **Engine ready; scope not yet wired** — the three metrics exist and run, but nothing evaluates the link-rule predicate yet (bronze projects 0 eVars). Tractable and scoped in [21 §3.3](21-gwam-link-rule-scope.md). |
+> | Page-view numerator (Q6/Q14) | 🟡 **Both bases built, unscored** — re-measured on the qualified population: **4.31** vs **1.65** pv/visit. Promotion blocker only (`PAGE_VIEW_BASIS`, v0.7.0). |
+> | Per-rule series (Q13) | 🔴 **Do not seed yet** — 6 of 16 language-split rules have 23–46 zero days of 88 and cannot support a daily test. Four rules carry 88% of the population. |
+> | D14 (`post_evar194` ∉ URL coalesce) | ✅ **Measured, not assumed** — violating it deletes **238,595 of 248,987 rule-matching hits (95.8%)** silently. Pinned by `tests/test_link_rules.py`. |
+> | Baseline history | 🟡 **88 of 91 days** in the probe window (`2026-06-26`, `2026-07-11`, `2026-07-21` absent) on a suite with 138 days total — still the thinnest margin in the programme. |
+> | Main EDA / charts profile | 🔴 **Never exported, and not runnable as-is** — the pair scopes by rsid + URL only (no `evar105`, no `evar193/194`), so it cannot express D13; plus ADR-0007 §5 requires a human privacy read-through of its full-raw blocks. Re-scope before running. |
+> | Governance | 🟡 **v0.8.1** — 5 candidate / 14 deferred, all `owner: TBD`; probe evidence now attached. G5 (binding pin) still open. |
+> | Open SME questions | 🔴 **Q13–Q21** — Q19 and Q20 are the two where our own rulings genuinely conflict. |
+>
+> **Revised bottom line.** The programme's remaining risk has moved decisively from *"can we measure
+> this?"* to *"which of our own rulings wins?"*. Every engineering unknown the link-rule scope raised
+> came back answerable: the eVars carry data, the match strategy resolves, the volume supports daily
+> detection, and the one catastrophic failure mode (D14) is now a pinned test rather than a worry.
+> What is left is **governance, and it is genuinely contradictory in two places** — Q19 (rules vs
+> brand tag) and Q20 (D13 vs Q3b). Those cannot be resolved by more probing, and both change the
+> population. The honest read: **build is unblocked, but seeding and promotion are not.**
 
 **Bottom line.** ↺ The pre-probe verdict said "GWAM's blockers are the data itself." **That was too
 pessimistic by three-quarters.** Three of the four suites are in our feed with 880+ days of history on
@@ -874,3 +935,4 @@ those three, plus G2/G3/G6, which are all now unblocked and independent of any r
 | **2026-07-29 (later, SME ruling)** | **Scope narrowed to the Public Website channel only.** D8 conflict dissolved (not resolved); `manucustomer.prod` access request moot; segment-scope justification collapsed; G3/G4 moot and **G2 promoted to critical**; Q5 answered (marketing = CID) with two new implementation gaps; **new §1.1** (three SME anomaly signals) and **new §2.5.1** (the CID rule); **new Q3b** (`wealth-ca` / `pvt-wealth`); Q6 escalated to blocking. Registry → **v0.5.0** (5 candidate / 14 deferred + 2 new signal seeds); probe gains C3 variant sizing, **C11** and **C12**. |
 | **2026-07-30 (extended probe + G2)** | **The extended probe ran** (`generated_at` 2026-07-30T08:28:42, 12 sections, `complete: true`, 12/12 payloads verified against the manifest, privacy grep clean) and its results are folded in. **Three findings change the plan:** C11 **rejected** `post_campaign` as the CID proxy (agreement 0.762 suite / **0.537** segment), leaving an ADR-0007 amendment as the only route to marketing exclusion; C12 showed the SME's literal "page views per visit **< 1**" test **never fires** (88-day floor 1.2236, so the signal is inert as specified — `share_pv_eq_0` = 3.25% is the detectable quantity); and C12's `visitor_grain` **settled** the ECID-vs-visid-pair divergence as negligible (≤15 visitors/day, 0.068%). C3 **sized** Q3b — `wealth-ca` and `pvt-wealth` are additive with **zero** overlap. **G2 CLOSED**: `SeriesSpec` gains `numerator`/`denominator` + governance, `kpis.py` gains the ratio arm it was missing, `test_gold_parity` gains ratio + zero-denominator cases. Registry → **v0.6.0** (no entry added, removed, or promoted — evidence replacing expectation). Both signals now blocked on **Q6 alone**. |
 | **2026-08-04 (SME link-rule scope)** | **The surviving channel's scope was REDEFINED** — see [21](21-gwam-link-rule-scope.md). 8 named link-click rules × EN/FR, ratified as the scope at **qualified-visit grain** (doc-16 **D13**), superseding **D10**'s "stay on URL scope" recommendation *by ruling rather than by evidence* and superseding the `evar105` half of **D11** pending **Q19**. Ingest scope flipped `en_only` → `broad` (**D12**) so the French rules are matchable, with `%/group-plans%` **deliberately excluded** — French was the ask, the umbrella is a separate unsigned widening. **D8 amended in place**: it excludes login *page views*, not clicks *toward* login from public pages — five of the eight rules target `id.manulife.ca`/`portal.manulife.ca`, so without that distinction the new scope reads as violating a standing decision. **D14 added**: `post_evar194` must never enter a URL coalesce. **§2.5.1's premise corrected** — the pipeline does **not** strip query strings (only the EDA notebooks do), so the CID rule needs no ADR amendment; backlog #16 retagged, not resolved. **New G7** (scope predicate not importable). Registry → **v0.8.0**: all 5 `public_website` `scope_predicate` strings rewritten, **zero** entries seeded and counts held at 19/{5,4,4,6}. Probe gains **C13–C18** + `tests/test_link_rules.py`. ⚠ **Not run** — **C17 is the gate**, and every readiness verdict in §6 is stale until it reports. |
+| **2026-08-05 (link-rule probe ran)** | **C13–C18 executed and the gate CLEARED** (`generated_at` 2026-08-05T01:29:56, **18 sections**, 19 SHAREABLE blocks, `skipped == {}`, `complete: true`, **18/18 payloads match bytes+sha1**, source parity **41/41 cells**). **C17: median 1,599 qualified visits/day**, min 368, **0 days below 100**, 0 at zero, over 88 days — the qualified-visit scope can carry daily detection, so the "back to the SME" branch did not trigger and **the build is unblocked**. ⚠ **Re-baseline is 75%** (`share_of_url_scope_retained` **0.250**; 9,195 visits qualified-**only**, so it is a re-scope not a subset) — **accepted as the phase-1 scope**, re-widening deferred to a later phase. **D14 measured at 95.8%** (238,595 of 248,987 hits would be silently deleted, and non-uniformly — the sign-in family dies, the six weakest rules survive). **D12 priced**: the `%/group-plans%` exclusion costs ~70% of app-download clicks. **Q19 priced and NOT redundant**: ANDing the brand tag costs 7.4% of qualified visits. **6 of 16 rules cannot sustain a daily series**; four rules carry 88%. Four pre-run claims **corrected**: FR mojibake is spreadsheet-only, `token` collisions are `n=2 × 96` (not uniquely `n=1`), §4's privacy gate **could never pass** as written (now `--grep-sections` + an SME-allowlist check), and `evar194.len_max` is 255 (the good branch). **New Q20/Q21** — both cases where our own rulings conflict. §6 verdict refreshed in place. Registry → **v0.8.1** (evidence only; nothing seeded, promoted or removed). |
