@@ -19,6 +19,25 @@
 # MAGIC Every panel is an **aggregate** (counts / rates by time or by an allow-listed dimension).
 # MAGIC No visitor IDs, IPs, cookies, user-agents, or fine geo are ever read or displayed.
 # MAGIC
+# MAGIC ### ⚠ Read this before running (↺ 2026-08-05)
+# MAGIC **This notebook profiles the URL scope, which is no longer the alerting scope.** On
+# MAGIC 2026-08-04 the Business SME redefined Public Website scope as the **16 link rules at
+# MAGIC qualified-visit grain** (doc-16 **D13**, doc [21](../research/claude/21-gwam-link-rule-scope.md)):
+# MAGIC a visit is in scope if it contains ≥1 rule-matching `evar194` link click. This notebook
+# MAGIC scopes by `rsid` + URL `LIKE` only — it has **no `evar193`/`evar194` handle and no
+# MAGIC `evar105` handle** — so it *cannot* express that predicate.
+# MAGIC
+# MAGIC Probe **C17** measured the difference: the two populations overlap by only **25%**. So a
+# MAGIC run of this notebook today profiles a population roughly **4× larger** than the one the
+# MAGIC metrics are actually defined on. That is still useful for site-wide exploration — it is
+# MAGIC what the deferred-channel evidence base is made of — but **do not read its output as a
+# MAGIC baseline for the alerting metrics.**
+# MAGIC
+# MAGIC Before producing a profile of record, re-scope this pair: add the link-rule predicate, drop
+# MAGIC `manugrs` (deferred under D11), and bump `end_date`. Then run, then do the ADR-0007 §5
+# MAGIC privacy read-through — the EDA notebook's blocks are full-raw, though **this notebook's are
+# MAGIC aggregate-only** (see Privacy above), so charts clear that bar on their own.
+# MAGIC
 # MAGIC ### Scope — both report suites
 # MAGIC `rsid` IN (`manugrs`, `manulifeglobalprod`) AND a URL matching the `url_scope_mode`
 # MAGIC include list — default `broad`: `%/group-retirement%`, `%/group-plans%`,
@@ -64,16 +83,35 @@ import plotly.io as pio
 
 # ---------------------------------------------------------------- widgets ----
 dbutils.widgets.text("table_fqn", "gwam_prod_catalog.inv_typed_common.adobe_hit_data", "1. Table (catalog.schema.table)")
+# ⚠ `manugrs` is a DEFERRED channel under D11 (2026-07-29: Public Website only). It is kept in the
+# default because this notebook is an exploratory profiler, not the alerting scope -- the deferred
+# channels retain their evidence base so a re-widening is a status flip. Drop it if you want a
+# scope-parity profile.
 dbutils.widgets.text("rsid_list", "manugrs,manulifeglobalprod", "2. rsid list (comma-sep, empty = off)")
 dbutils.widgets.dropdown("url_scope_mode", "broad", ["broad", "en_only"], "3. URL scope mode (en_only = pipeline parity)")
+# ⚠ "%/group-plans%" IS HERE ON PURPOSE AND MUST NOT BE "FIXED" TO MATCH settings.py.
+# D12 (2026-08-04) removed it from settings.SCOPE_URL_LIKE_BROAD, so this widget is deliberately
+# WIDER than the pipeline -- a sanctioned D5 divergence, recorded in doc 16 D5. The reason is that
+# the umbrella is what an analyst must be able to SEE in order to rule on it (exit criterion: doc 20
+# Q3 / Q21). Narrowing this to pipeline parity would hide the very population the open question is
+# about. ↺ 2026-08-05: probe C15 priced it -- the excluded umbrella carries ~70% of the app-download
+# link clicks (/ca/en/personal/group-plans/resources/mobile), which is what raised Q21.
+# Keep this in lockstep with the identical block in gwam_canada_retirement_eda.py.
 dbutils.widgets.text("url_scope_list", "%/group-retirement%,%/group-plans%,%/regimes-collectifs%", "3b. URL include patterns — ADD URLS HERE (SQL LIKE, comma-sep)")
 dbutils.widgets.text("url_scope_exclude", "%adobeaemcloud.com%,%/ph/%", "3c. URL patterns to exclude")
 dbutils.widgets.text("login_host_exclude",
                      "%portal.manulife.ca%,%id.manulife.ca%,%grsmembers.manulife.com%,"
                      "%gsrs1.manulife.com%,%viproom.manulife.com%,%portail.manuvie.ca%",
                      "3d. Individual-login hosts to exclude (D8)")
+# ⚠ These are HARD PINS, not a rolling window -- unlike the EDA notebook, which uses `window_months`.
+# Bump `end_date` before every run or the charts silently stop at a stale boundary while looking
+# complete. ↺ 2026-08-05: was "2026-07-07"; moved to the last day probe C17 confirmed carries data.
+# `start_date` stays 2026-02-01 -- it is deliberately just before the 2026-02-01 scoped-marketing
+# cutover recorded as a known_change_point, so the discontinuity stays visible in the charts.
+# ⚠ Probe C17 also found three days with NO data in this range -- 2026-06-26, 2026-07-11 and
+# 2026-07-21. They are feed gaps, not zero-traffic days; do not read them as drops.
 dbutils.widgets.text("start_date", "2026-02-01", "4. Start date (YYYY-MM-DD)")
-dbutils.widgets.text("end_date", "2026-07-07", "5. End date (YYYY-MM-DD)")
+dbutils.widgets.text("end_date", "2026-08-04", "5. End date (YYYY-MM-DD)")
 dbutils.widgets.dropdown("geo_country", "ALL",
                          ["ALL", "can", "usa", "hkg", "phl", "ind", "gbr"], "6. Country (geo_country)")
 dbutils.widgets.text("geo_region", "", "7. Region(s), comma-sep e.g. on,qc (empty = all)")

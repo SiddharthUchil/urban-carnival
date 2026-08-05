@@ -48,7 +48,7 @@ from registry import slug
 # qualified-visit grain (doc-16 D13) and flips the GWAM ingest scope to "broad". Both are
 # GWAM-only: no CoverMe series, scope, or count changes, and this pin moves purely because it
 # is the single pin for the whole file.
-REGISTRY_VERSION = "0.8.0"
+REGISTRY_VERSION = "0.8.1"
 
 # --- Gold build parameters (consumed by cm_03_gold_kpis via gold_lib) ---
 DATE_COL = "hit_date"

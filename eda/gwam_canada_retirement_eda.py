@@ -5,6 +5,22 @@
 # MAGIC **Purpose.** Read-only exploratory profiling of the Adobe Analytics hit-level table
 # MAGIC (`gwam_prod_catalog.inv_typed_common.adobe_hit_data`, provisional) to:
 # MAGIC
+# MAGIC ### ⚠ Read this before running (↺ 2026-08-05)
+# MAGIC **This notebook profiles the URL scope, which is no longer the alerting scope.** On
+# MAGIC 2026-08-04 the Business SME redefined Public Website scope as the **16 link rules at
+# MAGIC qualified-visit grain** (doc-16 **D13**, doc [21](../research/claude/21-gwam-link-rule-scope.md)):
+# MAGIC a visit is in scope if it contains ≥1 rule-matching `evar194` link click. This notebook
+# MAGIC scopes by `rsid` + URL `LIKE` only — it has **no `evar193`/`evar194` handle and no
+# MAGIC `evar105` handle** — so it *cannot* express that predicate.
+# MAGIC
+# MAGIC Probe **C17** measured the difference: the two populations overlap by only **25%**, so a
+# MAGIC run today profiles a population roughly **4× larger** than the one the metrics are defined
+# MAGIC on. Still useful for site-wide exploration and as the deferred-channel evidence base —
+# MAGIC but **do not read its output as a baseline for the alerting metrics.**
+# MAGIC
+# MAGIC Before producing a profile of record: add the link-rule predicate, drop `manugrs`
+# MAGIC (deferred under D11), then run, then complete the ADR-0007 §5 privacy read-through below.
+# MAGIC
 # MAGIC **Scope.** The table holds ALL GWAM Adobe data. CA Retirement is the subset with
 # MAGIC `rsid` IN (`manugrs`, `manulifeglobalprod`) AND a URL matching the `url_scope_mode`
 # MAGIC include list — default `broad`: `%/group-retirement%`, `%/group-plans%`,
@@ -91,6 +107,15 @@ dbutils.widgets.text("top_events_k", "12", "8. Top-K events for daily series")
 dbutils.widgets.text("cache_sample", "false", "9. Persist sample df (true/false)")
 dbutils.widgets.text("rsid_list", "manugrs,manulifeglobalprod", "10. rsid list (comma-sep, empty = off)")
 dbutils.widgets.dropdown("url_scope_mode", "broad", ["broad", "en_only"], "11. URL scope mode (en_only = pipeline parity)")
+# ⚠ "%/group-plans%" IS HERE ON PURPOSE AND MUST NOT BE "FIXED" TO MATCH settings.py.
+# D12 (2026-08-04) removed it from settings.SCOPE_URL_LIKE_BROAD, so this widget is deliberately
+# WIDER than the pipeline -- a sanctioned D5 divergence, recorded in doc 16 D5. The reason is that
+# the umbrella is what an analyst must be able to SEE in order to rule on it (exit criterion: doc 20
+# Q3 / Q21). Narrowing this to pipeline parity would hide the very population the open question is
+# about. ↺ 2026-08-05: probe C15 priced it -- the excluded umbrella carries ~70% of the app-download
+# link clicks (/ca/en/personal/group-plans/resources/mobile), which is what raised Q21.
+# When Q21 is answered: if the umbrella is ruled IN, add it to settings.py; if ruled OUT, drop it
+# here. Either way both sides move in the SAME commit and the divergence closes.
 dbutils.widgets.text("url_scope_list", "%/group-retirement%,%/group-plans%,%/regimes-collectifs%", "12. URL include patterns — ADD URLS HERE (SQL LIKE, comma-sep)")
 dbutils.widgets.text("url_scope_exclude", "%adobeaemcloud.com%,%/ph/%", "13. URL patterns to exclude")
 dbutils.widgets.text("login_host_exclude",
