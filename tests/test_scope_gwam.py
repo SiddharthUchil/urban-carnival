@@ -84,18 +84,41 @@ def _matches(spark, tmp_path, urls, patterns):
 
 def test_scope_mode_toggles_are_held():
     """Both toggles stay on the shipped branch. Changing either is a full mode=backfill with
-    gold truncated (settings.py) -- if you meant it, update this test in the same commit."""
-    assert SCOPE_URL_MODE == "en_only", (
-        "SCOPE_URL_MODE flipped. 'broad' widens to group-plans/regimes-collectifs and needs "
-        "a re-profile plus product sign-off first (doc 19 §2.2, doc 16 D3).")
+    gold truncated (settings.py) -- if you meant it, update this test in the same commit.
+
+    The guard is symmetric on purpose: it pins whatever branch is currently shipped, in both
+    directions. Reverting a flip re-baselines exactly as much as making one did."""
+    assert SCOPE_URL_MODE == "broad", (
+        "SCOPE_URL_MODE moved off 'broad'. Broad was ratified 2026-08-04 so the SME's French "
+        "link rules are ingestable at all (doc 16 D12); reverting to 'en_only' drops every FR "
+        "page and is ALSO a full mode=backfill with gold truncated.")
     assert SCOPE_SUITE_MODE == "current_only", (
         "SCOPE_SUITE_MODE flipped. 'with_legacy' unions the CONCURRENT manugrs suite -- only "
         "~12 eVars are shared, so eVar-derived series are not splice-safe (doc 14).")
 
 
+def test_broad_scope_admits_french_without_the_group_plans_umbrella():
+    """The 2026-08-04 decision was 'French in, group-plans NOT'. Those are separable and were
+    deliberately separated: %/group-plans% is the umbrella containing group-benefits /
+    business / advisor, which nobody has signed off (doc 20 Q3). Re-adding it is a second,
+    independent re-baseline -- not a tidy-up."""
+    assert "%/group-plans%" not in SCOPE_URL_LIKE_BROAD, (
+        "%/group-plans% is back in the broad scope. It admits three lines of business beyond "
+        "retirement and needs product sign-off first (doc 16 D12, doc 20 Q3).")
+    assert "%/regimes-collectifs%" in SCOPE_URL_LIKE_BROAD, "FR retirement root dropped"
+    assert "%/group-retirement%" in SCOPE_URL_LIKE_BROAD, "EN retirement root dropped"
+    # The retired en_only root is a subset of the surviving patterns, so narrowing the umbrella
+    # cost no English traffic. If this ever fails, the flip silently dropped shipped pages.
+    assert any(p.strip("%") in SCOPE_URL_LIKE for p in SCOPE_URL_LIKE_BROAD), (
+        "no broad pattern covers the old en_only root -- the flip dropped shipped EN traffic")
+
+
 def test_scope_identifiers_pinned():
     assert SCOPE_RSID == "manulifeglobalprod"
     assert LEGACY_SCOPE_RSID == "manugrs"
+    # SCOPE_URL_LIKE now pins the INERT en_only branch (live branch is "broad" since
+    # 2026-08-04). Kept pinned: it is the only record of what the shipped population was, and
+    # the branch is still reachable.
     assert SCOPE_URL_LIKE == "%manulife.com/ca/en/personal/group-plans/group-retirement%"
 
 
@@ -165,9 +188,13 @@ def test_en_only_url_scope_selects_the_shipped_population(spark, tmp_path):
 
 
 def test_broad_mode_would_widen_and_still_drop_noise(spark, tmp_path):
-    """Inert today (en_only), but pinned so the branch is known-good before anyone flips it:
-    broad covers EN + FR retirement roots, and the exclude list still removes AEM author
-    hosts and non-CA /ph/ paths."""
+    """↺ This is the LIVE branch as of 2026-08-04 (was inert under en_only). Broad covers the
+    EN + FR retirement roots, and the exclude list still removes AEM author hosts and non-CA
+    /ph/ paths.
+
+    Every fixture below matches via %/group-retirement% or %/regimes-collectifs%, so dropping
+    %/group-plans% from the pattern list left this test's assertions untouched -- which is
+    itself the evidence that narrowing the umbrella cost no retirement traffic."""
     widened = [
         "https://www.manulife.com/ca/en/personal/group-plans/group-retirement.html",
         "https://www.manulifeim.com/group-retirement/ca/fr/apercu",

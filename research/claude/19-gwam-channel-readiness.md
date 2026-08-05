@@ -10,6 +10,32 @@
 > CoverMe precedent [17](17-coverme-eda-readiness.md) / [18](18-coverme-sme-questions.md). The
 > send-ready questionnaire is [20 — GWAM SME Questions](20-gwam-sme-questions.md).
 
+> ### ↺ REVISION 2026-08-04 — the surviving channel's scope was REDEFINED
+>
+> **Read [21 — GWAM Link-Rule Scope](21-gwam-link-rule-scope.md) before acting on anything in this
+> document.** The SME sent 8 named link-click rules × EN/FR as (`evar193`, `evar194`) pairs and
+> ratified them as the **scope** for the Public Website metrics, at qualified-visit grain: a visit is
+> in scope if it contains ≥1 rule-matching link click. Consequences for *this* document:
+>
+> - **§1's table and §2.1's suite mapping still hold** — same channel, same rsid, same three metrics.
+> - **§2.2's scope model is superseded.** It concluded "stay on URL scope" on coverage grounds
+>   (doc-16 D10). That recommendation is overridden **by SME ruling, not by new evidence** — the
+>   analysis was correct, the decision went the other way. URL patterns survive as the *ingest*
+>   filter only (D12; also flipped `en_only` → `broad` so the French rules are matchable, with
+>   `%/group-plans%` deliberately still excluded).
+> - **§2.3's D8 conflict acquires a new edge.** Five of the eight rules point at `id.manulife.ca` /
+>   `portal.manulife.ca`. D8 has been **amended** to distinguish login *page views* (out) from clicks
+>   *toward* login on public pages (in), and **D14** now forbids `post_evar194` from ever entering a
+>   URL coalesce. Still a dissolution, still not an adjudication.
+> - **§2.5.1's premise was wrong and is corrected in place** — the pipeline does **not** strip query
+>   strings; only the EDA notebooks do. The CID rule needs no ADR amendment.
+> - **§3 gains G7** (the scope predicate is not importable — promoted from G6's residual gap).
+> - **§4 gains Q13–Q19**, carried in [20](20-gwam-sme-questions.md) Part 5.
+>
+> ⚠ **Nothing is built.** Probe sections C13–C18 exist and have **not been run**; **C17 is the gate**
+> — it measures whether the qualified-visit population can carry daily detection at all. Every
+> readiness verdict below (§6) is stale until it does.
+
 > ### ↺ REVISION 2026-07-29 (later the same day) — the scope narrowed to ONE channel
 >
 > **The SME (Abhisekh) has ruled: "Currently we are only going with *Public Website* in scope."**
@@ -467,16 +493,37 @@ opposite of what a "narrower scope is cleaner" intuition would suggest.
 Counts only were emitted; no URLs or query-string values leave the probe, and the ADR-0007 privacy
 grep over this section is clean (§7).
 
-**(2) We strip query strings by policy.** This is the harder one. The pipeline projects
-`post_page_url` and the EDA notebooks strip `?`-onward explicitly, on the stated grounds that session
-tokens live in query strings ([15 §](15-consolidated-eda-report.md), and
-[ADR-0007 §](adr/adr-0007-identity-privacy-layer.md)). The SME's rule lives in exactly the substring
-our privacy posture discards. So implementing it means **either** extracting `cid` at ingest and
-keeping only that (not the raw query string), **or** relying on `post_campaign` as the proxy if C11
-vindicates it. ↺ **2026-07-30: C11 did not vindicate it, so the second option is gone.** The
-zero-cost path is closed and the only remaining route is extracting `cid` at ingest — which needs an
-**ADR-0007 amendment**. That decision is tracked in [16](16-e2e-production-blueprint.md)'s backlog and
-is now the *sole* blocker on marketing exclusion.
+**(2) ~~We strip query strings by policy.~~** ↺ **CORRECTED 2026-08-04 — this premise was wrong, and
+correcting it makes the problem smaller, not larger.**
+
+What this section used to say: the pipeline strips query strings by policy, so the SME's `cid=` rule
+lives in exactly the substring our privacy posture discards, and extracting it needs an **ADR-0007
+amendment**. Three parts of that are false of the code:
+
+- **Bronze does not strip.** It projects `post_page_url` and writes it **verbatim** — query string
+  included. There is no `split('?')`, no `regexp_replace`, no truncation anywhere in
+  bronze/silver/gold ([bronze_columns.py](../../databricks/conf/bronze_columns.py) `bronze_select`,
+  [01_bronze_ingest.py](../../databricks/src/01_bronze_ingest.py)).
+- **ADR-0007 does not govern this.** It is the identity/pseudonymization ADR. It says nothing about
+  URL truncation, so there is nothing here to amend.
+- **The stripping is in the EDA notebooks only** — `gwam_canada_retirement_eda.py` S4b/S4c apply a
+  hard-coded `^([^?#]*)`, and S9 has an opt-in `strip_url_query` widget defaulting to `false`. Those
+  are profiling-output decisions, not pipeline policy.
+
+**What is actually true, and it is a real constraint:** `SILVER_COLUMNS` drops `post_page_url`
+entirely, so nothing downstream of bronze ever sees a URL — stripped or not. A production `cid=` rule
+is therefore a `regexp_extract` over a column we already carry, computed **at bronze or silver**.
+That is a design decision about where the parse lives, **not an ADR amendment**.
+
+C11's finding stands unchanged: `post_campaign` is **rejected** as the proxy (agreement 0.762 suite /
+0.537 segment), so parsing the URL is the only route. What changes is the price of that route —
+from "amend a privacy ADR" to "add a derived column at ingest". Doc 16 backlog #16 is **retagged
+accordingly, not resolved**: implementing the exclusion is still out of scope, and the reason it is
+still open is now scheduling rather than governance.
+
+⚠ The false premise had a second cost worth recording: it is what made the 2026-08-04 link-rule
+spec look unimplementable at first reading, since 7 of its 16 rules are distinguishable only by
+query string. They are not — see [21 §6](21-gwam-link-rule-scope.md).
 
 Until one of those lands, the three public-website metrics count **all** traffic, marketing included —
 which is a documented deviation from the SME's "ideally non-marketing" qualifier, not an oversight.
@@ -530,6 +577,7 @@ Numbered **G1–G6**. Deliberately *not* the `E1–E4` series: that namespace be
 | **G4** | **Scope has no channel dimension.** `SCOPE_RSID` is a single string and the predicate is one rsid AND a URL match. | [settings.py:19](../../databricks/conf/settings.py), [01_bronze_ingest.py:62-101](../../databricks/src/01_bronze_ingest.py). | Per-channel scope config (rsid + its own segment predicate), and a `channel` column carried to gold so metrics break down by it. **Blocked on the D8 ruling** — do not build until §4 item 1 lands. | A four-channel product cannot be expressed. Note this is also the change that re-baselines everything (§2.2). |
 | **G5** | **GWAM has no registry pin or drift test.** CoverMe has both. | [test_registry_yaml.py](../../tests/test_registry_yaml.py) covers only the three CoverMe sheets; `detect/registry.py` has no `REGISTRY_VERSION`. | Pin GWAM's binding to the YAML and add a drift guard, mirroring `test_series_governance_matches_yaml`. Seeded 2026-07-28 by `test_gwam_channel_seed_counts`. | GWAM metric definitions can drift from the governed registry silently — the exact failure the CoverMe test was written to prevent. |
 | **G6** ✅ **CLOSED 2026-07-30** | ~~No test covers the scope constants.~~ | Was: nothing asserted `SCOPE_RSID`, `SCOPE_URL_MODE`, `SCOPE_SUITE_MODE`, or `SCOPE_LOGIN_HOST_EXCLUDE`. | **Done** — [test_scope_gwam.py](../../tests/test_scope_gwam.py), 8 tests: the mode toggles and identifiers are pinned with failure messages naming what a flip costs, all six ruled login hosts are asserted excluded under real Spark `LIKE` (incl. FR `portail.manuvie.ca`, which a `%portal%` pattern would miss), `en_only` selection is checked positively and negatively, and the inert `broad` branch is pinned known-good. `PAGE_VIEW_BASIS` is guarded from birth. | **Residual gap, stated plainly:** the GWAM predicate is built inline in `01_bronze_ingest.py`, which cannot be imported (`dbutils` at module level), so unlike CoverMe the test pins the *constants* and re-composes the patterns rather than exercising the production expression object. A change to the notebook's composition logic would still slip through. Closing that means extracting the predicate into an importable helper like `cm_silver_lib.scope_expr` — worth doing, not done here. |
+| **G7** ↺ **RAISED 2026-08-04** | **The GWAM scope predicate is not importable** — promoted from G6's "residual gap" to a gate of its own. | [test_scope_gwam.py:9-22](../../tests/test_scope_gwam.py) already states it; [01_bronze_ingest.py:62-101](../../databricks/src/01_bronze_ingest.py) builds the predicate inline and calls `dbutils` at module level. | Extract into an importable helper mirroring [`cm_silver_lib.scope_expr`](../../databricks/src/cm_silver_lib.py), then have `test_scope_gwam.py` exercise the real expression object instead of re-composing the patterns. | **Two things promoted this.** (1) The predicate is now *live-branch* rather than inert — D12 flipped `SCOPE_URL_MODE` to `broad`, which also swapped the URL column from `post_page_url` to `coalesce(page_url, post_page_url)`; a composition bug there is a silent population change, not a test failure. (2) D14 forbids `post_evar194` from entering any URL coalesce, and the only enforcement today is a comment plus a data-shape test — an importable predicate is what would let a test assert it structurally. |
 
 ---
 
@@ -769,8 +817,17 @@ those three, plus G2/G3/G6, which are all now unblocked and independent of any r
    because `c_run_manifest` counts `RESULTS` before emitting itself (the 11-block run above reported
    `n_sections: 10` the same way; asserting `n_sections == 13` reads as a vanished section when
    nothing is wrong) — plus `skipped == {}`, `complete: true`, and **12/12 payloads matching the
-   manifest bytes+sha1**. Reproduce with:
+   manifest bytes+sha1**. Verified at the time with:
    `python scripts/decode_databricks_export.py gwam_channel_discovery.html --expect-sections 12 --expect-blocks 13`.
+
+   > ⚠ **Those numbers are historical — do not use that command on a new export.** The 2026-08-04
+   > link-rule work added six sections (C13–C18), so a current run produces **19 blocks /
+   > `n_sections: 18`** and the flag is `--expect-sections 18`. It also **edited C11's emitted
+   > note** (removing the false "the pipeline strips query strings" claim), so that section's sha1
+   > changed and the committed `gwam_channel_discovery.html` **no longer matches the source**.
+   > Verifying the old export against the current file will report a mismatch that is not a bug —
+   > re-run and export fresh. See [21 §4](21-gwam-link-rule-scope.md).
+
    What each section said:
    - `evar105_census.brand_variant_sizing` → **Q3b sized.** `wealth-ca` 250,355 rows, `pvt-wealth`
      9,690, against ca-retirement's 1,298,417. `overlap_with_ca_retirement` is **exactly 0** on both,
@@ -816,3 +873,4 @@ those three, plus G2/G3/G6, which are all now unblocked and independent of any r
 | 2026-07-29 (audit) | C3 null-guard bug found — `segment_only` (+1,436) is an undercount for NULL-URL rows; code fixed, figures flagged pending re-run. |
 | **2026-07-29 (later, SME ruling)** | **Scope narrowed to the Public Website channel only.** D8 conflict dissolved (not resolved); `manucustomer.prod` access request moot; segment-scope justification collapsed; G3/G4 moot and **G2 promoted to critical**; Q5 answered (marketing = CID) with two new implementation gaps; **new §1.1** (three SME anomaly signals) and **new §2.5.1** (the CID rule); **new Q3b** (`wealth-ca` / `pvt-wealth`); Q6 escalated to blocking. Registry → **v0.5.0** (5 candidate / 14 deferred + 2 new signal seeds); probe gains C3 variant sizing, **C11** and **C12**. |
 | **2026-07-30 (extended probe + G2)** | **The extended probe ran** (`generated_at` 2026-07-30T08:28:42, 12 sections, `complete: true`, 12/12 payloads verified against the manifest, privacy grep clean) and its results are folded in. **Three findings change the plan:** C11 **rejected** `post_campaign` as the CID proxy (agreement 0.762 suite / **0.537** segment), leaving an ADR-0007 amendment as the only route to marketing exclusion; C12 showed the SME's literal "page views per visit **< 1**" test **never fires** (88-day floor 1.2236, so the signal is inert as specified — `share_pv_eq_0` = 3.25% is the detectable quantity); and C12's `visitor_grain` **settled** the ECID-vs-visid-pair divergence as negligible (≤15 visitors/day, 0.068%). C3 **sized** Q3b — `wealth-ca` and `pvt-wealth` are additive with **zero** overlap. **G2 CLOSED**: `SeriesSpec` gains `numerator`/`denominator` + governance, `kpis.py` gains the ratio arm it was missing, `test_gold_parity` gains ratio + zero-denominator cases. Registry → **v0.6.0** (no entry added, removed, or promoted — evidence replacing expectation). Both signals now blocked on **Q6 alone**. |
+| **2026-08-04 (SME link-rule scope)** | **The surviving channel's scope was REDEFINED** — see [21](21-gwam-link-rule-scope.md). 8 named link-click rules × EN/FR, ratified as the scope at **qualified-visit grain** (doc-16 **D13**), superseding **D10**'s "stay on URL scope" recommendation *by ruling rather than by evidence* and superseding the `evar105` half of **D11** pending **Q19**. Ingest scope flipped `en_only` → `broad` (**D12**) so the French rules are matchable, with `%/group-plans%` **deliberately excluded** — French was the ask, the umbrella is a separate unsigned widening. **D8 amended in place**: it excludes login *page views*, not clicks *toward* login from public pages — five of the eight rules target `id.manulife.ca`/`portal.manulife.ca`, so without that distinction the new scope reads as violating a standing decision. **D14 added**: `post_evar194` must never enter a URL coalesce. **§2.5.1's premise corrected** — the pipeline does **not** strip query strings (only the EDA notebooks do), so the CID rule needs no ADR amendment; backlog #16 retagged, not resolved. **New G7** (scope predicate not importable). Registry → **v0.8.0**: all 5 `public_website` `scope_predicate` strings rewritten, **zero** entries seeded and counts held at 19/{5,4,4,6}. Probe gains **C13–C18** + `tests/test_link_rules.py`. ⚠ **Not run** — **C17 is the gate**, and every readiness verdict in §6 is stale until it reports. |
