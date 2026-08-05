@@ -1,5 +1,25 @@
 # Canada Retirement Analytics — Questions for the Business / SME
 
+> ### ↺ STATUS (2026-08-04) — your link-click scope arrived, and it raises seven new questions
+>
+> Thank you — the 8 rules × English/French are now recorded as the **scope** for the Public Website
+> metrics (a visit counts if it contains at least one of those clicks). We have **not built anything
+> yet**, on purpose: re-scoping rebuilds every existing metric, so we are measuring the new
+> population first and will come back with a number before committing.
+>
+> **The new questions are in Part 5 (Q13–Q19).** Two are worth flagging as more than housekeeping:
+> **Q17** — the French "Find an Advisor" link carries a `cid=` parameter, which by your own earlier
+> rule makes it *marketing*, while the scope table says "ideally non-marketing"; those two rulings
+> point opposite ways on that one rule. And **Q19** — the new spec does not mention the eVar105 brand
+> tag that previously defined this channel's scope, so we need to know whether it still applies on
+> top of the rules or is replaced by them.
+>
+> **Q6 is still open and we are re-asking it as Q14**, because your new table uses the same
+> "Page Views (count)" wording that raised it the first time.
+>
+> Three items are transcription checks rather than decisions — **Q15**, **Q16**, **Q18** — where the
+> spreadsheet contains something that looks like a typo or a site bug. We would rather ask than guess.
+
 > **STATUS (2026-07-29, updated): ↺ answers received from Abhisekh — most of this list is closed.**
 > He has ruled that **only the Public Website is in scope for now**, which withdraws seven of the
 > twelve questions outright, and he answered Q5. What remains is short:
@@ -626,3 +646,144 @@ there is no engineering work left waiting on you.*
 *Nothing else on this list needs you. Q1, Q2 and Q7–Q11 are withdrawn; Q5 is answered; Q4 and Q12 we
 can proceed on with the assumptions stated above — they are written down explicitly so you can override
 them rather than having to answer them.*
+
+---
+
+## Part 5 — ↺ Your link-click scope (new 2026-08-04)
+
+*Your 8 rules × English/French are recorded. These are the questions they raise. Q13, Q17 and Q19 are
+decisions we cannot make for you; Q15, Q16 and Q18 are transcription checks; Q14 is Q6 again.*
+
+---
+
+### Q13. English and French — one alert per rule, or two?
+
+Each of your 8 rules has an English and a French version. We can watch each rule as **one** signal
+(both languages combined) or as **two** (tracked separately).
+
+**The trade-off is not cosmetic.** Splitting doubles the number of things being watched and halves
+the traffic behind each one. Anomaly detection needs enough daily volume to tell a real drop from
+normal day-to-day noise — so for the lower-traffic rules, splitting by language could mean *neither*
+half is reliably detectable, when the combined signal would have been.
+
+**Our suggestion:** let us measure the volumes first, then split only the rules that can carry it. If
+you have a strong preference either way, tell us and we will follow it.
+
+> ⚠ One case is decided for us, not by us: the **Apple and Android app-download** rules have a blank
+> Link Name in *both* languages, so the only thing distinguishing EN from FR is a `?l=fr` / `&hl=fr`
+> in the URL. See **Q18**.
+
+---
+
+### Q14. ↺ Re-asking Q6 — "Page Views": Adobe page views, or every interaction?
+
+Your new table again says **"Page Views (count)"**, which is the exact wording that raised **Q6** on
+2026-07-28. We still need the answer, and it is a genuine either/or.
+
+We currently count **every tracked interaction**, which includes link clicks. Adobe's own "Page Views"
+metric counts only page loads. On your Canada Retirement traffic the two give **2.885** vs **1.343**
+pages per visit — the first is more than double the second.
+
+**Which number do you want on the dashboard?** Both are built and ready; this selects between them.
+
+*(Good news since the last time we asked: because your new scope counts page views **within**
+qualifying visits, both definitions now make sense. Under the alternative reading we were
+considering, "page views of a link click" would have been meaningless. So this is back to being a
+straightforward choice of number.)*
+
+---
+
+### Q15. One URL looks like it lost its last character in the spreadsheet
+
+The **Sign in - Sponsor (English)** URL ends `...handlelogin?ui_locales=en-C`.
+
+Its structural twin, **Sign in - Advisor (English)**, ends `...handlelogin?ui_locales=en-CA` — one
+character longer, and `en-CA` is the value that appears everywhere else in your table.
+
+We think this is a copy/paste truncation in the spreadsheet rather than something real on the site.
+**Please confirm** the intended value is `...ui_locales=en-CA`. We are matching that rule on a
+distinctive fragment of the URL rather than the whole string, so this does not block us either way —
+we would just rather have it right in the record.
+
+---
+
+### Q16. Two French sign-in links point at an *English* destination — bug or intended?
+
+The French **Sign in - Sponsor** and **Sign in - Advisor** URLs are French on the outside
+(`?ui_locales=fr-CA`) but the address they forward to carries `ui_locales=en-CA`:
+
+```
+https://id.manulife.ca/sponsor/?ui_locales=fr-CA&goto=...handlelogin%3Fui_locales%3Den-CA
+                                            ^^^^^                              ^^^^^
+```
+
+Read literally, a French user clicking that link lands on an English page. The other French rules do
+not do this — **Sign up to join** and **Sign in to join** both carry `fr-CA` all the way through.
+
+**Is this intended, or a tagging/site bug?** It matters because if it is a bug, an alert on that rule
+would be quietly monitoring a broken journey — and the more useful thing to do first is fix the link.
+
+---
+
+### Q17. The French "Find an Advisor" link is *marketing* by your own definition
+
+On 2026-07-29 you told us **"marketing" = traffic carrying the CID campaign parameter.** The French
+Find an Advisor URL carries exactly that:
+
+```
+...parler-a-un-conseiller.html?cid=CA-FR_ML_RE_IR_RetirementWebsite_PRLandingPage_PlanRight...
+                               ^^^^
+```
+
+The English version of the same rule has no CID. Meanwhile the scope table says these metrics should
+be **"ideally non-marketing."**
+
+So two of your own rulings point opposite ways on this one rule. **Which wins?**
+
+1. **Keep it** — it is a rule you explicitly asked for, so scope beats the marketing filter; or
+2. **Exclude it** — the marketing rule applies uniformly, and this rule drops out of its own alert.
+
+We have not implemented the marketing exclusion yet, so nothing is broken today. We would rather
+settle it now than have the rule quietly change meaning later.
+
+---
+
+### Q18. The app-download rules have no Link Name — is the URL alone the identifier?
+
+**Apple App Download** and **Android App Download** are the only two rules with a blank Link Name, in
+both languages. Two things follow, and we would like both confirmed:
+
+1. **Is the URL alone the intended identifier** for these two rules? (We will match on the app-store
+   address, which is unambiguous — we just want it on the record that the blank is intentional and
+   not a gap in the spreadsheet.)
+2. **Are the English and French genuinely two separate tracked links?** They differ only by a locale
+   suffix — `?l=fr` for Apple, `&hl=fr` vs `&hl=en` for Android. Those are parameters the *app store*
+   uses to pick a display language, and in some setups they get appended by the browser rather than
+   being two distinct buttons on the page. If it is really one button, we should treat it as one rule
+   and not split it by language (see **Q13**).
+
+---
+
+### Q19. Does the brand tag still apply, or do these rules replace it?
+
+Until now, "Public Website — Canada Retirement" was defined by the **eVar105 brand tag**
+(`ca-retirement` + `GWAM`) — that is the definition you gave us on 2026-07-29 and the one we built
+against. Your new spec defines the scope by the link rules and **does not mention eVar105 at all**.
+
+**Which is it?**
+
+1. **The rules replace the brand tag** — a visit counts if it contains one of these clicks, full stop;
+2. **Both apply** — a visit counts only if it is brand-tagged **and** contains one of these clicks; or
+3. **The brand tag is a safety net** — keep it to exclude anything that wanders in from another line
+   of business.
+
+This is not a technicality: option 2 is *stricter than either rule alone* and would shrink the
+monitored population twice over. We are measuring how much the two definitions overlap and will bring
+you that number — but the decision is yours.
+
+---
+
+*Nothing in Part 5 blocks us this week: we are measuring the new scope first and will come back with
+volumes before building anything. The two we would most like answered are **Q17** and **Q19**, because
+they are the two where your own prior rulings and the new spec genuinely disagree — everything else we
+can proceed on with a stated assumption if you would rather not spend time on it.*

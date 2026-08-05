@@ -44,7 +44,11 @@ from registry import slug
 # ruling. v0.7.0 makes the GWAM page-view basis a config constant (settings.PAGE_VIEW_BASIS)
 # and adds the page_views / visit_pv_bucket sources to gold_lib -- CoverMe declares neither,
 # so its 53 series are untouched and the new gold_lib branches are inert for this registry.
-REGISTRY_VERSION = "0.7.0"
+# v0.8.0 re-scopes the GWAM Public Website channel onto the SME's 16 link rules at
+# qualified-visit grain (doc-16 D13) and flips the GWAM ingest scope to "broad". Both are
+# GWAM-only: no CoverMe series, scope, or count changes, and this pin moves purely because it
+# is the single pin for the whole file.
+REGISTRY_VERSION = "0.8.0"
 
 # --- Gold build parameters (consumed by cm_03_gold_kpis via gold_lib) ---
 DATE_COL = "hit_date"

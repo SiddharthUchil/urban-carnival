@@ -1,6 +1,6 @@
 # GMAI-Pulse Phase-1 Metric Registry
 # ------------------------------------------------------------------
-# version: 0.7.0 (2026-07-30)
+# version: 0.8.0 (2026-08-04)
 # generated_from: new_data/data_profile_summary.json (profiler v0.1.0, run 2026-07-02)
 # seed_source: CoverMe data dictionary rows where Notes == "Anomaly Detection"
 #              -> confirmed counts: 9 (data_feed_columns) + 8 (post_eVar) + 12 (post_event_list) = 29
@@ -20,6 +20,39 @@
 # bytes+sha1. What remains is purely SME: Q3b and Q6. ↺ 2026-07-30 (later): Q3b is ANSWERED,
 # so the promotion gate now rests on Q6 ALONE. The partition itself is unchanged — every GWAM
 # entry stays `candidate` / `deferred` with `owner: TBD`.
+#
+# v0.8.0 (2026-08-04) records a SCOPE CHANGE, which is why it is a minor bump and not a patch:
+# the Public Website scope is no longer an eVar105 brand tag, it is the SME's 16 link rules at
+# qualified-visit grain (doc-16 D13, doc 21). A visit is in scope if it contains >= 1 hit whose
+# evar194 matches one of 8 named rules x {en, fr}. Every `scope_predicate` on the 5
+# public_website entries changed; that string IS the governance record of the change.
+#
+# What did NOT change, deliberately:
+#   - ENTRY COUNTS. Still 19 gwam_channel_metrics, still {public_website: 5, web_member: 4,
+#     mobile: 4, manulifeid: 6}. No per-rule series are seeded yet. Two reasons: doc 20 Q13
+#     decides whether the per-rule family is 8 series or 16 (EN/FR split), so seeding now
+#     guarantees a churn commit; and this registry's convention is that entries carry evidence,
+#     which probe C13-C18 has not yet produced. Holding the counts also keeps the hard pins in
+#     tests/test_registry_yaml.py guarding rather than being edited alongside the change.
+#   - STATUS. All 5 stay `candidate`, owner TBD. The scope moved; nothing was promoted.
+#
+# ⚠ THE COST IS NOT YET KNOWN. Re-scoping means all 42 gold series rebuild on the qualified-visit
+# population. Probe section C17 (qualified_visit_scope) measures how large it is and how much of
+# today's URL-scoped population survives; if median daily qualified visits is small, the scope as
+# specified cannot carry daily detection and that goes back to the SME BEFORE anything is built.
+# Nothing in this version builds anything — it records the decision and the gate.
+#
+# Ingest scope also flipped: settings.SCOPE_URL_MODE en_only -> broad, because the SME specified
+# all 8 rules in French as well as English (doc-16 D12). "%/group-plans%" was deliberately NOT
+# admitted — that umbrella pulls in group-benefits / business / advisor and is a separate,
+# still-unsigned widening (doc 20 Q3).
+#
+# ↺ CORRECTION carried through this version: several notes below claimed "the pipeline STRIPS
+# query strings by policy (ADR-0007)". That is false of the code. Bronze writes post_page_url
+# verbatim; nothing in bronze/silver/gold strips a query string; ADR-0007 governs identity
+# pseudonymization. Only the EDA notebooks strip. The real constraint on a CID rule is that
+# SILVER_COLUMNS drops post_page_url, so the parse must live at bronze or silver — a design
+# decision, not an ADR amendment. Corrected in place below and in doc 19 §2.5.1.
 #
 # v0.7.0 (2026-07-30) makes the Q6 page-view basis a CONFIG CONSTANT instead of a build
 # blocker. Q6 cannot be settled by data — probe C12 already measured both bases (2.885 vs
@@ -96,8 +129,8 @@
 # ------------------------------------------------------------------
 
 meta:
-  version: 0.7.0
-  updated: 2026-07-30
+  version: 0.8.0
+  updated: 2026-08-04
   default_grain: daily          # hourly reserved — enable only after >=30-day feed confirms volume
   domains: [coverme, gwam_retirement]
   sme_confirmations:            # rulings from Kerrian (Business SME), email 2026-07-27; ↺ extended 2026-07-29
@@ -159,6 +192,33 @@ meta:
     mappings. The GWAM manulifeglobalprod suite exposes different IDs (EDA S6
     observed 10000-10099, 500-504, 20 — all unresolved); GWAM needs its own
     dictionary / event-lookup extraction before these definitions transfer.
+  gwam_link_rules:              # link-click scope table from the Business SME, 2026-08-04
+    status: >
+      RATIFIED AS SCOPE, NOT AS A BREAKDOWN. 8 named rules x {en, fr} = 16 (evar193 Link Name,
+      evar194 Link Href) pairs. A visit is in Public Website scope if it contains >= 1
+      rule-matching link click; the site-wide Page Views / Visits / Visitors metrics are
+      counted on that qualified-visit population. Supersedes the eVar105 segment in
+      gwam_sme_inputs below (doc-16 D13) and supersedes D10's "stay on URL scope"
+      recommendation by SME ruling. NOT YET BUILT — gated on probe C17 volume and doc 20 Q13.
+    dimensions:                 # named by the SME; documented in data/EDDL_datalayer.xlsx
+      evar101: Page Name        #   tab "EDDL for CAR_WIP" r18
+      evar193: Link Name        #   tab "EDDL for CAR_WIP" r42
+      evar194: Link HREF URL    #   tab "EDDL for CAR_WIP" r43 ("URL of the lin clicked" [sic])
+    metrics: ["Page Views (count)", "Visits (count)", "Visitors (count)"]
+    rule_ids: [signin_member, signin_sponsor, signin_advisor, signup_join, signin_join,
+               app_apple, app_android, find_advisor]
+    authoritative_copy: >
+      eda/gwam_channel_discovery.py SME_LINK_RULES — the 16 records verbatim, with the match
+      tokens, the transcription notes, and the measured collision facts. Pinned by
+      tests/test_link_rules.py. Narrative and the as-received table: doc 21. The URLs are NOT
+      duplicated here; one authoritative copy, one test guarding it.
+    transcription_caveats:
+      - "FR link names arrived mojibaked (UTF-8 read as Latin-1): créez-en / adhérer. Both forms are carried; probe C14 reports which the data holds."
+      - "signin_sponsor/en arrived at 143 chars ending 'en-C', one short of its structural twin signin_advisor/en (144). Matches no Adobe limit — reads as a copy/paste artefact. doc 20 Q15."
+      - "signin_sponsor/fr and signin_advisor/fr carry an inner ui_locales%3Den-CA inside an outer fr-CA URL. doc 20 Q16."
+      - "find_advisor/fr is 262 chars — already over the 255-byte eVar cap, so exact matching may be impossible for it."
+      - "app_apple and app_android have a BLANK Link Name in both languages, so the href query string is their only EN/FR discriminator. doc 20 Q18."
+
   gwam_sme_inputs:              # four-channel scope table from the Business SME, 2026-07-28
     status: >
       DRAFT INPUT — ↺ SUPERSEDED IN SCOPE 2026-07-29. The table below is retained verbatim as
@@ -173,7 +233,10 @@ meta:
       public_website:           # IN SCOPE (ruled 2026-07-29) — the only alerting channel
         instance: Manulife
         report_suite_label: Manulife Global Prod       # resolves to rsid manulifeglobalprod
-        segment: "Brand (evar105) = 'ca-retirement :  : GWAM'"
+        segment: "Brand (evar105) = 'ca-retirement :  : GWAM'"   # ↺ SUPERSEDED 2026-08-04 by
+                                # gwam_link_rules below — the scope is now the 16 link rules.
+                                # Retained because doc 20 Q19 has not ruled on whether the brand
+                                # tag still applies on top of them.
       web_member:               # DEFERRED 2026-07-29 (single-channel ruling)
         instance: Manulife
         report_suite_label: GRS+                       # RESOLVED (probe C1/C4) -> rsid manugrs; SME to ratify the string (doc 20 Q2)
@@ -605,7 +668,36 @@ post_event_list:     # exactly 12 entries (seed count 12)
 # ------------------------------------------------------------------
 gwam_channel_metrics:   # 19 entries (3 traffic x 4 channels + 3 errors + 2 sign-in + 2 anomaly signals)
 
-  # ---- Public Website — rsid manulifeglobalprod; scope = eVar105 brand tag ----
+  # ---- Public Website — rsid manulifeglobalprod; scope = the 16 SME link rules ----
+  # ↺ 2026-08-04 SCOPE REDEFINED (doc-16 D13, doc 21). The SME sent 8 named link-click rules,
+  # each in English and French, as (evar193 Link Name, evar194 Link Href) pairs, and ratified
+  # them as the SCOPE for these site-wide metrics — not as an extra breakdown. A visit is in
+  # Public Website scope if it contains >= 1 rule-matching link click; Visits/Visitors count
+  # those qualified visits, Page Views count page views WITHIN them.
+  #
+  # This is the doc-16 D10 event (scope moving off URL patterns = one clean re-baseline), and it
+  # SUPERSEDES D10's standing "stay on URL scope" recommendation by SME ruling. It also
+  # supersedes the eVar105 half of D11 — pending doc 20 Q19, because the new spec never mentions
+  # eVar105 and nobody has said whether the brand tag still applies on top of the rules. Probe
+  # C18 sizes the overlap so that is a priced question. The old predicate string and its
+  # justification are kept in the history below: they are what a re-widening would restore.
+  #
+  # ⚠ NOT YET BUILDABLE, and the gate is volume not engineering. conf/bronze_columns.py projects
+  # 17 columns and ZERO eVars, so the predicate is not evaluable anywhere in the lake; and gold
+  # has no source that counts visits/visitors filtered to a dimension value. Both are tractable
+  # (add post_evar101/193/194 to bronze+silver, compute a `visit_qualified` flag in
+  # 02_silver_conform.py, filter in 03_gold_kpis.py — which leaves gold_lib.py and detect/kpis.py
+  # untouched, so the 04_detect parity assertion holds for free). What is NOT tractable by
+  # engineering is whether enough qualified visits exist per day to detect on. Probe C17 answers
+  # that FIRST. Nothing here is built until it does.
+  #
+  # ⚠⚠ post_evar194 MUST NEVER ENTER A URL COALESCE (doc-16 D14). Five of the eight rules point
+  # at id.manulife.ca / portal.manulife.ca, both on SCOPE_LOGIN_HOST_EXCLUDE. That list is
+  # matched against the PAGE url, which is what lets these clicks survive — D8 excludes login
+  # page views, not intent-to-log-in measured on a public marketing page (D8 amended to say so).
+  # Fold the href into any url expression and the pipeline silently deletes exactly the rows the
+  # SME asked us to alert on, while looking like it ran clean. Pinned by tests/test_link_rules.py.
+  #
   # ↺ 2026-07-29: the ONLY channel in the alerting scope (SME ruling). 5 entries.
   # Probe C1: 9.1M rows but only 138 days of history (from 2026-03-10) — thinnest baseline margin
   # of the three located suites. C3: the SME's literal value exists (776,860 hits); a second form
@@ -616,9 +708,13 @@ gwam_channel_metrics:   # 19 entries (3 traffic x 4 channels + 3 errors + 2 sign
   # marketing traffic = hits carrying the CID campaign identifier, the standard query-string
   # parameter appended to marketing URLs. NOT YET IMPLEMENTABLE, two reasons: (a) our marketing
   # candidate is Adobe's post_campaign column (C10: 57.03% populated here), and nothing yet
-  # proves it is equivalent to CID presence — probe C11 tests exactly that; (b) the pipeline
-  # STRIPS query strings by policy (ADR-0007; bronze projects post_page_url only), so parsing
-  # cid= in production needs an ADR amendment. Tracked in doc 16's backlog. Until then these
+  # proves it is equivalent to CID presence — probe C11 tests exactly that; (b) ↺ CORRECTED
+  # 2026-08-04 — this used to read "the pipeline STRIPS query strings by policy (ADR-0007)",
+  # which is false of the code. Bronze writes post_page_url VERBATIM and nothing in
+  # bronze/silver/gold strips a query string; ADR-0007 governs identity pseudonymization, not
+  # URL truncation. Only the EDA notebooks strip. The actual constraint is that SILVER_COLUMNS
+  # drops post_page_url, so a cid= parse has to live at bronze or silver — a design decision,
+  # not an ADR amendment. Doc 16's backlog item is retagged accordingly. Until then these
   # metrics count ALL public-website traffic, marketing included.
   #
   # BRAND PREDICATE — ✅ CONFIRMED 2026-07-30 (doc 20 Q3b, Abhisekh): neither `wealth-ca` nor
@@ -645,11 +741,14 @@ gwam_channel_metrics:   # 19 entries (3 traffic x 4 channels + 3 errors + 2 sign
     domain: gwam_retirement
     channel: public_website
     report_suite_label: Manulife Global Prod
-    scope_predicate: "evar105 parts-match: contains 'ca-retirement' AND contains 'gwam'"   # value VERIFIED (probe C3);
-                                    # parts-match because a second brand form exists (see block note); HELD here —
-                                    # NEVER widen to wealth-ca / pvt-wealth — both were ruled OUT of
-                                    # Canada Retirement by the SME on 2026-07-30 (doc 20 Q3b).
-                                    # Scope-model switch (segment vs URL) still needs sign-off (doc 20 Q3).
+    scope_predicate: "visit-qualified: visit contains >=1 hit whose evar194 matches one of the 16 SME link rules (8 rules x en/fr, doc 21)"
+                                    # ↺ 2026-08-04 REPLACED the evar105 parts-match (doc-16 D13). Page Views are counted
+                                    # WITHIN qualified visits, which is what keeps them coherent under either Q6 basis.
+                                    # Whether the brand tag still ANDs on top is doc 20 Q19; probe C18 sizes the overlap.
+                                    # ↺ was: "evar105 parts-match: contains 'ca-retirement' AND contains 'gwam'" — value
+                                    # VERIFIED (probe C3), parts-match because a second brand form exists (see block note).
+                                    # NEVER widen that predicate to wealth-ca / pvt-wealth if it is ever restored — both
+                                    # were ruled OUT of Canada Retirement by the SME on 2026-07-30 (doc 20 Q3b).
     source_sheet: sme_scope_table
     source_ref: Page Views (count)
     decode_rule: hit-count          # ⚠ we count hits; SME may mean Adobe page views (doc 20 Q6 — now ESCALATED,
@@ -673,14 +772,16 @@ gwam_channel_metrics:   # 19 entries (3 traffic x 4 channels + 3 errors + 2 sign
                                     # segment, so the rule direction holds), but agreement_when_both is only 0.762
                                     # suite-wide and 0.537 on the segment scope we would ship. post_campaign is
                                     # therefore NOT equivalent to CID and must not be substituted for it. The only
-                                    # remaining path is parsing cid= from the URL, which ADR-0007 blocks (bronze
-                                    # projects post_page_url and strips query strings) — needs an ADR amendment.
+                                    # remaining path is parsing cid= from the URL. ↺ CORRECTED 2026-08-04: that is
+                                    # NOT blocked by ADR-0007 and needs no ADR amendment — bronze writes
+                                    # post_page_url verbatim, query strings included. What it needs is for the parse
+                                    # to happen at bronze or silver, because SILVER_COLUMNS drops the URL column.
   - metric_id: gwam_pw_visits
     name: Visits — Public Website
     domain: gwam_retirement
     channel: public_website
     report_suite_label: Manulife Global Prod
-    scope_predicate: "evar105 parts-match: contains 'ca-retirement' AND contains 'gwam'"
+    scope_predicate: "visit-qualified: visit contains >=1 hit whose evar194 matches one of the 16 SME link rules (8 rules x en/fr, doc 21)"   # ↺ 2026-08-04, was the evar105 parts-match; whether the brand tag still ANDs on top is doc 20 Q19 (probe C18 sizes it)
     source_sheet: sme_scope_table
     source_ref: Visits (count)
     decode_rule: visit-distinct
@@ -693,7 +794,7 @@ gwam_channel_metrics:   # 19 entries (3 traffic x 4 channels + 3 errors + 2 sign
     domain: gwam_retirement
     channel: public_website
     report_suite_label: Manulife Global Prod
-    scope_predicate: "evar105 parts-match: contains 'ca-retirement' AND contains 'gwam'"
+    scope_predicate: "visit-qualified: visit contains >=1 hit whose evar194 matches one of the 16 SME link rules (8 rules x en/fr, doc 21)"   # ↺ 2026-08-04, was the evar105 parts-match; whether the brand tag still ANDs on top is doc 20 Q19 (probe C18 sizes it)
     source_sheet: sme_scope_table
     source_ref: Visitors (count)
     decode_rule: visitor-distinct   # ↺ 2026-07-29 the SME names "Unique ECID - unique visitor" an anomaly signal in its
@@ -733,7 +834,7 @@ gwam_channel_metrics:   # 19 entries (3 traffic x 4 channels + 3 errors + 2 sign
     domain: gwam_retirement
     channel: public_website
     report_suite_label: Manulife Global Prod
-    scope_predicate: "evar105 parts-match: contains 'ca-retirement' AND contains 'gwam'"
+    scope_predicate: "visit-qualified: visit contains >=1 hit whose evar194 matches one of the 16 SME link rules (8 rules x en/fr, doc 21)"   # ↺ 2026-08-04, was the evar105 parts-match (doc-16 D13). ⚠ This signal's baselines below were measured on the OLD scope and do not carry over — probe C17 must re-measure them on the qualified-visit population.
     source_sheet: sme_anomaly_signals
     source_ref: "SME 2026-07-29: Page view per visit (if page view < 1 could be anomaly)"
     decode_rule: ratio              # page_views / visits. A daily ratio can only fall below 1 if visits exist with
@@ -767,7 +868,7 @@ gwam_channel_metrics:   # 19 entries (3 traffic x 4 channels + 3 errors + 2 sign
     domain: gwam_retirement
     channel: public_website
     report_suite_label: Manulife Global Prod
-    scope_predicate: "evar105 parts-match: contains 'ca-retirement' AND contains 'gwam'"
+    scope_predicate: "visit-qualified: visit contains >=1 hit whose evar194 matches one of the 16 SME link rules (8 rules x en/fr, doc 21)"   # ↺ 2026-08-04, was the evar105 parts-match (doc-16 D13). ⚠ This signal's baselines below were measured on the OLD scope and do not carry over — probe C17 must re-measure them on the qualified-visit population.
     source_sheet: sme_anomaly_signals
     source_ref: "SME 2026-07-29: if all pages are consistently at 2, sometimes an indicator of duplication"
     decode_rule: point-mass-share   # share of visits with EXACTLY 2 page views. The SME's signal is CONSISTENCY at 2,
