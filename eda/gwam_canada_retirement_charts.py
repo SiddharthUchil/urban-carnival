@@ -38,12 +38,24 @@
 # MAGIC privacy read-through — the EDA notebook's blocks are full-raw, though **this notebook's are
 # MAGIC aggregate-only** (see Privacy above), so charts clear that bar on their own.
 # MAGIC
-# MAGIC ### Scope — both report suites
-# MAGIC `rsid` IN (`manugrs`, `manulifeglobalprod`) AND a URL matching the `url_scope_mode`
-# MAGIC include list — default `broad`: `%/group-retirement%`, `%/group-plans%`,
-# MAGIC `%/regimes-collectifs%`. Those patterns are language- AND domain-agnostic, so one list
-# MAGIC covers both suites (`manulifeim.com`, `manulife.com`) in EN and FR. Same contract as the
-# MAGIC EDA notebook.
+# MAGIC ### Scope — ↺ single suite by default (phase 1)
+# MAGIC `rsid` = `manulifeglobalprod` AND a URL matching the `url_scope_mode` include list —
+# MAGIC default `broad`: `%/group-retirement%`, `%/group-plans%`, `%/regimes-collectifs%`. Those
+# MAGIC patterns are language- AND domain-agnostic, so one list covers EN and FR (and, if the
+# MAGIC legacy suite is added back, `manulifeim.com` as well as `manulife.com`). Same contract as
+# MAGIC the EDA notebook.
+# MAGIC
+# MAGIC ⚠ **`rsid_list` narrowed 2026-08-05** (was `manugrs,manulifeglobalprod`). `manugrs` is
+# MAGIC `deferred` under **D11**, is dead code in the pipeline while
+# MAGIC `settings.SCOPE_SUITE_MODE == "current_only"`, and carries **0.0%** `evar193`/`evar194`
+# MAGIC (probe C13) so it cannot express the D13 link-rule scope. It matters more here than in the
+# MAGIC EDA notebook because **panels aggregate across the rsid list** — two suites meant one
+# MAGIC blended bar, with only `scope.rsid_breakdown` carrying the split. Dual-rsid is still
+# MAGIC supported (**D7**, amended): type both suites back in for deferred-channel work.
+# MAGIC
+# MAGIC ⚠ **`%/group-plans%` is deliberately wider than the pipeline** (`SCOPE_URL_LIKE_BROAD` has
+# MAGIC only two patterns). Analysts need the umbrella visible to rule on **Q21** — probe C15
+# MAGIC measured it as ~70% of the app-download link clicks. Do not "fix" it to match production.
 # MAGIC
 # MAGIC Two exclusions: `url_scope_exclude` (AEM authoring/staging, non-CA `/ph/`) and
 # MAGIC `login_host_exclude` — the six D8 member-auth hosts, dropped in every mode. That is an
@@ -83,12 +95,28 @@ import plotly.io as pio
 
 # ---------------------------------------------------------------- widgets ----
 dbutils.widgets.text("table_fqn", "gwam_prod_catalog.inv_typed_common.adobe_hit_data", "1. Table (catalog.schema.table)")
-# ⚠ `manugrs` is a DEFERRED channel under D11 (2026-07-29: Public Website only). It is kept in the
-# default because this notebook is an exploratory profiler, not the alerting scope -- the deferred
-# channels retain their evidence base so a re-widening is a status flip. Drop it if you want a
-# scope-parity profile.
-dbutils.widgets.text("rsid_list", "manugrs,manulifeglobalprod", "2. rsid list (comma-sep, empty = off)")
-dbutils.widgets.dropdown("url_scope_mode", "broad", ["broad", "en_only"], "3. URL scope mode (en_only = pipeline parity)")
+# ↺ 2026-08-05: default NARROWED to manulifeglobalprod alone (was "manugrs,manulifeglobalprod").
+# Three independent grounds, any one of which is sufficient:
+#   1. D11 (2026-07-29) put only the Public Website channel in scope; manugrs is the Web Member
+#      channel and is `deferred` in the registry.
+#   2. settings.SCOPE_SUITE_MODE == "current_only", which makes the manugrs branch DEAD CODE in
+#      01_bronze_ingest.py. Only ~12 eVars are shared across the two suites, so eVar-derived
+#      series are NOT splice-safe.
+#   3. Probe C13 (2026-08-05) measured evar193/evar194 at 0.0% on manugrs -- it cannot carry the
+#      SME link rules at all.
+# ⚠ THIS NOTEBOOK MADE THE RISK WORSE THAN THE EDA ONE: panels aggregate ACROSS the rsid list
+# (see the header), so a two-suite default silently blended two concurrent suites into one bar /
+# one line -- the cross-suite top_values attribution trap. Only `scope.rsid_breakdown` and
+# `traffic_ts.rows_by_rsid` carried the split. Single-suite removes the blend by construction.
+# Dual-rsid remains fully SUPPORTED (doc 16 D7, amended) -- type both suites back in for
+# deferred-channel evidence work, and read the per-suite panels rather than the aggregate ones.
+dbutils.widgets.text("rsid_list", "manulifeglobalprod", "2. rsid list (comma-sep, empty = off)")
+# ⚠ NEITHER MODE IS EXACT PIPELINE PARITY -- the old label claimed en_only was, and that is wrong
+# twice over. (a) D12 flipped settings.SCOPE_URL_MODE to "broad" on 2026-08-04, so en_only is now
+# the RETIRED branch. (b) Even against the old pipeline it never matched: 01_bronze_ingest.py:69
+# filters `post_page_url` ALONE, while this notebook applies the D4 blank-guarded
+# coalesce(page_url, post_page_url) in every mode -- and post_page_url is 36.41% blank here.
+dbutils.widgets.dropdown("url_scope_mode", "broad", ["broad", "en_only"], "3. URL scope mode (broad = live ingest shape; en_only = retired 2026-08-04 root — neither is exact pipeline parity)")
 # ⚠ "%/group-plans%" IS HERE ON PURPOSE AND MUST NOT BE "FIXED" TO MATCH settings.py.
 # D12 (2026-08-04) removed it from settings.SCOPE_URL_LIKE_BROAD, so this widget is deliberately
 # WIDER than the pipeline -- a sanctioned D5 divergence, recorded in doc 16 D5. The reason is that
@@ -97,7 +125,7 @@ dbutils.widgets.dropdown("url_scope_mode", "broad", ["broad", "en_only"], "3. UR
 # about. ↺ 2026-08-05: probe C15 priced it -- the excluded umbrella carries ~70% of the app-download
 # link clicks (/ca/en/personal/group-plans/resources/mobile), which is what raised Q21.
 # Keep this in lockstep with the identical block in gwam_canada_retirement_eda.py.
-dbutils.widgets.text("url_scope_list", "%/group-retirement%,%/group-plans%,%/regimes-collectifs%", "3b. URL include patterns — ADD URLS HERE (SQL LIKE, comma-sep)")
+dbutils.widgets.text("url_scope_list", "%/group-retirement%,%/group-plans%,%/regimes-collectifs%", "3b. URL include patterns — ⚠ WIDER than the pipeline by design: %/group-plans% is EDA-only (doc 20 Q21) — ADD URLS HERE (SQL LIKE, comma-sep)")
 dbutils.widgets.text("url_scope_exclude", "%adobeaemcloud.com%,%/ph/%", "3c. URL patterns to exclude")
 dbutils.widgets.text("login_host_exclude",
                      "%portal.manulife.ca%,%id.manulife.ca%,%grsmembers.manulife.com%,"
@@ -135,7 +163,13 @@ LOGIN_EXCLUDE  = _csv("login_host_exclude")
 # Same scope contract as the EDA notebook (doc-16 D5). The `url_scope_list` widget is
 # AUTHORITATIVE: the patterns visible there are the patterns that run, so adding a URL
 # means editing that widget and nothing else. `en_only` is the single override, pinning
-# the one pattern the bronze pipeline still ingests for like-for-like comparison.
+# the retired pre-2026-08-04 root.
+#
+# ⚠ CORRECTED 2026-08-05. This used to claim en_only pins "the one pattern the bronze pipeline
+# still ingests for like-for-like comparison." FALSE on both halves -- D12 made broad the live
+# branch, and the pipeline's en_only filters `post_page_url` alone while this notebook always
+# coalesces (D4). No mode of this notebook is byte-parity with production; treat both as EDA
+# scopes. Closest reachable approximation: "broad" with %/group-plans% removed.
 URL_SCOPE_EN_ONLY = ["%manulife.com/ca/en/personal/group-plans/group-retirement%"]
 URL_INCLUDE = URL_SCOPE_EN_ONLY if URL_SCOPE_MODE == "en_only" else _csv("url_scope_list")
 START_DATE  = dbutils.widgets.get("start_date").strip()
