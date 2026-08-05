@@ -44,17 +44,38 @@
 # MAGIC | `C10 marketing_fields` | What could "ideally non-marketing" mean operationally? |
 # MAGIC | `C11 cid_vs_campaign` | The SME's marketing rule is "carries CID". Is `post_campaign` — the column we actually ingest — equivalent to the presence of a `cid=` query parameter? |
 # MAGIC | `C12 visit_shape` | What does the per-visit page-view distribution look like: how many visits have zero page views (the "< 1" signal), and how stable is the mass at exactly 2 (the duplication signal)? Also: ECID vs visid-pair visitor counts. |
+# MAGIC | `C13 link_evar_census` | Do `evar101`/`193`/`194` carry data here, and is the stored href raw? **Is it truncated?** (a 100-char cap merges two rules permanently) |
+# MAGIC | `C14 link_rule_match` | Per rule × language: how many hits match, under five different matching strategies, and how much does each strategy over-claim? Is there enough daily volume to detect on? |
+# MAGIC | `C15 link_page_context` | Which pages host these clicks, and is any scope variant wide enough to see them? Plus the size of the D8 href collision. |
+# MAGIC | `C16 link_language_split` | Can EN/FR be derived at all, and do four independent derivations agree? |
+# MAGIC | `C17 qualified_visit_scope` | **The gate.** How big is the qualified-visit population, how much of today's URL-scoped population survives, and can it carry daily detection? |
+# MAGIC | `C18 evar105_vs_rules` | Does D11's `evar105` brand tag still add anything on top of the rules, or is it redundant? |
+# MAGIC
+# MAGIC **↺ 2026-08-04 — the Public Website scope is now defined by 16 SME link rules.** The SME sent
+# MAGIC 8 named link-click rules × EN/FR, each an (`evar193` Link Name, `evar194` Link Href) pair, and
+# MAGIC ratified them as the **scope** for the site-wide Public Website metrics — not as an extra
+# MAGIC breakdown. That is the doc-16 **D10** event: scope moving off URL patterns is a single clean
+# MAGIC re-baseline. `C13`–`C18` exist to price it before anything is built. Two facts make it sharp:
+# MAGIC the pipeline ingests **zero eVars** today, so the predicate is not evaluable anywhere in the
+# MAGIC lake; and 5 of the 8 rules point at `id.manulife.ca` / `portal.manulife.ca`, both on the D8
+# MAGIC login-host exclusion list — which the pipeline matches against the *page* url, not the href.
 # MAGIC
 # MAGIC **What this probe canNOT settle** — deliberately out of reach of any query, and therefore
 # MAGIC still SME questions: whether the `wealth-ca` / `pvt-wealth` brand variants belong to Canada
 # MAGIC Retirement (C3 only sizes them — Q3b); whether "page views" means hits or Adobe page views,
-# MAGIC which C12 profiles under every available basis but cannot choose between; whether 1/0 in the
-# MAGIC table means in/out of scope; whether the 2026-07-20 login-exclusion rule (D8) is superseded;
-# MAGIC the numerator/denominator of "Sign in % rate completion"; the friendly-name → rsid mapping
-# MAGIC for "GRS+" if no candidate in C1 is recognisable; and whether the "Manulife Financial" Adobe
-# MAGIC instance is the same feed (an Adobe-admin question). The business definition of
-# MAGIC "non-marketing" **was** on this list and is now answered (CID) — what remains is the
-# MAGIC mechanical question C11 asks.
+# MAGIC which C12 and C17 both profile under every available basis but cannot choose between (Q6/Q14);
+# MAGIC whether 1/0 in the table means in/out of scope; whether the 2026-07-20 login-exclusion rule
+# MAGIC (D8) is superseded; the numerator/denominator of "Sign in % rate completion"; the
+# MAGIC friendly-name → rsid mapping for "GRS+" if no candidate in C1 is recognisable; and whether the
+# MAGIC "Manulife Financial" Adobe instance is the same feed (an Adobe-admin question). The business
+# MAGIC definition of "non-marketing" **was** on this list and is now answered (CID) — what remains is
+# MAGIC the mechanical question C11 asks. From the 2026-08-04 spec, also out of reach: whether EN and
+# MAGIC FR should alert as one series or two (Q13); the true value of `signin_sponsor/en`, delivered
+# MAGIC one character short of its structural twin (Q15); whether the FR sponsor/advisor hrefs
+# MAGIC carrying an inner `ui_locales=en-CA` is a site bug (Q16); whether `find_advisor/fr` — which
+# MAGIC carries a `cid=` and is therefore *marketing* by the SME's own Q5 rule — is excluded from its
+# MAGIC own alert (Q17); whether the blank Link Name on the two app-download rules is intended (Q18);
+# MAGIC and whether the `evar105` brand tag survives the new scope (Q19 — C18 only sizes it).
 # MAGIC
 # MAGIC **How to run.** Databricks → Workspace → Import → File → select this `.py` (it imports as a
 # MAGIC notebook — the file is in Databricks "source" format). Attach to any cluster with Unity
@@ -71,12 +92,17 @@
 # MAGIC if it isn't, paste the SKIPPED lines back too. Top-N caps are kept deliberately small because
 # MAGIC Databricks silently truncates large stdout payloads mid-JSON (doc-16 §0.5).
 # MAGIC
-# MAGIC **A clean run of this version prints 13 `BEGIN SHAREABLE` blocks and reports
-# MAGIC `n_sections: 12`.** That is not an off-by-one bug: `run_manifest` counts `RESULTS` *before*
+# MAGIC **A clean run of this version prints 19 `BEGIN SHAREABLE` blocks and reports
+# MAGIC `n_sections: 18`.** That is not an off-by-one bug: `run_manifest` counts `RESULTS` *before*
 # MAGIC emitting itself, so the manifest total is always one less than the block count. The previous
-# MAGIC 11-section version reported `n_sections: 10` the same way. Checking `n_sections == 13` will
-# MAGIC look like a section vanished when nothing did. What to actually assert:
-# MAGIC `13` blocks · `n_sections: 12` · `skipped == {}` · `complete: true`.
+# MAGIC 12-section version reported `n_sections: 12` against 13 blocks the same way. Checking
+# MAGIC `n_sections == 19` will look like a section vanished when nothing did. What to actually
+# MAGIC assert: `19` blocks · `n_sections: 18` · `skipped == {}` · `complete: true`.
+# MAGIC
+# MAGIC ⚠ **The 2026-07-30 export of this notebook no longer matches this source.** `C11`'s emitted
+# MAGIC note was corrected on 2026-08-04 (it claimed the pipeline strips query strings, which is not
+# MAGIC true of the code), so that section's sha1 has changed and six sections were added. Do not
+# MAGIC verify the old `.html` against this file — re-run and export fresh.
 # MAGIC
 # MAGIC `scripts/decode_databricks_export.py` checks all four against an exported `.html`/`.ipynb`,
 # MAGIC re-hashes every block against the manifest, and flags stdout truncation — run it on the export
@@ -139,6 +165,26 @@ PIPELINE_RSID = "manulifeglobalprod"
 URL_SCOPE_BROAD = ["%/group-retirement%", "%/group-plans%", "%/regimes-collectifs%"]
 URL_SCOPE_EXCLUDE = ["%adobeaemcloud.com%", "%/ph/%"]
 
+# C15/C17 size the SME's link rules against every scope variant that is actually on the table,
+# so the ingest decision is priced rather than argued:
+#   EN_ONLY       what the pipeline shipped until 2026-08-04 (settings.SCOPE_URL_LIKE).
+#   BROAD         settings.SCOPE_URL_LIKE_BROAD as it stood -- includes the %/group-plans%
+#                 umbrella, which also pulls in group-benefits / business / advisor.
+#   BROAD_NARROW  what 2026-08-04 actually ratified: French admitted, group-plans NOT. The
+#                 delta between BROAD and BROAD_NARROW *is* the un-signed-off widening, so it
+#                 has to be a measured number and not a paragraph.
+URL_SCOPE_EN_ONLY = ["%manulife.com/ca/en/personal/group-plans/group-retirement%"]
+URL_SCOPE_BROAD_NARROW = ["%/group-retirement%", "%/regimes-collectifs%"]
+
+# settings.SCOPE_LOGIN_HOST_EXCLUDE (doc-16 D8). Mirrored here so C15 can measure the
+# collision the new scope creates: the pipeline matches this against the PAGE url
+# (01_bronze_ingest.py), but 5 of the 8 SME rules have hrefs ON these hosts. If evar194 ever
+# enters a url coalesce, this list deletes exactly the rows the SME asked us to alert on.
+LOGIN_HOST_EXCLUDE = [
+    "%portal.manulife.ca%", "%id.manulife.ca%", "%grsmembers.manulife.com%",
+    "%gsrs1.manulife.com%", "%viproom.manulife.com%", "%portail.manuvie.ca%",
+]
+
 # Candidate delimiters for the eVar105 "Brand | Line of Business | Segment" triple. The docs
 # describe the SHAPE, not the separator; the SME wrote "ca-retirement :  : GWAM". C3 measures
 # which of these actually splits the values, rather than assuming one.
@@ -157,9 +203,174 @@ BRAND_VARIANTS = ["wealth-ca", "pvt-wealth"]
 # Q5 ANSWERED 2026-07-29: "marketing" = hits carrying the CID campaign identifier, the standard
 # query-string parameter appended to marketing URLs. Applied to a LOWERCASED url; group 1 is the
 # value. C11 uses this to test the rule against post_campaign, the column the pipeline actually
-# ingests -- note the pipeline strips query strings by policy (ADR-0007), so a production CID
-# rule needs an ADR amendment regardless of what C11 finds.
+# ingests.
+#
+# ↺ CORRECTED 2026-08-04. This comment used to say "the pipeline strips query strings by policy
+# (ADR-0007), so a production CID rule needs an ADR amendment". That is NOT true of the code.
+# Bronze projects post_page_url and writes it VERBATIM (conf/bronze_columns.py bronze_select);
+# nothing in bronze, silver or gold strips a query string. ADR-0007 governs identity
+# pseudonymization, not URL truncation. What strips is the *EDA notebooks*:
+# gwam_canada_retirement_eda.py S4b/S4c apply a hard-coded ^([^?#]*) and S9 has an opt-in
+# strip_url_query widget (default false). So a production CID rule is a regexp_extract over a
+# column we already carry -- a design decision about where the parse lives, not an ADR amendment.
+# The real constraint is downstream: SILVER_COLUMNS drops post_page_url, so any URL-derived
+# field has to be computed at bronze or silver, never later.
 CID_REGEX = r"[?&]cid=([^&#]*)"
+
+# ---------------------------------------------------------- SME link rules (2026-08-04) ----
+# The Business SME's link-click scope for Canada Retirement, encoded verbatim so the emitted
+# payloads can be read against it directly -- same contract as SME_CHANNELS above. 8 named
+# rules x {en, fr} = 16 records, each an (evar193 link name, evar194 href) pair.
+#
+# ⚠ These rules are the SCOPE, not a breakdown. Ratified 2026-08-04: a visit is in Public
+# Website scope if it contains >= 1 rule-matching link click (doc-16 D13). C17 prices that
+# against today's URL-scoped population; nothing here changes the pipeline.
+#
+# Transcription notes -- what arrived vs what we believe is true:
+#   * The FR link names arrived MOJIBAKED (UTF-8 read as Latin-1): "crÃ©ez-en", "adhÃ©rer".
+#     Both forms are carried. C14 reports which one the data actually holds -- if the SME's
+#     own file was mangled, the tag on the site may be too, and we must not guess.
+#   * signin_sponsor/en arrived at 143 chars ending "...ui_locales=en-C". Its structural twin
+#     signin_advisor/en is 144. One char short of its sibling matches no Adobe limit
+#     (props cap at 100, eVars at 255), so this reads as a copy/paste artifact, not data
+#     truncation -- Q15. href_prefix carries the delivered value; token matching ignores it.
+#   * signin_sponsor/fr and signin_advisor/fr are percent-encoded (%3A%2F%2F) while their EN
+#     twins are not, and both carry an INNER "ui_locales%3Den-CA" inside an outer fr-CA URL
+#     (Q16 -- site bug or intended?).
+#
+# Measured collision facts (verified against these exact strings, not assumed):
+#   * Query-stripping does not blur these rules, it MERGES them. Path-only (^[^?#]*) collapses
+#     {signin_member, signin_join} x {en, fr} into ONE bucket, and collapses en/fr for
+#     signup_join, app_apple and app_android. 16 hrefs collapse to 10 distinct paths -- and
+#     sponsor/advisor survive purely on a trailing slash (EN "/sponsor" vs FR "/sponsor/"),
+#     so even trailing-slash normalization would break them. NEVER route evar194 through the
+#     profiler's ^([^?#]*) helpers (gwam_canada_retirement_eda.py S4b/S4c).
+#   * signin_member/en and signin_join/en are identical for their first 101 characters and
+#     diverge at 102 ("member/" vs "enrolment/"). At a 100-char cap they are the SAME VALUE:
+#     15 distinct of 16. At 128 all 16 separate. C13 measures max(char_length) -- a max of
+#     exactly 100 or 255 means Adobe truncation and rules 1/5 are unrecoverable.
+#   * find_advisor/fr is 262 chars -- ALREADY OVER the 255-byte eVar limit. If evar194 is
+#     255-capped, exact matching can never fire for it. Its token sits at the front, which is
+#     the whole reason the token strategy exists.
+#   * Two hrefs are strict prefixes of others: signin_member/fr of signin_join/fr, and
+#     app_apple/en of app_apple/fr. Naive startswith() over-claims on both -- that is what
+#     m_prefix is for in C14, and why it is reported alongside m_token rather than instead.
+#
+# Matching contract:
+#   token / anti_token  -- matched on the LOWERCASED, percent-DECODED value. Chosen so
+#                          (token AND NOT anti_token AND lang) resolves all 16 uniquely;
+#                          verified, not assumed (see C14's collision matrix).
+#   lang_token / lang_anti_token -- matched on the LOWERCASED **RAW** value. Deliberate: the
+#                          sponsor/advisor FR hrefs carry "ui_locales%3Den-CA" internally, so
+#                          decoding first would turn them into false EN matches.
+SME_LINK_RULES = [
+    {"rule_id": "signin_member", "rule_name": "Sign in - Member", "lang": "en",
+     "link_name": "Sign in", "link_name_mojibake": None,
+     "href": "https://id.manulife.ca/?ui_locales=en-CA&goto=https://portal.manulife.ca/apps/groupretirement/portal/member/handlelogin?ui_locales=en-CA",
+     "token": "member/handlelogin", "anti_token": None,
+     "lang_token": "ui_locales=en-ca", "lang_anti_token": None},
+    {"rule_id": "signin_member", "rule_name": "Sign in - Member", "lang": "fr",
+     "link_name": "Ouvrir une session", "link_name_mojibake": None,
+     "href": "https://id.manulife.ca/?ui_locales=fr-CA",
+     # anti "goto=" is load-bearing: this href is a strict PREFIX of signin_join/fr.
+     "token": "id.manulife.ca/?ui_locales=fr-ca", "anti_token": "goto=",
+     "lang_token": "ui_locales=fr-ca", "lang_anti_token": None},
+
+    {"rule_id": "signin_sponsor", "rule_name": "Sign in - Sponsor", "lang": "en",
+     "link_name": "Sign in", "link_name_mojibake": None,
+     # As delivered: 143 chars, ends "en-C". Q15.
+     "href": "https://id.manulife.ca/sponsor?ui_locales=en-CA&goto=https://portal.manulife.ca/apps/groupretirement/portal/sponsor/handlelogin?ui_locales=en-C",
+     "token": "/sponsor", "anti_token": None,
+     "lang_token": "ui_locales=en-ca", "lang_anti_token": None},
+    {"rule_id": "signin_sponsor", "rule_name": "Sign in - Sponsor", "lang": "fr",
+     "link_name": "Ouvrir une session", "link_name_mojibake": None,
+     "href": "https://id.manulife.ca/sponsor/?ui_locales=fr-CA&goto=https%3A%2F%2Fportal.manulife.ca%2Fapps%2Fgroupretirement%2Fportal%2Fsponsor%2Fhandlelogin%3Fui_locales%3Den-CA",
+     "token": "/sponsor", "anti_token": None,
+     "lang_token": "ui_locales=fr-ca", "lang_anti_token": None},
+
+    {"rule_id": "signin_advisor", "rule_name": "Sign in - Advisor", "lang": "en",
+     "link_name": "Sign in", "link_name_mojibake": None,
+     "href": "https://id.manulife.ca/advisor?ui_locales=en-CA&goto=https://portal.manulife.ca/apps/groupretirement/portal/advisor/handlelogin?ui_locales=en-CA",
+     "token": "/advisor", "anti_token": None,
+     "lang_token": "ui_locales=en-ca", "lang_anti_token": None},
+    {"rule_id": "signin_advisor", "rule_name": "Sign in - Advisor", "lang": "fr",
+     "link_name": "Ouvrir une session", "link_name_mojibake": None,
+     "href": "https://id.manulife.ca/advisor/?ui_locales=fr-CA&goto=https%3A%2F%2Fportal.manulife.ca%2Fapps%2Fgroupretirement%2Fportal%2Fadvisor%2Fhandlelogin%3Fui_locales%3Den-CA",
+     "token": "/advisor", "anti_token": None,
+     "lang_token": "ui_locales=fr-ca", "lang_anti_token": None},
+
+    {"rule_id": "signup_join", "rule_name": "Sign up to join", "lang": "en",
+     "link_name": "set one up to join", "link_name_mojibake": None,
+     "href": "https://id.manulife.ca/register?ui_locales=en-CA&goto=https://portal.manulife.ca/apps/groupretirement/portal/enrolment/handlelogin?ui_locales=en-CA",
+     "token": "/register", "anti_token": None,
+     "lang_token": "ui_locales=en-ca", "lang_anti_token": None},
+    {"rule_id": "signup_join", "rule_name": "Sign up to join", "lang": "fr",
+     "link_name": "créez-en un pour vous inscrire", "link_name_mojibake": "crÃ©ez-en un pour vous inscrire",
+     "href": "https://id.manulife.ca/register?ui_locales=fr-CA&goto=https://portal.manulife.ca/apps/groupretirement/portal/enrolment/handlelogin?ui_locales=fr-CA",
+     "token": "/register", "anti_token": None,
+     "lang_token": "ui_locales=fr-ca", "lang_anti_token": None},
+
+    {"rule_id": "signin_join", "rule_name": "Sign in to join", "lang": "en",
+     "link_name": "Sign in to join", "link_name_mojibake": None,
+     "href": "https://id.manulife.ca/?ui_locales=en-CA&goto=https://portal.manulife.ca/apps/groupretirement/portal/enrolment/handlelogin?ui_locales=en-CA",
+     # anti "/register" is load-bearing: signup_join's href ALSO contains enrolment/handlelogin.
+     "token": "enrolment/handlelogin", "anti_token": "/register",
+     "lang_token": "ui_locales=en-ca", "lang_anti_token": None},
+    {"rule_id": "signin_join", "rule_name": "Sign in to join", "lang": "fr",
+     "link_name": "Ouvrir une session pour adhérer", "link_name_mojibake": "Ouvrir une session pour adhÃ©rer",
+     "href": "https://id.manulife.ca/?ui_locales=fr-CA&goto=https://portal.manulife.ca/apps/groupretirement/portal/enrolment/handlelogin?ui_locales=fr-CA",
+     "token": "enrolment/handlelogin", "anti_token": "/register",
+     "lang_token": "ui_locales=fr-ca", "lang_anti_token": None},
+
+    {"rule_id": "app_apple", "rule_name": "Apple App Download - Link Click", "lang": "en",
+     "link_name": "", "link_name_mojibake": None,      # blank in BOTH languages -- Q18
+     "href": "https://apps.apple.com/ca/app/manulife-mobile/id1214009312",
+     "token": "apps.apple.com/ca/app/manulife-mobile", "anti_token": None,
+     # EN is the ABSENCE of the FR marker -- this href is a strict prefix of the FR one.
+     "lang_token": None, "lang_anti_token": "?l=fr"},
+    {"rule_id": "app_apple", "rule_name": "Apple App Download - Link Click", "lang": "fr",
+     "link_name": "", "link_name_mojibake": None,
+     "href": "https://apps.apple.com/ca/app/manulife-mobile/id1214009312?l=fr",
+     "token": "apps.apple.com/ca/app/manulife-mobile", "anti_token": None,
+     "lang_token": "?l=fr", "lang_anti_token": None},
+
+    {"rule_id": "app_android", "rule_name": "Android App Download - Link Click", "lang": "en",
+     "link_name": "", "link_name_mojibake": None,
+     "href": "https://play.google.com/store/apps/details?id=ca.manulife.MobileGBRS&hl=en",
+     "token": "play.google.com/store/apps/details", "anti_token": None,
+     "lang_token": "hl=en", "lang_anti_token": None},
+    {"rule_id": "app_android", "rule_name": "Android App Download - Link Click", "lang": "fr",
+     "link_name": "", "link_name_mojibake": None,
+     "href": "https://play.google.com/store/apps/details?id=ca.manulife.MobileGBRS&hl=fr",
+     "token": "play.google.com/store/apps/details", "anti_token": None,
+     "lang_token": "hl=fr", "lang_anti_token": None},
+
+    {"rule_id": "find_advisor", "rule_name": "Find an Advisor", "lang": "en",
+     "link_name": "Get started", "link_name_mojibake": None,
+     "href": "https://www.manulife.ca/page/groupsavings-talk-to-an-advisor.html?",
+     "token": "groupsavings-talk-to-an-advisor", "anti_token": None,
+     "lang_token": "manulife.ca/page/groupsavings", "lang_anti_token": None},
+    {"rule_id": "find_advisor", "rule_name": "Find an Advisor", "lang": "fr",
+     "link_name": "Lancez-vous", "link_name_mojibake": None,
+     # 262 chars -- over the 255-byte eVar limit. Exact match may be impossible; token is at
+     # the front so token match survives. Carries cid= => marketing by the SME's own Q5 rule (Q17).
+     "href": "https://www.manuvie.ca/page/solutionsepargne-parler-a-un-conseiller.html?cid=CA-FR_ML_RE_IR_RetirementWebsite_PRLandingPage_PlanRight________&utm_source=RetirementWebsite&utm_medium=IR&utm_campaign=_PRLandingPage&utm_content=_&utm_term=ML_RE_CA-FR_PlanRight_____",
+     "token": "solutionsepargne-parler-a-un-conseiller", "anti_token": None,
+     "lang_token": "manuvie.ca", "lang_anti_token": None},
+]
+
+# Derived once so every section shares one vocabulary. key = "<rule_id>_<lang>".
+def rule_key(r):
+    return f"{r['rule_id']}_{r['lang']}"
+
+
+RULE_KEYS = [rule_key(r) for r in SME_LINK_RULES]
+RULE_IDS = list(dict.fromkeys(r["rule_id"] for r in SME_LINK_RULES))
+
+# Percent sequences that actually occur in the SME's hrefs. NOT a general decoder -- Spark has
+# no unquote() and none exists in this repo. C13 reports pct_encoded_rows so a reader can see
+# how much of the real data this shortcut covers.
+PCT_DECODE = [("%3a", ":"), ("%2f", "/"), ("%3f", "?"), ("%3d", "=")]
 
 RESULTS = {}
 SKIPPED = {}
@@ -329,16 +540,80 @@ EVAR103 = evar(103)
 ERROR_EVARS = {f"evar{n}": evar(n) for n in (181, 182, 183, 184)}
 SIGNIN_EVARS = {f"evar{n}": evar(n) for n in (122, 135)}
 
+# The SME's link-rule dimensions (2026-08-04). evar() prefers post_ over raw; the 2026-07-02
+# column census found post_evar193 / post_evar194 populated but the bare evar193 / evar194 NOT,
+# while evar101 and post_evar101 are BOTH populated -- so which one pick() lands on is itself a
+# finding, and C13 reports the non-blank rate of every candidate rather than trusting this.
+EVAR101, EVAR193, EVAR194 = evar(101), evar(193), evar(194)
+
 print(json.dumps({
     "table": TABLE_FQN, "n_columns": len(base.columns),
     "max_process_date": MAX_DATE, "window": [START_DATE, MAX_DATE], "window_days": WINDOW_DAYS,
     "resolved_columns": {
         "evar105": EVAR105, "evar185": EVAR185, "evar110": EVAR110, "evar103": EVAR103,
+        "evar101": EVAR101, "evar193": EVAR193, "evar194": EVAR194,
         "error_evars": ERROR_EVARS, "signin_evars": SIGNIN_EVARS,
         "page_url": have("page_url"), "post_page_url": have("post_page_url"),
         "mobileappid": have("mobileappid"), "post_event_list": have("post_event_list"),
     },
 }, indent=2, default=str))
+
+
+# ---- link-rule matching -------------------------------------------------------
+# Shared by C14-C17 so every section scopes on exactly the same predicate. Two forms of the
+# href are needed and they are NOT interchangeable:
+#   href_raw  lowercased only. Language derivation MUST use this -- the sponsor/advisor FR
+#             hrefs carry an inner "ui_locales%3Den-CA", so decoding first would read them
+#             as English.
+#   href_dec  lowercased + the four percent sequences that occur in the spec. Token matching
+#             uses this so an encoded "%2Fhandlelogin" still matches "/handlelogin".
+def href_raw():
+    return F.lower(qcol(EVAR194).cast("string")) if EVAR194 else F.lit(None).cast("string")
+
+
+def href_dec():
+    e = href_raw()
+    for enc, dec in PCT_DECODE:
+        e = F.regexp_replace(e, enc, dec)
+    return e
+
+
+def rule_match_expr(r, raw=None, dec=None):
+    """token AND NOT anti_token (decoded) AND lang_token AND NOT lang_anti_token (raw).
+
+    Verified to resolve all 16 (rule x lang) records uniquely against the SME's own strings.
+    C14 re-measures that against real data instead of trusting it -- a value the feed stores
+    differently (truncated, re-encoded, redirected) can still collide."""
+    raw = href_raw() if raw is None else raw
+    dec = href_dec() if dec is None else dec
+    e = dec.contains(r["token"])
+    if r["anti_token"]:
+        e = e & ~dec.contains(r["anti_token"])
+    if r["lang_token"]:
+        e = e & raw.contains(r["lang_token"])
+    if r["lang_anti_token"]:
+        e = e & ~raw.contains(r["lang_anti_token"])
+    return F.coalesce(e, F.lit(False))
+
+
+def any_rule_expr(raw=None, dec=None):
+    """True if the hit matches ANY of the 16 rules -- the qualifying-click predicate that
+    doc-16 D13 defines the Public Website scope with."""
+    raw = href_raw() if raw is None else raw
+    dec = href_dec() if dec is None else dec
+    e = F.lit(False)
+    for r in SME_LINK_RULES:
+        e = e | rule_match_expr(r, raw, dec)
+    return e
+
+
+VISIT_KEY_COLS = ["post_visid_high", "post_visid_low", "visit_num"]
+
+
+def visit_key_expr():
+    """gold's visit grain (gold_lib._key_expr with null_safe_keys=False): a plain concat_ws
+    over the 3-part Adobe key. Kept identical so C17's numbers are comparable to gold's."""
+    return F.concat_ws(":", *[qcol(c).cast("string") for c in VISIT_KEY_COLS])
 
 # COMMAND ----------
 
@@ -805,17 +1080,22 @@ run_section("marketing_fields", c10_marketing_fields)
 # MAGIC ## C11 — Is `post_campaign` the same thing as a `cid=` query parameter?
 # MAGIC
 # MAGIC The SME's marketing rule (2026-07-29) is **"carries CID"** — a query-string parameter. Our
-# MAGIC pipeline ingests Adobe's `post_campaign` column and **strips query strings by policy**
-# MAGIC (ADR-0007), so before anyone writes an exclusion rule we need to know whether the column we
-# MAGIC have stands in for the parameter she named.
+# MAGIC pipeline ingests Adobe's `post_campaign` column, so before anyone writes an exclusion rule we
+# MAGIC need to know whether the column we have stands in for the parameter she named.
+# MAGIC
+# MAGIC ↺ **Corrected 2026-08-04.** This cell used to say the pipeline "strips query strings by policy
+# MAGIC (ADR-0007)". It does not: bronze writes `post_page_url` verbatim and nothing in bronze, silver
+# MAGIC or gold touches a query string. ADR-0007 governs identity pseudonymization. The stripping is
+# MAGIC in the *EDA notebooks* only. The real constraint is that `SILVER_COLUMNS` drops the URL
+# MAGIC column, so a CID parse has to happen at bronze or silver — a design decision, not an ADR
+# MAGIC amendment.
 # MAGIC
 # MAGIC Read the result knowing the two are *not* expected to match row-for-row: Adobe persists a
 # MAGIC campaign value across the visit, while `cid=` appears only on the landing hit. So
 # MAGIC `campaign_only >> cid_only` is normal and healthy. The two figures that matter are
 # MAGIC **`cid_only` ≈ 0** (nothing carries CID that the column misses) and a high
 # MAGIC **`equal_when_both / both`** (when both are present they agree). If either fails, the rule
-# MAGIC cannot be implemented from `post_campaign` and needs the raw query string — which means an
-# MAGIC ADR-0007 amendment, not just a settings change.
+# MAGIC cannot be implemented from `post_campaign` and needs the raw query string parsed upstream.
 # MAGIC
 # MAGIC **Privacy.** This section reads raw URLs transiently and emits **counts only** — never a
 # MAGIC query-string value, never a URL. That matches the repo's posture (the EDA notebooks strip
@@ -869,9 +1149,12 @@ def c11_cid_vs_campaign():
         "ingest. EXPECTED asymmetry: post_campaign persists across a visit while cid= appears only "
         "on landing URLs, so campaign_only >> cid_only is normal. The real checks are cid_only ~ 0 "
         "and a high agreement_when_both. Counts only -- no query-string values or URLs are emitted "
-        "(ADR-0007 posture). Even a clean result does not make the rule shippable: bronze projects "
+        "(ADR-0007 posture). ↺ CORRECTED 2026-08-04: this note used to end 'bronze projects "
         "post_page_url and strips query strings, so parsing cid= in production needs an ADR "
-        "amendment (doc-16 backlog).")
+        "amendment'. Bronze does NOT strip -- it writes post_page_url verbatim, and nothing in "
+        "bronze/silver/gold touches a query string; only the EDA notebooks strip. What actually "
+        "constrains a production CID rule is that SILVER_COLUMNS drops post_page_url, so the parse "
+        "must live at bronze or silver. That is a design decision, not an ADR amendment.")
     emit("cid_vs_campaign", payload)
 
 
@@ -1007,6 +1290,715 @@ def c12_visit_shape():
 
 
 run_section("visit_shape", c12_visit_shape)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## C13 — Link-rule eVar census (evar101 / evar193 / evar194)
+# MAGIC
+# MAGIC The SME's 2026-08-04 scope names three dimensions the pipeline has never ingested — bronze
+# MAGIC projects 17 columns and **zero** eVars. Before any rule can be matched we need to know these
+# MAGIC columns carry data here, and in what shape.
+# MAGIC
+# MAGIC ⚠ **The single most important number in this run is `evar194.len_max`.** Adobe props cap at
+# MAGIC 100 characters and eVars at 255. `signin_member/en` and `signin_join/en` are identical for
+# MAGIC their first **101** characters — so a max of exactly 100 means those two rules are one value
+# MAGIC in the data and no matching strategy can recover them. A max of exactly 255 means
+# MAGIC `find_advisor/fr` (262 chars) is stored truncated and can never match exactly.
+# MAGIC
+# MAGIC **Privacy.** Hrefs the SME gave us are echoed verbatim; every other discovered href has its
+# MAGIC parameter *values* elided (`?a=<v>&b=<v>`), keeping scheme/host/path and parameter keys —
+# MAGIC enough to answer "is it raw / is it encoded / which params", and no session token.
+
+# COMMAND ----------
+
+_KNOWN_HREFS = {r["href"].lower() for r in SME_LINK_RULES}
+
+
+def elide_href(v):
+    """Emit a DISCOVERED url with parameter values removed. A url the SME handed us is echoed
+    verbatim -- we may republish what we were given, not what we found (C11 set this posture)."""
+    if v is None:
+        return None
+    s = str(v)
+    if s.lower() in _KNOWN_HREFS:
+        return s
+    head, sep, qs = s.partition("?")
+    if not sep:
+        return head
+    keys = []
+    for kv in qs.split("&"):
+        k, eq, _ = kv.partition("=")
+        keys.append(k + "=<v>" if eq else k)
+    return head + "?" + "&".join(keys)
+
+
+def c13_link_evar_census():
+    d = WIN.filter(F.col("rsid") == F.lit(PIPELINE_RSID))
+
+    # Every candidate spelling, not just the one evar() picked. The 2026-07-02 census found
+    # post_evar193/194 populated but bare evar193/194 absent, while 101 has both -- so which
+    # column carries the value is itself a finding, and pick() must be evidenced not trusted.
+    cands = [f"{p}{n}" for n in (101, 193, 194) for p in ("post_evar", "evar")]
+    present = [c for c in cands if have(c)]
+    cand_rates = {c: None for c in cands}
+    if present:
+        row = d.agg(*[nonblank_rate(c).alias(c) for c in present]).collect()[0]
+        for c in present:
+            cand_rates[c] = float(row[c]) if row[c] is not None else None
+
+    resolved = {"evar101": EVAR101, "evar193": EVAR193, "evar194": EVAR194}
+    stats, aggs = {}, [F.count(F.lit(1)).alias("rows")]
+    for label, name in resolved.items():
+        if not name:
+            continue
+        nb = F.when(nonblank(name), qcol(name).cast("string"))
+        aggs += [
+            nonblank_rate(name).alias(f"{label}__rate"),
+            F.approx_count_distinct(nb).alias(f"{label}__distinct"),
+            F.min(F.length(nb)).alias(f"{label}__len_min"),
+            F.max(F.length(nb)).alias(f"{label}__len_max"),
+            F.expr(f"percentile_approx(nullif(length({sql_col(name)}), 0), array(0.5,0.95,0.99))")
+             .alias(f"{label}__len_pct"),
+        ]
+
+    # Is the stored href raw, or has something upstream already stripped/encoded it?
+    if EVAR194:
+        raw = href_raw()
+        marks = {
+            "has_query": raw.contains("?"), "has_fragment": raw.contains("#"),
+            "pct_encoded": raw.rlike("%[0-9a-f]{2}"),
+            "pct_3a_colon": raw.contains("%3a"), "pct_2f_slash": raw.contains("%2f"),
+            "has_goto": raw.contains("goto="), "has_ui_locales": raw.contains("ui_locales"),
+            "host_id_manulife": raw.contains("id.manulife.ca"),
+            "host_portal_manulife": raw.contains("portal.manulife.ca"),
+        }
+        aggs += [F.sum(F.when(F.coalesce(e, F.lit(False)), 1).otherwise(0)).alias(f"enc__{k}")
+                 for k, e in marks.items()]
+        aggs.append(F.sum(F.when(nonblank(EVAR194), 1).otherwise(0)).alias("n_href"))
+        if EVAR193:
+            aggs += [
+                F.sum(F.when(nonblank(EVAR194) & ~nonblank(EVAR193), 1).otherwise(0)).alias("href_no_name"),
+                F.sum(F.when(~nonblank(EVAR194) & nonblank(EVAR193), 1).otherwise(0)).alias("name_no_href"),
+            ]
+
+    row = d.agg(*aggs).collect()[0]
+    fields = set(row.asDict().keys())
+    total = int(row["rows"])
+    for label in resolved:
+        if f"{label}__rate" not in fields:
+            stats[label] = None
+            continue
+        pct = row[f"{label}__len_pct"]
+        stats[label] = {
+            "column": resolved[label],
+            "nonblank_rate": float(row[f"{label}__rate"] or 0.0),
+            "apx_distinct": int(row[f"{label}__distinct"] or 0),
+            "len_min": int(row[f"{label}__len_min"]) if row[f"{label}__len_min"] is not None else None,
+            "len_max": int(row[f"{label}__len_max"]) if row[f"{label}__len_max"] is not None else None,
+            "len_p50_p95_p99": [int(x) for x in pct] if pct else None,
+        }
+
+    payload = {
+        "window": [START_DATE, MAX_DATE], "rsid": PIPELINE_RSID, "rows": total,
+        "candidate_nonblank_rates": cand_rates,
+        "resolved_columns": resolved,
+        "stats": stats,
+        "per_rsid": per_rsid_rates(WIN, [("evar101", EVAR101), ("evar193", EVAR193),
+                                         ("evar194", EVAR194)]),
+    }
+
+    if EVAR194:
+        n_href = int(row["n_href"] or 0)
+        payload["encoding"] = {k: int(row[f"enc__{k}"] or 0) for k in
+                               ("has_query", "has_fragment", "pct_encoded", "pct_3a_colon",
+                                "pct_2f_slash", "has_goto", "has_ui_locales",
+                                "host_id_manulife", "host_portal_manulife")}
+        payload["encoding"]["n_href_nonblank"] = n_href
+        if EVAR193:
+            payload["cooccurrence"] = {"href_without_name": int(row["href_no_name"] or 0),
+                                       "name_without_href": int(row["name_no_href"] or 0)}
+        payload["top_hrefs"] = [{"value": elide_href(x["value"]), "count": x["count"]}
+                                for x in top_values(d, EVAR194)]
+        payload["top_hrefs_id_manulife"] = [
+            {"value": elide_href(x["value"]), "count": x["count"]}
+            for x in top_values(d, EVAR194, extra_filter=href_raw().contains("id.manulife.ca"))]
+
+    payload["top_link_names"] = top_values(d, EVAR193)
+    payload["top_page_names"] = top_values(d, EVAR101)
+
+    payload["truncation_verdict"] = (
+        "READ evar194.len_max FIRST. == 100 -> the feed caps at prop length: signin_member/en and "
+        "signin_join/en share their first 101 chars and are THE SAME VALUE, unrecoverable. == 255 "
+        "-> eVar cap: find_advisor/fr (262 chars) is stored truncated, exact match impossible but "
+        "its token is at the front so token match survives. Anything else -> no cap hit in this "
+        "window, and both rules stay separable.")
+    payload["note"] = (
+        "evar101/193/194 are documented for Canada Retirement in data/EDDL_datalayer.xlsx (tab "
+        "'EDDL for CAR_WIP': eVar101 Page Name, eVar193 Link Name, eVar194 Link Href) and already "
+        "labelled in gwam_canada_retirement_eda.py EVAR_LABELS -- but NOTHING reads them: "
+        "conf/bronze_columns.py projects 17 columns and no eVar. Adding them is a bronze schema "
+        "change plus a backfill, gated on this section.")
+    emit("link_evar_census", payload)
+
+
+run_section("link_evar_census", c13_link_evar_census)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## C14 — Link-rule match: five strategies, side by side
+# MAGIC
+# MAGIC Per rule × language, how many hits match under each of five matching strategies. The
+# MAGIC deliverable is the **comparison**, not one number: `m_path` is expected to over-claim (it
+# MAGIC collapses `signin_member`+`signin_join` into one bucket and merges en/fr for three more
+# MAGIC rules), and `m_prefix` is expected to over-claim on the two rules whose href is a strict
+# MAGIC prefix of another. Seeing them disagree is the measurement.
+# MAGIC
+# MAGIC `m_token` is the working definition — token AND NOT anti-token on the percent-decoded value,
+# MAGIC plus the language marker on the **raw** value. Verified to resolve all 16 uniquely against
+# MAGIC the SME's own strings; the collision matrix here re-tests that against what the feed
+# MAGIC actually stores, which can differ (truncated, re-encoded, redirected).
+
+# COMMAND ----------
+
+def _series_stats(vals):
+    nz = [v for v in vals if v > 0]
+    s = sorted(vals)
+    return {
+        "total": int(sum(vals)), "days": len(vals), "days_nonzero": len(nz),
+        "days_zero": len(vals) - len(nz),
+        "min": int(s[0]) if s else None,
+        "p50": int(s[len(s) // 2]) if s else None,
+        "max": int(s[-1]) if s else None,
+    }
+
+
+def c14_link_rule_match():
+    if not EVAR194:
+        emit("link_rule_match", {"skipped": "no evar194/post_evar194 column in this feed -- "
+                                            "the SME's rules are unmatchable here"})
+        return
+
+    d = WIN.filter(F.col("rsid") == F.lit(PIPELINE_RSID))
+    raw, dec = href_raw(), href_dec()
+    path = F.regexp_extract(raw, r"^([^?#]*)", 1)
+    name_c = F.lower(F.trim(qcol(EVAR193).cast("string"))) if EVAR193 else None
+
+    strat, tok_exprs = {}, {}
+    for r in SME_LINK_RULES:
+        k, h = rule_key(r), r["href"].lower()
+        m_tok = rule_match_expr(r, raw, dec)
+        tok_exprs[k] = m_tok
+        if name_c is None:
+            m_name = F.lit(None).cast("boolean")
+        elif r["link_name"] == "":
+            m_name = name_c.isNull() | (name_c == F.lit(""))
+        else:
+            wanted = [r["link_name"].lower()]
+            if r["link_name_mojibake"]:
+                wanted.append(r["link_name_mojibake"].lower())
+            m_name = name_c.isin(wanted)
+        strat[k] = {
+            "exact": raw == F.lit(h),
+            "prefix": raw.startswith(h),
+            "path": path == F.lit(h.split("?")[0].split("#")[0]),
+            "token": m_tok,
+            "token_name": m_tok & F.coalesce(m_name, F.lit(False)),
+        }
+
+    aggs = [F.count(F.lit(1)).alias("rows")]
+    for k, ss in strat.items():
+        for lbl, e in ss.items():
+            aggs.append(F.sum(F.when(F.coalesce(e, F.lit(False)), 1).otherwise(0)).alias(f"{k}__{lbl}"))
+    # Name-encoding verdict: does the feed hold the true accents or the Latin-1 mangling?
+    if name_c is not None:
+        for r in SME_LINK_RULES:
+            if not r["link_name_mojibake"]:
+                continue
+            k = rule_key(r)
+            aggs += [
+                F.sum(F.when(name_c == F.lit(r["link_name"].lower()), 1).otherwise(0)).alias(f"moj__{k}__true"),
+                F.sum(F.when(name_c == F.lit(r["link_name_mojibake"].lower()), 1).otherwise(0)).alias(f"moj__{k}__mojibake"),
+            ]
+    row = d.agg(*aggs).collect()[0]
+
+    by_rule = {}
+    for k, ss in strat.items():
+        by_rule[k] = {lbl: int(row[f"{k}__{lbl}"] or 0) for lbl in ss}
+
+    # Collision matrix -- how many rules does a single hit satisfy? >1 under `path` is the
+    # direct measurement of the query-stripping merge.
+    collisions = {}
+    for lbl in ("path", "token"):
+        n = F.lit(0)
+        for k in strat:
+            n = n + F.when(F.coalesce(strat[k][lbl], F.lit(False)), 1).otherwise(0)
+        rows = (d.filter(nonblank(EVAR194)).groupBy(n.alias("n")).count()
+                 .orderBy("n").collect())
+        collisions[lbl] = {str(int(r["n"])): int(r["count"]) for r in rows}
+
+    # Daily series, parallel-array encoded. One `dates` list + one int array per rule is ~7 KB;
+    # per-day {date, hits} objects for 16 rules would be ~86 KB, which crosses the 48 000-byte
+    # emit split and risks the Databricks stdout truncation of doc-16 §0.5.
+    daily = (d.groupBy("process_date")
+              .agg(*[F.sum(F.when(tok_exprs[k], 1).otherwise(0)).alias(k) for k in RULE_KEYS])
+              .orderBy("process_date").collect())
+    dates = [str(r["process_date"])[:10] for r in daily]
+    series = {k: [int(r[k] or 0) for r in daily] for k in RULE_KEYS}
+
+    unmatched = top_values(d, EVAR194, extra_filter=~any_rule_expr(raw, dec))
+
+    payload = {
+        "window": [START_DATE, MAX_DATE], "rsid": PIPELINE_RSID, "rows": int(row["rows"]),
+        "strategies": ["exact", "prefix", "path", "token", "token_name"],
+        "by_rule": by_rule,
+        "collision_hist": collisions,
+        "dates": dates,
+        "daily_token_hits": series,
+        "volume": {k: _series_stats(series[k]) for k in RULE_KEYS},
+        "unmatched_href_top": [{"value": elide_href(x["value"]), "count": x["count"]} for x in unmatched],
+    }
+    if name_c is not None:
+        payload["name_encoding"] = {
+            rule_key(r): {"true_accents": int(row[f"moj__{rule_key(r)}__true"] or 0),
+                          "mojibake": int(row[f"moj__{rule_key(r)}__mojibake"] or 0)}
+            for r in SME_LINK_RULES if r["link_name_mojibake"]}
+    payload["note"] = (
+        "Expected disagreements, stated up front so a clean-looking table is not misread: "
+        "`path` MERGES {signin_member, signin_join} x {en,fr} into one bucket and merges en/fr "
+        "for signup_join / app_apple / app_android -- its collision_hist should show n=2 and n=4 "
+        "mass. `prefix` over-claims on signin_member/fr (a strict prefix of signin_join/fr) and "
+        "app_apple/en (a strict prefix of app_apple/fr). `token` should show ONLY n=1. If it "
+        "does not, the feed stores something the spec did not anticipate -- read "
+        "unmatched_href_top and link_evar_census.stats.evar194 before trusting any count. "
+        "`volume` is the feasibility answer: a rule whose p50 daily hits is single-digit cannot "
+        "support daily anomaly detection no matter how cleanly it matches.")
+    emit("link_rule_match", payload)
+
+
+run_section("link_rule_match", c14_link_rule_match)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## C15 — Where the link clicks fire, and the D8 collision
+# MAGIC
+# MAGIC A link click happens **on a page**. The rules say nothing about which page, and the pipeline
+# MAGIC filters on the page url — so if these clicks fire on pages outside the ingest scope, the
+# MAGIC scope never sees them. This sizes each rule against `en_only`, the old three-pattern `broad`,
+# MAGIC and the two-pattern `broad_narrow` that 2026-08-04 actually ratified.
+# MAGIC
+# MAGIC ⚠ **The D8 collision.** 5 of 8 rules target `id.manulife.ca` / `portal.manulife.ca`, both on
+# MAGIC `SCOPE_LOGIN_HOST_EXCLUDE`. The pipeline matches that list against the PAGE url, so the
+# MAGIC clicks survive — `excl_by_page_url` should be ≈0 while `excl_by_href` should be ≈100% for
+# MAGIC those rules. That gap is the cost of ever folding `post_evar194` into a url expression.
+
+# COMMAND ----------
+
+def _page_url_expr():
+    parts = [F.when(nonblank(c), qcol(c).cast("string")) for c in ("page_url", "post_page_url") if have(c)]
+    return F.lower(F.coalesce(*parts)) if parts else F.lit(None).cast("string")
+
+
+def c15_link_page_context():
+    if not EVAR194:
+        emit("link_page_context", {"skipped": "no evar194 column -- no rule to place on a page"})
+        return
+
+    d = WIN.filter(F.col("rsid") == F.lit(PIPELINE_RSID))
+    raw, dec = href_raw(), href_dec()
+    pu = _page_url_expr()
+
+    in_en = like_any(pu, URL_SCOPE_EN_ONLY)
+    excl = like_any(pu, URL_SCOPE_EXCLUDE)
+    in_broad = like_any(pu, URL_SCOPE_BROAD) & ~excl
+    in_narrow = like_any(pu, URL_SCOPE_BROAD_NARROW) & ~excl
+    login_page = like_any(pu, LOGIN_HOST_EXCLUDE)
+    login_href = like_any(raw, LOGIN_HOST_EXCLUDE)
+
+    aggs = []
+    for r in SME_LINK_RULES:
+        k = rule_key(r)
+        m = rule_match_expr(r, raw, dec)
+
+        def s(cond, alias):
+            aggs.append(F.sum(F.when(m & F.coalesce(cond, F.lit(False)), 1).otherwise(0)).alias(alias))
+
+        aggs.append(F.sum(F.when(m, 1).otherwise(0)).alias(f"{k}__matched"))
+        s(in_en, f"{k}__en_only")
+        s(in_broad, f"{k}__broad")
+        s(in_narrow, f"{k}__broad_narrow")
+        s(in_broad & ~in_narrow, f"{k}__group_plans_only")
+        s(~in_en & ~in_broad, f"{k}__neither")
+        s(login_page, f"{k}__excl_by_page_url")
+        s(login_href, f"{k}__excl_by_href")
+        aggs.append(F.sum(F.when(m & ~F.coalesce(pu.isNotNull(), F.lit(False)), 1).otherwise(0))
+                     .alias(f"{k}__page_url_blank"))
+    row = d.agg(*aggs).collect()[0]
+
+    by_rule = {}
+    for r in SME_LINK_RULES:
+        k = rule_key(r)
+        by_rule[k] = {lbl: int(row[f"{k}__{lbl}"] or 0) for lbl in
+                      ("matched", "en_only", "broad", "broad_narrow", "group_plans_only",
+                       "neither", "excl_by_page_url", "excl_by_href", "page_url_blank")}
+
+    # Where do they fire? Host + query-stripped path is safe to echo: no token lives there.
+    matched = d.filter(any_rule_expr(raw, dec))
+    hp = F.regexp_extract(F.regexp_replace(pu, r"^[a-z]+://", ""), r"^([^?#]*)", 1)
+    hosts = (matched.groupBy(F.regexp_extract(hp, r"^([^/]+)", 1).alias("host"))
+                    .count().orderBy(F.desc("count")).limit(TOP_N).collect())
+    paths = (matched.groupBy(hp.alias("host_path")).count()
+                    .orderBy(F.desc("count")).limit(TOP_N).collect())
+
+    payload = {
+        "window": [START_DATE, MAX_DATE], "rsid": PIPELINE_RSID,
+        "scope_variants": {"en_only": URL_SCOPE_EN_ONLY, "broad": URL_SCOPE_BROAD,
+                           "broad_narrow": URL_SCOPE_BROAD_NARROW, "exclude": URL_SCOPE_EXCLUDE},
+        "by_rule": by_rule,
+        "top_hosts": [{"host": r["host"], "count": int(r["count"])} for r in hosts],
+        "top_host_paths": [{"host_path": r["host_path"], "count": int(r["count"])} for r in paths],
+        "top_page_names_on_matched": top_values(matched, EVAR101),
+    }
+    payload["note"] = (
+        "Read three columns. (1) `neither` -- rule hits firing on pages no scope variant covers; "
+        "any real volume there means the ingest widening does not reach them and another scope "
+        "question is open (settings.py already records epargnemanuvie.ca as uncovered). "
+        "(2) `group_plans_only` -- traffic the dropped %/group-plans% pattern WOULD have admitted; "
+        "this is the price of the 2026-08-04 decision to admit French without the umbrella. "
+        "(3) `excl_by_page_url` vs `excl_by_href` -- the D8 collision. The first is what the "
+        "pipeline does today (match the PAGE url) and should be ~0; the second is what would "
+        "happen if evar194 joined the url coalesce, and should be ~100% for the five id/portal "
+        "rules. The difference is the size of that mistake. doc-16 D14 forbids it; this measures it.")
+    emit("link_page_context", payload)
+
+
+run_section("link_page_context", c15_link_page_context)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## C16 — Language derivation: four independent readings
+# MAGIC
+# MAGIC The rules are specified per language but the feed has no EN/FR field for GWAM (`language` is
+# MAGIC a raw Adobe numeric lookup id and the decode tables are not in this repo). Four independent
+# MAGIC derivations are computed and cross-tabulated; the agreement matrix is the finding.
+# MAGIC
+# MAGIC ⚠ `regexp_extract` returns the **first** match, and language is read off the **raw** href.
+# MAGIC Both are deliberate: the sponsor/advisor FR hrefs carry an inner `ui_locales%3Den-CA`, so
+# MAGIC decoding first — or taking the last match — would read them as English.
+
+# COMMAND ----------
+
+def c16_link_language_split():
+    if not EVAR194:
+        emit("link_language_split", {"skipped": "no evar194 column -- no href to read language from"})
+        return
+
+    d = WIN.filter(F.col("rsid") == F.lit(PIPELINE_RSID))
+    raw, dec = href_raw(), href_dec()
+    pu = _page_url_expr()
+    matched = d.filter(any_rule_expr(raw, dec))
+
+    lang_param = F.regexp_extract(raw, r"[?&](?:ui_locales|hl|l)=([a-z]{2})", 1)
+    l_param = F.when(lang_param == "fr", "fr").when(lang_param == "en", "en").otherwise("unknown")
+    l_host = (F.when(raw.rlike(r"manuvie\.ca|epargnemanuvie"), "fr")
+               .when(raw.rlike(r"manulife\.ca|manulife\.com"), "en").otherwise("unknown"))
+    fr_names = [r["link_name"].lower() for r in SME_LINK_RULES if r["lang"] == "fr" and r["link_name"]]
+    fr_names += [r["link_name_mojibake"].lower() for r in SME_LINK_RULES if r["link_name_mojibake"]]
+    en_names = [r["link_name"].lower() for r in SME_LINK_RULES if r["lang"] == "en" and r["link_name"]]
+    if EVAR193:
+        nm = F.lower(F.trim(qcol(EVAR193).cast("string")))
+        l_name = F.when(nm.isin(fr_names), "fr").when(nm.isin(en_names), "en").otherwise("unknown")
+    else:
+        l_name = F.lit("unknown")
+    l_page = (F.when(pu.rlike(r"/fr/|/ca/fr|regimes-collectifs|manuvie"), "fr")
+               .when(pu.rlike(r"/en/|/ca/en"), "en").otherwise("unknown"))
+
+    derivations = {"href_param": l_param, "href_host": l_host,
+                   "link_name": l_name, "page_url": l_page}
+
+    counts = {}
+    for lbl, e in derivations.items():
+        rows = matched.groupBy(e.alias("v")).count().orderBy(F.desc("count")).collect()
+        counts[lbl] = {str(r["v"]): int(r["count"]) for r in rows}
+
+    keys = list(derivations)
+    agree = {}
+    aggs = []
+    for i in range(len(keys)):
+        for j in range(i + 1, len(keys)):
+            a, b = derivations[keys[i]], derivations[keys[j]]
+            both = (a != "unknown") & (b != "unknown")
+            aggs += [F.sum(F.when(both, 1).otherwise(0)).alias(f"{keys[i]}|{keys[j]}__n"),
+                     F.sum(F.when(both & (a == b), 1).otherwise(0)).alias(f"{keys[i]}|{keys[j]}__same")]
+    if aggs:
+        row = matched.agg(*aggs).collect()[0]
+        for i in range(len(keys)):
+            for j in range(i + 1, len(keys)):
+                p = f"{keys[i]}|{keys[j]}"
+                n, same = int(row[f"{p}__n"] or 0), int(row[f"{p}__same"] or 0)
+                agree[p] = {"comparable": n, "agree": same,
+                            "agreement_rate": (same / n) if n else None}
+
+    per_rule = {}
+    aggs = []
+    for r in SME_LINK_RULES:
+        k = rule_key(r)
+        m = rule_match_expr(r, raw, dec)
+        for lbl, e in derivations.items():
+            for v in ("en", "fr", "unknown"):
+                aggs.append(F.sum(F.when(m & (e == v), 1).otherwise(0)).alias(f"{k}__{lbl}__{v}"))
+    row = matched.agg(*aggs).collect()[0]
+    for r in SME_LINK_RULES:
+        k = rule_key(r)
+        per_rule[k] = {lbl: {v: int(row[f"{k}__{lbl}__{v}"] or 0) for v in ("en", "fr", "unknown")}
+                       for lbl in derivations}
+
+    # If a real language dimension exists we should stop deriving. Cheap to check.
+    lang_like = sorted(c for c in AVAILABLE if "locale" in c or c == "language"
+                       or c.endswith("_language") or c == "geo_country")[:12]
+    native = {}
+    if lang_like:
+        rr = d.agg(*[nonblank_rate(c).alias(c) for c in lang_like]).collect()[0]
+        native = {c: (float(rr[c]) if rr[c] is not None else None) for c in lang_like}
+
+    emit("link_language_split", {
+        "window": [START_DATE, MAX_DATE], "rsid": PIPELINE_RSID,
+        "derivations": list(derivations),
+        "counts": counts, "pairwise_agreement": agree, "per_rule": per_rule,
+        "native_language_candidates": native,
+        "note": (
+            "Four derivations are emitted separately and never reconciled here on purpose -- a "
+            "single 'language' column would hide the disagreement, and the disagreement is the "
+            "finding. href_param is the most trustworthy for the sign-in family and reads the "
+            "RAW value first-match, which is what keeps signin_sponsor/fr and signin_advisor/fr "
+            "(inner ui_locales%3Den-CA inside an outer fr-CA url -- Q16) on the French side. "
+            "link_name cannot split app_apple / app_android at all: the SME's own table has the "
+            "Link Name blank in BOTH languages (Q18). If native_language_candidates shows a real "
+            "populated locale column, prefer it and retire all four."),
+    })
+
+
+run_section("link_language_split", c16_link_language_split)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## C17 — Qualified-visit scope: what the re-baseline actually costs
+# MAGIC
+# MAGIC **The gate section.** Under the 2026-08-04 ruling (doc-16 D13) a visit is in Public Website
+# MAGIC scope if it contains ≥1 rule-matching link click. Every one of gold's 42 series would be
+# MAGIC rebuilt on that population, so its size and stability decide whether the scope as specified
+# MAGIC can support daily anomaly detection at all.
+# MAGIC
+# MAGIC Emits the qualified population, today's URL-scoped population, and the **overlap** between
+# MAGIC them — the direct measure of how far the existing series move. Page views are reported under
+# MAGIC **both** `PAGE_VIEW_BASIS` branches so doc-20 Q6/Q14 can be answered from one run.
+
+# COMMAND ----------
+
+def c17_qualified_visit_scope():
+    if not EVAR194:
+        emit("qualified_visit_scope", {"skipped": "no evar194 column -- the qualifying predicate "
+                                                  "is not expressible on this feed"})
+        return
+    missing = [c for c in VISIT_KEY_COLS if not have(c)]
+    if missing:
+        emit("qualified_visit_scope", {"skipped": f"visit key columns absent: {missing}"})
+        return
+
+    d = WIN.filter(F.col("rsid") == F.lit(PIPELINE_RSID)).withColumn("_vk", visit_key_expr())
+    raw, dec = href_raw(), href_dec()
+    pu = _page_url_expr()
+    qualifying = any_rule_expr(raw, dec)
+
+    # Qualify the VISIT, then keep all of its hits -- that is what "a visit is in scope if it
+    # contains a qualifying click" means, and it is why page views stay coherent under adobe_pv.
+    qkeys = d.filter(qualifying).select("_vk").distinct()
+    qual = d.join(qkeys, "_vk", "left_semi")
+
+    ecid = pick("mcvisid", "post_mcvisid")
+    pv_adobe = (F.expr("try_cast(post_page_event as int) = 0") if have("post_page_event")
+                else F.lit(None).cast("boolean"))
+
+    def daily(frame):
+        aggs = [F.count(F.lit(1)).alias("hits"),
+                F.countDistinct("_vk").alias("visits"),
+                F.sum(F.when(F.coalesce(pv_adobe, F.lit(False)), 1).otherwise(0)).alias("pv_adobe")]
+        if ecid:
+            aggs.append(F.countDistinct(qcol(ecid)).alias("visitors_ecid"))
+        aggs.append(F.countDistinct(F.concat_ws(":", qcol("post_visid_high").cast("string"),
+                                                qcol("post_visid_low").cast("string")))
+                     .alias("visitors_pair"))
+        rows = frame.groupBy("process_date").agg(*aggs).orderBy("process_date").collect()
+        return rows
+
+    q_rows = daily(qual)
+    dates = [str(r["process_date"])[:10] for r in q_rows]
+
+    def pack(rows):
+        idx = {str(r["process_date"])[:10]: r for r in rows}
+        out = {}
+        for fld in ("hits", "visits", "pv_adobe", "visitors_ecid", "visitors_pair"):
+            if rows and fld in rows[0].asDict():
+                out[fld] = [int(idx[dt][fld] or 0) if dt in idx else 0 for dt in dates]
+        # page views under all_hits IS the hit count, by construction (gold_lib._pv_int)
+        out["pv_all_hits"] = out.get("hits", [])
+        return out
+
+    populations = {"qualified": pack(q_rows)}
+    excl = like_any(pu, URL_SCOPE_EXCLUDE)
+    for lbl, pats in (("en_only", URL_SCOPE_EN_ONLY), ("broad", URL_SCOPE_BROAD),
+                      ("broad_narrow", URL_SCOPE_BROAD_NARROW)):
+        cond = like_any(pu, pats) & (~excl if lbl != "en_only" else F.lit(True))
+        populations[lbl] = pack(daily(d.filter(cond)))
+
+    # Overlap on the visit key -- the number that prices the re-baseline.
+    overlap = {}
+    n_q = qkeys.count()
+    for lbl, pats in (("en_only", URL_SCOPE_EN_ONLY), ("broad_narrow", URL_SCOPE_BROAD_NARROW)):
+        cond = like_any(pu, pats) & (~excl if lbl != "en_only" else F.lit(True))
+        uk = d.filter(cond).select("_vk").distinct()
+        n_u = uk.count()
+        n_both = qkeys.join(uk, "_vk", "inner").count()
+        overlap[lbl] = {"qualified_visits": n_q, "url_scoped_visits": n_u, "both": n_both,
+                        "qualified_only": n_q - n_both, "url_scoped_only": n_u - n_both,
+                        "share_of_url_scope_retained": (n_both / n_u) if n_u else None}
+
+    # Which rules actually qualify visits, and which are rounding error?
+    contrib = {}
+    for r in SME_LINK_RULES:
+        k = rule_key(r)
+        contrib[k] = int(d.filter(rule_match_expr(r, raw, dec)).select("_vk").distinct().count())
+
+    # The 02_silver_conform.py:70-73 warning: if the visid parts are degenerate on this suite,
+    # visits_total collapses toward distinct(visit_num) and every count above is fiction.
+    card = d.agg(F.approx_count_distinct(qcol("post_visid_high")).alias("hi"),
+                 F.approx_count_distinct(qcol("post_visid_low")).alias("lo"),
+                 F.approx_count_distinct(qcol("visit_num")).alias("vn"),
+                 F.approx_count_distinct("_vk").alias("vk")).collect()[0]
+    qcard = qual.agg(F.approx_count_distinct(qcol("post_visid_high")).alias("hi"),
+                     F.approx_count_distinct(qcol("post_visid_low")).alias("lo")).collect()[0]
+
+    qv = populations["qualified"].get("visits", [])
+    s = sorted(qv)
+    verdict = {
+        "median_daily_qualified_visits": int(s[len(s) // 2]) if s else 0,
+        "min_daily_qualified_visits": int(s[0]) if s else 0,
+        "max_daily_qualified_visits": int(s[-1]) if s else 0,
+        "days_below_100": sum(1 for v in qv if v < 100),
+        "days_at_zero": sum(1 for v in qv if v == 0),
+        "days": len(qv),
+    }
+
+    emit("qualified_visit_scope", {
+        "window": [START_DATE, MAX_DATE], "rsid": PIPELINE_RSID,
+        "visit_key": VISIT_KEY_COLS, "ecid_column": ecid,
+        "adobe_pv_available": bool(have("post_page_event")),
+        "dates": dates,
+        "populations": populations,
+        "visit_overlap": overlap,
+        "per_rule_qualified_visits": contrib,
+        "identity_cardinality": {
+            "suite": {"post_visid_high": int(card["hi"] or 0), "post_visid_low": int(card["lo"] or 0),
+                      "visit_num": int(card["vn"] or 0), "visit_key": int(card["vk"] or 0)},
+            "qualified": {"post_visid_high": int(qcard["hi"] or 0), "post_visid_low": int(qcard["lo"] or 0)},
+        },
+        "verdict": verdict,
+        "note": (
+            "THIS IS THE GATE. `verdict.median_daily_qualified_visits` decides whether the scope "
+            "as specified can carry daily anomaly detection; if it is small the answer goes back "
+            "to the SME before anything is built, because all 42 gold series would be rebuilt on "
+            "this population. `visit_overlap.share_of_url_scope_retained` is how much of today's "
+            "series survives the change. `per_rule_qualified_visits` shows which of the 16 rules "
+            "carry the scope and which are rounding error -- a rule contributing near-zero visits "
+            "adds governance weight and no signal. Page views are given BOTH ways: pv_all_hits is "
+            "the hit count by construction (gold_lib._pv_int returns lit(1)), pv_adobe counts "
+            "try_cast(post_page_event as int)=0 -- doc-20 Q6/Q14. Finally check "
+            "identity_cardinality: 02_silver_conform.py:70-73 warns post_visid_high/low can be "
+            "<=1 on this suite, in which case visits collapse toward distinct(visit_num) and "
+            "every visit count here is an artefact of visit_num alone."),
+    })
+
+
+run_section("qualified_visit_scope", c17_qualified_visit_scope)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## C18 — eVar105 brand tag vs the link rules
+# MAGIC
+# MAGIC D11 (2026-07-29) defined the Public Website scope as `rsid` + an `evar105` brand-tag
+# MAGIC parts-match on `ca-retirement` AND `gwam`. The 2026-08-04 spec never mentions `evar105`.
+# MAGIC Either the brand tag still applies on top of the rules, or the rules replace it — that is a
+# MAGIC business ruling (Q19), but it should be priced first.
+
+# COMMAND ----------
+
+def c18_evar105_vs_rules():
+    if not EVAR105 or not EVAR194:
+        emit("evar105_vs_rules", {"skipped": f"evar105={EVAR105}, evar194={EVAR194} -- "
+                                             "both are required to cross-tabulate"})
+        return
+    missing = [c for c in VISIT_KEY_COLS if not have(c)]
+    if missing:
+        emit("evar105_vs_rules", {"skipped": f"visit key columns absent: {missing}"})
+        return
+
+    d = WIN.filter(F.col("rsid") == F.lit(PIPELINE_RSID)).withColumn("_vk", visit_key_expr())
+    raw, dec = href_raw(), href_dec()
+    c105 = F.lower(qcol(EVAR105).cast("string"))
+    tagged = c105.contains("ca-retirement") & c105.contains("gwam")
+    qualifying = any_rule_expr(raw, dec)
+
+    row = d.agg(
+        F.count(F.lit(1)).alias("rows"),
+        F.sum(F.when(tagged, 1).otherwise(0)).alias("tagged"),
+        F.sum(F.when(qualifying, 1).otherwise(0)).alias("rule_hits"),
+        F.sum(F.when(tagged & qualifying, 1).otherwise(0)).alias("both"),
+        F.sum(F.when(~tagged & qualifying, 1).otherwise(0)).alias("rule_untagged"),
+    ).collect()[0]
+
+    qk = d.filter(qualifying).select("_vk").distinct()
+    tk = d.filter(tagged).select("_vk").distinct()
+    n_q, n_t = qk.count(), tk.count()
+    n_both = qk.join(tk, "_vk", "inner").count()
+
+    per_rule = {}
+    aggs = [F.sum(F.when(rule_match_expr(r, raw, dec) & tagged, 1).otherwise(0)).alias(f"{rule_key(r)}__tagged")
+            for r in SME_LINK_RULES]
+    aggs += [F.sum(F.when(rule_match_expr(r, raw, dec), 1).otherwise(0)).alias(f"{rule_key(r)}__all")
+             for r in SME_LINK_RULES]
+    rr = d.agg(*aggs).collect()[0]
+    for r in SME_LINK_RULES:
+        k = rule_key(r)
+        a, t = int(rr[f"{k}__all"] or 0), int(rr[f"{k}__tagged"] or 0)
+        per_rule[k] = {"matched": a, "also_brand_tagged": t,
+                       "tagged_share": (t / a) if a else None}
+
+    emit("evar105_vs_rules", {
+        "window": [START_DATE, MAX_DATE], "rsid": PIPELINE_RSID,
+        "evar105_column": EVAR105,
+        "predicate": "lower(evar105) contains 'ca-retirement' AND contains 'gwam' (D11 parts-match)",
+        "hits": {"rows": int(row["rows"]), "brand_tagged": int(row["tagged"]),
+                 "rule_matching": int(row["rule_hits"]), "both": int(row["both"]),
+                 "rule_matching_but_untagged": int(row["rule_untagged"])},
+        "visits": {"rule_qualified": n_q, "brand_tagged": n_t, "both": n_both,
+                   "qualified_only": n_q - n_both, "tagged_only": n_t - n_both},
+        "per_rule": per_rule,
+        "note": (
+            "Q19. If rule_matching_but_untagged is ~0 the brand tag is redundant on top of the "
+            "rules and D11's predicate can retire cleanly. If it is large, the two scopes "
+            "disagree and the SME must say which wins -- keeping both would AND them together "
+            "and shrink the population further, on top of whatever C17 already reports. Note "
+            "this is only meaningful if evar105 is populated on this suite at all; read C3's "
+            "census first."),
+    })
+
+
+run_section("evar105_vs_rules", c18_evar105_vs_rules)
 
 # COMMAND ----------
 
