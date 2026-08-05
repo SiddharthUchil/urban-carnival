@@ -18,27 +18,47 @@ PARTITION_COL = "process_date"
 # 8,412,803 unfiltered hits on this rsid; en_only captures 31.8% of them).
 SCOPE_RSID = "manulifeglobalprod"
 
-# URL scope mode. "en_only" reproduces the shipped population exactly (single English
+# URL scope mode. "en_only" reproduces the pre-2026-08-04 population exactly (single English
 # section root, applied to post_page_url). "broad" widens to a language-agnostic,
 # multi-domain retirement scope.
 #
-# KEEP "en_only". The 2026-07-20 scope inventory satisfied the first half of the old
-# gate (excluded volume is now quantified: doc-16 §1 D3) but two conditions remain --
-# the widened population has not been re-profiled (phase P2), and "%/group-plans%"
-# still needs the product sign-off noted below. Flipping re-baselines every downstream
-# KPI, detector threshold, and injected-anomaly calibration; done under
-# mode=incremental it also writes a step change mid-series that the detector reads as
-# a level-shift anomaly. Any flip must be a full mode=backfill with gold truncated.
-SCOPE_URL_MODE = "en_only"
+# ↺ FLIPPED to "broad" 2026-08-04. The Business SME's link-rule scope specifies all 8 rules in
+# BOTH English and French, so French pages must be in the ingest scope for the rules to be
+# matchable at all. Ratified with the accompanying decision NOT to admit "%/group-plans%"
+# (see SCOPE_URL_LIKE_BROAD below) -- French was the ask; the group-plans umbrella is a
+# separate, still-unsigned widening and was deliberately left out.
+#
+# This is now the INGEST layer only. Under doc-16 D13 the metric scope is the SME's 16 link
+# rules at qualified-visit grain (a visit is in scope if it contains >=1 rule-matching click);
+# the URL patterns here just decide what lands in bronze with its page context intact, so the
+# rule set stays re-editable without a re-ingest.
+#
+# ⚠ THE FLIP CHANGES TWO THINGS, NOT ONE. Read 01_bronze_ingest.py: the "en_only" branch
+# filters on post_page_url ALONE, while "broad" filters on coalesce(page_url, post_page_url).
+# post_page_url measured 36.41% blank on this suite, so switching the COLUMN moves a larger
+# population than switching the patterns does. It also discharges doc-16 D4's last tracked
+# violation, which named exactly that line.
+#
+# ⚠ RE-BASELINE OBLIGATION. Flipping re-baselines every downstream KPI, detector threshold and
+# injected-anomaly calibration; done under mode=incremental it writes a step change mid-series
+# that the detector reads as a level-shift anomaly. Any flip must be a full mode=backfill with
+# gold truncated. VERIFY BEFORE THE NEXT RUN whether that debt is real here:
+#     SHOW SCHEMAS IN <catalog> LIKE 'gmai_pulse*';
+#     SELECT count(*) FROM <catalog>.gmai_pulse_bronze.adobe_hit_gwam_ca_ret;
+# If the schemas do not exist or bronze is empty, nothing has been built in this catalog yet
+# and the flip costs nothing -- there is no baseline to move. If bronze IS populated, the next
+# run must be mode=backfill with gold truncated, not incremental.
+SCOPE_URL_MODE = "broad"
 
-# Current production scope -- English section root only.
+# The pre-2026-08-04 production scope -- English section root only. INERT since the flip to
+# "broad" above; kept because "en_only" is still a reachable branch and this is the only record
+# of what the shipped population was. Note it contains "/group-retirement", which is why the
+# narrowed broad list below still covers every page this ever matched.
 SCOPE_URL_LIKE = "%manulife.com/ca/en/personal/group-plans/group-retirement%"
 
-# Proposed broad scope: SQL LIKE patterns OR-ed together, matched case-insensitively on the
-# COMPLETE url (coalesce(page_url, post_page_url) -- post_page_url measured 36.41% blank on
-# this suite and 45.75% on manugrs, vs <=0.013% for page_url; 2026-07-20 inventory).
-# NOTE group-plans is the umbrella that CONTAINS group-retirement (also pulls in
-# group-benefits / business / advisor), so product sign-off is needed before activating.
+# LIVE broad scope (2026-08-04): SQL LIKE patterns OR-ed together, matched case-insensitively
+# on the COMPLETE url (coalesce(page_url, post_page_url) -- post_page_url measured 36.41% blank
+# on this suite and 45.75% on manugrs, vs <=0.013% for page_url; 2026-07-20 inventory).
 #
 # These patterns are already language-agnostic: the 2026-07-20 inventory confirmed they
 # cover every French path it found -- manulifeim.com/group-retirement/ca/fr/* via
@@ -46,9 +66,18 @@ SCOPE_URL_LIKE = "%manulife.com/ca/en/personal/group-plans/group-retirement%"
 # "%/regimes-collectifs%". No FR-specific additions are needed here. Known NOT covered:
 # epargnemanuvie.ca (separate FR brand domain, blocked on the SCOPE_LOGIN_HOST_EXCLUDE
 # ruling below) and the unhyphenated "groupretirement" portal paths (login, excluded by design).
+#
+# ⚠ "%/group-plans%" WAS HERE AND WAS DELIBERATELY REMOVED (2026-08-04). It is the umbrella
+# that CONTAINS group-retirement, so it also admits group-benefits / business / advisor -- three
+# lines of business nobody has signed off on (doc-20 Q3, still open). The 2026-08-04 decision
+# was to admit FRENCH, and French is fully covered by the two patterns below: the previously
+# shipped en_only root (%manulife.com/ca/en/personal/group-plans/group-retirement%) itself
+# contains "/group-retirement", so dropping the umbrella loses no EN traffic either. Probe
+# section C15 reports `group_plans_only` per rule -- the volume this exclusion costs -- so
+# re-admitting it later is a priced decision rather than an argument. Do not add it back
+# without that sign-off; it is a separate re-baseline from the one above.
 SCOPE_URL_LIKE_BROAD = [
     "%/group-retirement%",     # EN retirement subsection + pagename section token; also FR /ca/fr
-    "%/group-plans%",          # EN group-plans umbrella (personal/business/advisor)
     "%/regimes-collectifs%",   # FR equivalent (particuliers/entreprises/conseillers) -- S4b-confirmed
 ]
 
@@ -67,6 +96,17 @@ SCOPE_URL_LIKE_EXCLUDE = [
 # scope inventory run (doc-16 §1 D8; notebook retired, output in git history at 408de5a);
 # candidates NOT yet ruled on:
 # retirement.sponsor.manulife.com (sponsor login), manulifeplan.ca, epargnemanuvie.ca.
+#
+# ⚠⚠ NEVER MATCH THIS LIST AGAINST A LINK-TARGET COLUMN (doc-16 D14, 2026-08-04). It is matched
+# against the PAGE url -- coalesce(page_url, post_page_url) in 01_bronze_ingest.py -- and that
+# is load-bearing, not incidental. Five of the SME's eight link-click rules have hrefs ON these
+# hosts (id.manulife.ca sign-in, portal.manulife.ca handlelogin), because the whole point of
+# those rules is a click TOWARD login from a public marketing page. D8 excludes login PAGE
+# VIEWS; it does not exclude intent-to-log-in measured on the public site. So folding
+# post_evar194 into any "url" expression -- a coalesce, a shared helper, a well-meaning
+# refactor -- would silently delete exactly the rows the SME asked us to alert on, and the
+# pipeline would look like it ran clean. Probe section C15 measures the gap
+# (excl_by_page_url ~0% vs excl_by_href ~100%) and tests/test_scope_gwam.py pins it.
 SCOPE_LOGIN_HOST_EXCLUDE = [
     "%portal.manulife.ca%",       # member portal (Storefront), ~130M hits on manugrs
     "%id.manulife.ca%",           # login / identity, 62.6M hits
