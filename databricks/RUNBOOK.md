@@ -181,7 +181,8 @@ and both language domains are present.
 
 > **If anything fails here, stop and fix it before Step 5.** The likely DBR 18 failure modes are
 > ANSI-mode casts and Spark 4 API changes. The known ANSI hazards are already handled
-> (`try_cast`, `try_element_at`), so a new one is genuinely new information — capture the full
+> (`try_cast` in the pipeline; `try_element_at` in the EDA notebooks), so a new one is
+> genuinely new information — capture the full
 > traceback.
 
 ## Step 5 — CoverMe full backfill
@@ -258,9 +259,13 @@ Same shape, much smaller data (~1.15M rows). Notebooks `01_bronze_ingest` → `0
 Widgets: `target_catalog=usdo_aa_catalog`, `mode=backfill`, `start_date=2026-02-01`,
 `pseudonymize=false`.
 
-**Expect** ≈1,151,474 bronze rows across ~157 `process_date` partitions, and **42 series** in
+**Expect** ≈1,151,474 bronze rows across ~157 `process_date` partitions — ⚠ a **floor**, not a
+target: that figure is the en_only baseline, and the shipped `SCOPE_URL_MODE="broad"` (D12,
+2026-08-04) also admits FR `/regimes-collectifs%` and wider `/group-retirement%` traffic, so
+more rows is correct behaviour (check 4 of the verify SQL reads the drift). And **42 series** in
 gold — not 35. 42 is the built count since registry v0.7.0; 35 is the *scored* count, and older
-docs conflate them.
+docs conflate them. (D13's qualified-visit re-scope — doc 21 — is not in this build yet; when it
+lands, all 42 series re-baseline on ~25% of this population.)
 
 A `visid_pair_cardinality<=1` warning from silver is expected on this feed (account-level ids),
 not a failure.

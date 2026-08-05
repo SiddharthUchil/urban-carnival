@@ -1,7 +1,8 @@
 """CoverMe metric registry for the GMAI-Pulse gold KPI build (config-not-code).
 
-Python stand-in for research/claude/metric-registry.yaml **v0.5.0** (CoverMe entries
-SME-confirmed at v0.3.0, 2026-07-27; language rule ratified 2026-07-29),
+Python stand-in for research/claude/metric-registry.yaml (version pinned by
+REGISTRY_VERSION below; CoverMe entries SME-confirmed at v0.3.0, 2026-07-27; language
+rule ratified 2026-07-29),
 which remains the governed source of truth -- metric_ids for the 12 business-flagged
 post_event_list entries are taken from it verbatim. Kept separate from detect/registry.py
 because the two report suites expose different event-id spaces (the YAML's

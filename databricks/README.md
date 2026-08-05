@@ -34,7 +34,7 @@ scheduled daily **06:00 America/Toronto**, created **PAUSED**.
 | `src/cm_silver_lib.py` | CoverMe pure transforms: page_url-first coalesce, URL scope, domain language, hit eligibility |
 | `src/cm_00_freshness_guard.py` … `cm_03_gold_kpis.py` | The four CoverMe job notebooks (no detect task yet) |
 | `jobs/coverme_pulse_daily.json` | CoverMe Databricks Jobs definition |
-| `../detect/cm_registry.py` | CoverMe series registry, pinned to `research/claude/metric-registry.yaml` v0.4.0 (CoverMe entries SME-confirmed at v0.3.0) |
+| `../detect/cm_registry.py` | CoverMe series registry, pinned to `research/claude/metric-registry.yaml` by `REGISTRY_VERSION` + `tests/test_registry_yaml.py` (v0.8.1 as of 2026-08-05; CoverMe entries SME-confirmed at v0.3.0) |
 
 > **Standing up the layers for the first time? Follow [`RUNBOOK.md`](RUNBOOK.md), not this file.**
 > That is the click-by-click running order for `usdo_aa_catalog`. This README is the reference
@@ -55,7 +55,8 @@ names are now real, and the job JSONs carry them:
 
 Two things about that runtime worth knowing before you start: the notebooks were written for
 DBR 16.4 / Spark 3.5, and the ANSI-mode hazards that bit us before are already fixed
-(`try_cast`, `try_element_at`) — but that is an argument, not evidence. **Smoke one month
+(`try_cast` in the pipeline; `try_element_at` in the EDA notebooks) — but that is an
+argument, not evidence. **Smoke one month
 before backfilling all of it** (see "Smoke run" below).
 
 Everything below that still says `databricks <cmd>` works identically from the UI: Jobs →
@@ -162,7 +163,11 @@ databricks jobs run-now --job-id <id> \
   --job-parameters target_catalog=usdo_aa_catalog,mode=backfill,start_date=2026-02-01,pseudonymize=false
 ```
 Expected (per EDA):
-- **bronze** ≈ 1,151,474 rows across 157 `process_date` partitions. ⚠ The unfiltered 2026-07-20
+- **bronze** ≈ 1,151,474 rows across 157 `process_date` partitions — ⚠ that figure is the
+  **en_only** baseline and is now a **floor**: the shipped `SCOPE_URL_MODE="broad"` (D12,
+  2026-08-04) also admits FR `/regimes-collectifs%` and wider `/group-retirement%` traffic,
+  so expect more rows; the broad-scope total has not been measured pipeline-side yet.
+  ⚠ The unfiltered 2026-07-20
   inventory puts `manulifeglobalprod`'s first day at **2026-03-10** (138 days) against
   `BACKFILL_START`'s 2026-02-01 — doc-16 backlog #4, still open. Backfilling from February simply
   yields fewer partitions if the later date is right. **Check 1 of the verify SQL settles it:
@@ -171,7 +176,10 @@ Expected (per EDA):
   warning is expected (account-level ids per EDA) — not a failure.
 - **gold** `kpi_daily` = **42 series** × ~157 days. 42 is the *built* count since registry v0.7.0
   (35 scored + 7 page-view candidates held behind SME Q6); the old "35 series / 5,495 rows"
-  figure was the scored count and is stale.
+  figure was the scored count and is stale. ⚠ **D13 (2026-08-04)** redefined the alerting scope
+  to the SME's 16 link rules at **qualified-visit grain** — when that lands, all 42 series
+  rebuild on ~25% of this population (median 1,599 qualified visits/day; doc 21 §5). The
+  figures here describe the current URL-scope build.
 - **detect** parity guard prints `unmatched=0 max_abs_diff≈0`; `anomalies` + `run_meta` populated.
   **Out of scope for this build** — see the note under "Create the job" below.
 - Re-run the same window → identical bronze/gold counts (idempotent `replaceWhere`).

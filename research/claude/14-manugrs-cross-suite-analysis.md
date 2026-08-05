@@ -19,6 +19,10 @@
 > hold at suite level**: an unfiltered full‑history inventory measured `manugrs` at
 > **320,304,305 hits running through 2026‑07‑19**, concurrent with `manulifeglobalprod`. Only the
 > `manulifeim.com` marketing site wound down at 2026‑02‑01. See doc‑16 §1 D7 / §2.
+> ↺ *2026‑08‑05: D7 has since been amended — the phase‑1 default is single‑suite
+> (`manulifeglobalprod` only, `SCOPE_SUITE_MODE = "current_only"`); `manugrs` is deferred, and the
+> alerting scope itself moved to the 16 link rules at qualified‑visit grain (doc‑16 D13,
+> [21](21-gwam-link-rule-scope.md)). D7 references below point at the decision as amended.*
 
 **Why this document exists.** The manager challenged two business‑supplied assumptions: (1) the
 CA‑Retirement URL filter `post_page_url LIKE '…/ca/en/personal/group-plans/group-retirement'`, and

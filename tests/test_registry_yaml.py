@@ -11,7 +11,11 @@ NOT part of Canada Retirement, which CONFIRMS the predicate that was already hel
 more no series changes and nothing re-baselines; v0.7.0 makes the doc 20 Q6 page-view basis a
 config constant -- both bases are now BUILT behind settings.PAGE_VIEW_BASIS, shipped at
 "all_hits" where page_views_total == hits_total, so once again no GWAM entry changes status
-and nothing re-baselines. Q6 stops being a build blocker and becomes a promotion blocker);
+and nothing re-baselines. Q6 stops being a build blocker and becomes a promotion blocker;
+v0.8.0 rebinds the GWAM scope to doc-16 D13 -- the SME's 16 link rules at qualified-visit
+grain -- with ingest flipped to broad-minus-group-plans (D12); v0.8.1 attaches the C13-C18
+probe evidence and records the cleared C17 gate -- median 1,599 qualified visits/day at the
+accepted ~75% phase-1 re-baseline -- once more with no series change);
 detect/cm_registry.py is its Python binding. Enforces the yaml's own validation_rules
 block plus the code pin, so REGISTRY_VERSION and the copied status/direction/owner
 governance fields cannot drift silently.
@@ -55,6 +59,17 @@ def entries(registry):
 
 def test_version_pin(registry):
     assert str(registry["meta"]["version"]) == REGISTRY_VERSION == "0.8.1"
+
+
+def test_version_header_comment():
+    # The YAML's "# version: X.Y.Z (...)" header comment is prose, invisible to safe_load;
+    # bind it too so the human-facing header cannot drift from meta.version (the 4th site).
+    path = REPO / "research" / "claude" / "metric-registry.yaml"
+    with open(path, encoding="utf-8") as f:
+        head = [f.readline() for _ in range(5)]
+    hits = [ln for ln in head if ln.startswith("# version:")]
+    assert hits, "expected a '# version: ...' header comment in the first 5 lines"
+    assert hits[0].removeprefix("# version:").strip().split()[0] == REGISTRY_VERSION
 
 
 def test_per_sheet_counts(registry):
